@@ -19,7 +19,7 @@ class TableLayout:
         self.dirty = False
         self.table.connect("columns-changed", self._changed)
 
-    def register(self, key, column, index, width, renderer=None):
+    def register(self, key, column, index, width, renderer=None, *, sort_index=None):
         self.columns[key] = (column, index)
         header = column.get_widget()
         if header is None:
@@ -54,7 +54,7 @@ class TableLayout:
             self._wrap(column, None, renderer)
             column.connect("notify::width", self._wrap, renderer)
             column.connect("notify::fixed-width", self._wrap, renderer)
-        self.store.set_sort_func(index, self._compare, index)
+        self.store.set_sort_func(index, self._compare, index if sort_index is None else sort_index)
 
     @staticmethod
     def _header_width(column, _spec=None):

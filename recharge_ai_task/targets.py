@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import socket
 import sqlite3
@@ -31,6 +32,7 @@ class Target:
     send_prompt: bool | None = None
     send_goal: bool | None = None
     project_name: str = ""
+    last_active_at: float | None = None
 
     def signal_actions(self, legacy_goal=False):
         return (True if self.send_prompt is None else self.send_prompt,
@@ -58,12 +60,25 @@ def codex_home():
     return Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
 
 
+def _activity_timestamp(record):
+    # App-server v2 uses seconds. Recent state databases also retain milliseconds.
+    for key, divisor in (("updated_at_ms", 1000), ("updatedAt", 1), ("updated_at", 1)):
+        value = record.get(key)
+        if type(value) not in (int, float):
+            continue
+        timestamp = value / divisor
+        if math.isfinite(timestamp) and 0 < timestamp < 253402300800:
+            return timestamp
+    return None
+
+
 def _thread_target(record, home, ipc):
     thread_id = record["id"]
     return Target("thread", thread_id, record.get("name") or record.get("title") or thread_id,
         instance=str(home), endpoint=ipc,
         deeplink=f"codex://threads/{quote(thread_id, safe='')}", cwd=record.get("cwd", ""),
-        status="Saved chat", task_status=task_status(record.get("status")))
+        status="Saved chat", task_status=task_status(record.get("status")),
+        last_active_at=_activity_timestamp(record))
 
 
 def task_status(value):
@@ -171,7 +186,7 @@ def _saved_threads(home):
             columns = {r[1] for r in db.execute("PRAGMA table_info(threads)")}
             if not {"id", "title", "archived"} <= columns:
                 continue
-            fields = [name for name in ("id", "name", "title", "cwd", "source") if name in columns]
+            fields = [name for name in ("id", "name", "title", "cwd", "source", "updated_at", "updated_at_ms") if name in columns]
             order = "updated_at DESC" if "updated_at" in columns else "id"
             records = [dict(row) for row in db.execute(
                 f"SELECT {','.join(fields)} FROM threads WHERE archived=0 ORDER BY {order}")]

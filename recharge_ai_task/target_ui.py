@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
 
 import threading
 import subprocess
@@ -137,7 +138,7 @@ class TargetPicker(Gtk.Window):
         self.technical_toggle.connect("toggled", self.toggle_technical_columns)
         search_row.pack_start(self.technical_toggle, False, False, 0)
         box.pack_start(search_row, False, False, 0)
-        self.store = Gtk.ListStore(bool, str, str, str, str, str, str, str, str, str, str, str, bool, str)
+        self.store = Gtk.ListStore(bool, str, str, str, str, str, str, str, str, str, str, str, bool, str, str, float)
         self.filtered = self.store.filter_new()
         self.filtered.set_visible_func(self._visible)
         self.table = Gtk.TreeView(model=self.filtered)
@@ -150,7 +151,7 @@ class TargetPicker(Gtk.Window):
         self.table.get_style_context().add_provider(density_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.table.set_has_tooltip(True)
         self.table.connect("query-tooltip", self._tooltip)
-        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message)
+        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at")
         for label, index, action in (("Send message", 0, "send_prompt"), ("Resume goal", 12, "send_goal")):
             checkbox = Gtk.CellRendererToggle()
             checkbox.connect("toggled", self._toggle, action)
@@ -165,14 +166,14 @@ class TargetPicker(Gtk.Window):
                 column.set_cell_data_func(checkbox, self._goal_cell)
             self.table.append_column(column)
             self.table_layout.register(action, column, index, 105)
-        columns = [("Title", 1, 260), ("Task status", 10, 130), ("Goal status", 11, 110),
+        columns = [("Title", 1, 260), ("Last active", 14, 160), ("Task status", 10, 130), ("Goal status", 11, 110),
                    ("Project", 13, 150), ("Project path", 8, 300), ("Kind", 2, 80), ("Availability", 3, 160), ("ID", 4, 295),
                    ("PID", 5, 95), ("Instance", 6, 260), ("Deep link", 7, 400),
                    ("Desktop client", 9, 300)]
         self.technical_columns = []
         column_keys = {1: "title", 2: "kind", 3: "availability", 4: "id", 5: "pid",
                        6: "instance", 7: "deeplink", 8: "cwd", 9: "owner_id",
-                       10: "task_status", 11: "goal_status", 13: "project_name"}
+                       10: "task_status", 11: "goal_status", 13: "project_name", 14: "last_active_at"}
         for name, index, width in columns:
             renderer = Gtk.CellRendererText()
             column = Gtk.TreeViewColumn(name, renderer, text=index)
@@ -192,11 +193,14 @@ class TargetPicker(Gtk.Window):
             column.set_fixed_width(width)
             if index == 1:
                 self.title_column = column
-            if index not in (1, 10, 11, 13):
+            if index not in (1, 10, 11, 13, 14):
                 self.technical_columns.append(column)
                 column.set_visible(self.config.show_technical_columns)
             self.table.append_column(column)
-            self.table_layout.register(column_keys[index], column, index, width, renderer)
+            self.table_layout.register(column_keys[index], column, index, width, renderer,
+                                       sort_index=15 if index == 14 else None)
+            if index == 14:
+                column.get_widget().set_tooltip_text("Last chat update recorded by Codex, shown in local time. Refreshes every 15 seconds. Unknown means Codex did not provide a timestamp.")
         self.table_layout.restore()
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
@@ -275,12 +279,16 @@ class TargetPicker(Gtk.Window):
             hit = table.get_path_at_pos(bx, by)
             column = hit[1] if hit else None
         name = column.get_title() if column else ""
+        if name == "Last active":
+            tooltip.set_text(f"Last active: {row[14]}\nLast chat update recorded by Codex, shown in local time.")
+            table.set_tooltip_cell(tooltip, path, column, None)
+            return True
         if name in ("Task status", "Goal status"):
             index = 11 if name == "Goal status" else 10
             tooltip.set_text(status_tooltip(row[index], goal=index == 11))
             table.set_tooltip_cell(tooltip, path, column, None)
             return True
-        tooltip.set_text(f"{row[1]}\nTask: {row[10]}\nGoal: {row[11]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}")
+        tooltip.set_text(f"{row[1]}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}")
         table.set_tooltip_row(tooltip, path)
         return True
 
@@ -319,7 +327,7 @@ class TargetPicker(Gtk.Window):
 
     def _visible(self, model, iterator, _data):
         query = self.search.get_text().casefold()
-        return not query or query in " ".join(str(model[iterator][i]) for i in (*range(1, 12), 13)).casefold()
+        return not query or query in " ".join(str(model[iterator][i]) for i in (*range(1, 12), 13, 14)).casefold()
 
     @staticmethod
     def _goal_cell(_column, renderer, model, iterator, _data):
@@ -646,7 +654,9 @@ class TargetPicker(Gtk.Window):
             values = [choice.send_prompt if choice else False, target.title, target.kind,
                 target.status if key in live else "Unavailable — saved selection",
                 target.id, str(target.pid or ""), target.instance, target.deeplink, target.cwd,
-                target.owner_id, target.task_status, target.goal_status, choice.send_goal if choice else False, target.project_name]
+                target.owner_id, target.task_status, target.goal_status, choice.send_goal if choice else False, target.project_name,
+                datetime.fromtimestamp(target.last_active_at).astimezone().strftime("%Y-%m-%d %H:%M:%S") if target.last_active_at else "Unknown",
+                target.last_active_at or 0.0]
             iterator = rows.get(key)
             if iterator is None:
                 self.store.append(values)

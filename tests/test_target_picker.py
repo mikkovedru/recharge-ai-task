@@ -79,7 +79,7 @@ def check():
         assert window.next_check_label.get_text() == "—"
         assert "monitoring is off" in window.next_check_detail.get_text()
         visible_titles = lambda: [c.get_title() for c in window.table.get_columns() if c.get_visible()]
-        assert visible_titles() == ["Send message", "Resume goal", "Title", "Task status", "Goal status", "Project"]
+        assert visible_titles() == ["Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project"]
         assert "Editing them sends nothing now" in window.selection_help.get_text()
         assert "monitoring off" in window.summary.get_text()
         assert not window.send_button.get_sensitive()
@@ -89,7 +89,7 @@ def check():
         watch_settings = target_ui.tray_control.watch_settings(view_settings)
         window.technical_toggle.set_active(True)
         assert AppConfig.load().show_technical_columns
-        assert len(visible_titles()) == 14
+        assert len(visible_titles()) == 15
         reopened = target_ui.TargetPicker()
         assert reopened.technical_toggle.get_active()
         assert all(c.get_visible() for c in reopened.technical_columns)
@@ -184,7 +184,7 @@ def check():
         window._message("\n".join("Bounded line " + str(i) for i in range(1100)))
         assert window.status.buffer.get_line_count() <= 1000
         for index, states in ((10, TASK_STATES), (11, GOAL_STATES)):
-            column = window.table.get_columns()[3 if index == 10 else 4]
+            column = next(c for c in window.table.get_columns() if c.get_title() == ("Task status" if index == 10 else "Goal status"))
             header = column.get_widget()
             assert isinstance(header, Gtk.Box)
             assert " ".join(header.get_children()[0].get_text().split()) == column.get_title()
@@ -242,7 +242,7 @@ def check():
         assert window.send_button.get_label() == "Send now to 1 recipient"
         assert window.send_button.get_sensitive()
         assert not window.dirty() and not hasattr(window, "save_state")
-        assert [c.get_title() for c in window.table.get_columns()][:8] == ["Send message", "Resume goal", "Title", "Task status", "Goal status", "Project", "Project path", "Kind"]
+        assert [c.get_title() for c in window.table.get_columns()][:9] == ["Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project", "Project path", "Kind"]
         window.table.get_selection().select_path("0")
         target_ui.discover_targets = lambda: Inventory([alpha, replace(beta, task_status="Waiting for input", goal_status="Blocked")])
         window.refresh_statuses()

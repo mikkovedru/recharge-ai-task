@@ -80,7 +80,12 @@ Send message sends only the message. Resume goal resumes natively and starts
 continuation without a prompt. Both activates the goal first, then sends the
 message. Window rows support Send message only. **Open selected row** opens a chat
 without sending.
-The compact table shows Send message, Resume goal, Title, Task status, Goal status and Project.
+The compact table shows Send message, Resume goal, Title, Last active, Task status,
+Goal status and Project. **Last active** is Codex's last saved chat update, shown
+in your local time and refreshed every 15 seconds. Chats sort newest first by
+default; your chosen sort takes precedence after you change it. Windows and chats
+without a timestamp show Unknown. Activity sorting uses the timestamp, including
+millisecond precision when available.
 Enable **Show technical columns** for paths, kind, availability, IDs, PID,
 profile, deep link and desktop client. This preference survives reopening the
 dashboard and does not restart monitoring. All fields remain searchable in

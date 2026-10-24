@@ -369,7 +369,9 @@ The application is **Recharge AI-task**. Its package and desktop command use
 package is `recharge_ai_task`.
 Run `recharge-ai-task` for the dashboard. Resize columns by dragging their edges,
 click headers to sort, and drag headers to reorder them. Long text wraps; column
-widths, positions and sorting are remembered between launches.
+widths, positions and sorting are remembered between launches. The visible
+**Last active** column shows each chat's last update in Codex in local time.
+Chats sort newest first by default; you can choose and save another sort.
 
 Settings now live in `~/.recharge-ai-task/config.json`. On the first default
 launch, existing settings from the previous name are copied byte for byte;
