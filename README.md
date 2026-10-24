@@ -367,7 +367,9 @@ MIT — see [LICENSE](LICENSE).
 The application is **Recharge AI-task**. Its package and desktop command use
 `recharge-ai-task`; terminal commands use `recharge-ai-task-cli`. The Python
 package is `recharge_ai_task`.
-Run `recharge-ai-task` for the dashboard.
+Run `recharge-ai-task` for the dashboard. Resize columns by dragging their edges,
+click headers to sort, and drag headers to reorder them. Long text wraps; column
+widths, positions and sorting are remembered between launches.
 
 Settings now live in `~/.recharge-ai-task/config.json`. On the first default
 launch, existing settings from the previous name are copied byte for byte;

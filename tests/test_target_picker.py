@@ -54,6 +54,19 @@ def check():
     if window.busy or window.runtime_busy or window.quota_busy or window.discovery_busy:
         return True
     try:
+        # Sorting an action moves rows during toggles. Recipient identity and
+        # both saved actions must still refer to the clicked chat.
+        window.table_layout.sort("id", True)
+        assert window.filtered[0][4] == "beta"
+        window._toggle(None, "0", "send_goal")
+        window.table_layout.sort("send_goal", True)
+        window._toggle(None, "0")
+        assert [(t.id, t.send_prompt, t.send_goal) for t in window.selected.values()] == [("beta", True, True)]
+        window._toggle(None, "0", "send_goal")
+        beta_path = next(str(i) for i, row in enumerate(window.filtered) if row[4] == "beta")
+        window._toggle(None, beta_path)
+        assert not window.selected
+        window.table_layout.sort("id")
         assert window.get_title() == "Recharge AI-task"
         assert window.logo.get_pixbuf().get_width() == 128
         assert {icon.get_width() for icon in window.get_icon_list()} == {16,24,32,48,64,128,256}
@@ -174,7 +187,7 @@ def check():
             column = window.table.get_columns()[3 if index == 10 else 4]
             header = column.get_widget()
             assert isinstance(header, Gtk.Box)
-            assert header.get_children()[0].get_text() == column.get_title()
+            assert " ".join(header.get_children()[0].get_text().split()) == column.get_title()
             info = header.get_children()[1]
             assert isinstance(info, Gtk.Image) and info.get_pixel_size() == 14
             assert info.get_icon_name()[0] == "dialog-information-symbolic"

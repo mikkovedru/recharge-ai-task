@@ -12,6 +12,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk
 
+from .table_layout import TableLayout
 from .config import AppConfig, config_path
 from .autostart import is_autostart_enabled, set_autostart
 from .quota import discover_codex, fetch_quota
@@ -140,8 +141,16 @@ class TargetPicker(Gtk.Window):
         self.filtered = self.store.filter_new()
         self.filtered.set_visible_func(self._visible)
         self.table = Gtk.TreeView(model=self.filtered)
+        density_css = Gtk.CssProvider()
+        density_css.load_from_data(b"""
+            .recipient-table { -GtkTreeView-horizontal-separator: 2; -GtkTreeView-vertical-separator: 2; }
+            .recipient-table header button { padding: 3px 4px; min-width: 0; }
+        """)
+        self.table.get_style_context().add_class("recipient-table")
+        self.table.get_style_context().add_provider(density_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.table.set_has_tooltip(True)
         self.table.connect("query-tooltip", self._tooltip)
+        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message)
         for label, index, action in (("Send message", 0, "send_prompt"), ("Resume goal", 12, "send_goal")):
             checkbox = Gtk.CellRendererToggle()
             checkbox.connect("toggled", self._toggle, action)
@@ -155,14 +164,17 @@ class TargetPicker(Gtk.Window):
             if action == "send_goal":
                 column.set_cell_data_func(checkbox, self._goal_cell)
             self.table.append_column(column)
-        columns = [("Title", 1, 270), ("Task status", 10, 170), ("Goal status", 11, 140),
-                   ("Project", 13, 180), ("Project path", 8, 300), ("Kind", 2, 80), ("Availability", 3, 160), ("ID", 4, 295),
+            self.table_layout.register(action, column, index, 105)
+        columns = [("Title", 1, 260), ("Task status", 10, 130), ("Goal status", 11, 110),
+                   ("Project", 13, 150), ("Project path", 8, 300), ("Kind", 2, 80), ("Availability", 3, 160), ("ID", 4, 295),
                    ("PID", 5, 95), ("Instance", 6, 260), ("Deep link", 7, 400),
                    ("Desktop client", 9, 300)]
         self.technical_columns = []
+        column_keys = {1: "title", 2: "kind", 3: "availability", 4: "id", 5: "pid",
+                       6: "instance", 7: "deeplink", 8: "cwd", 9: "owner_id",
+                       10: "task_status", 11: "goal_status", 13: "project_name"}
         for name, index, width in columns:
             renderer = Gtk.CellRendererText()
-            renderer.set_property("ellipsize", 3)
             column = Gtk.TreeViewColumn(name, renderer, text=index)
             if index in (10, 11):
                 column.set_cell_data_func(renderer, self._status_cell, index)
@@ -184,6 +196,8 @@ class TargetPicker(Gtk.Window):
                 self.technical_columns.append(column)
                 column.set_visible(self.config.show_technical_columns)
             self.table.append_column(column)
+            self.table_layout.register(column_keys[index], column, index, width, renderer)
+        self.table_layout.restore()
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroller.add(self.table)
@@ -321,10 +335,16 @@ class TargetPicker(Gtk.Window):
         if action == "send_goal" and target.kind != "thread":
             self._message("Resume goal needs a chat ID. Window recipients support Send message only.", "warning")
             return
-        column = 0 if action == "send_prompt" else 12
-        row[column] = not row[column]
-        target = replace(target, send_prompt=row[0], send_goal=row[12])
-        if row[0] or row[12]:
+        prompt, goal = row[0], row[12]
+        if action == "send_prompt":
+            prompt = not prompt
+        else:
+            goal = not goal
+        # Sorting by an action can move the row as soon as its value changes.
+        iterator = self.filtered.convert_iter_to_child_iter(row.iter)
+        self.store.set(iterator, [0, 12], [prompt, goal])
+        target = replace(target, send_prompt=prompt, send_goal=goal)
+        if prompt or goal:
             self.selected[target.key] = target
         else:
             self.selected.pop(target.key, None)
@@ -360,6 +380,7 @@ class TargetPicker(Gtk.Window):
         self._render_runtime()
 
     def _destroy(self, *_):
+        self.table_layout.close()
         self.closed = True
         for timer in self._timers:
             GLib.source_remove(timer)

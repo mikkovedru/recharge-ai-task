@@ -84,7 +84,12 @@ The compact table shows Send message, Resume goal, Title, Task status, Goal stat
 Enable **Show technical columns** for paths, kind, availability, IDs, PID,
 profile, deep link and desktop client. This preference survives reopening the
 dashboard and does not restart monitoring. All fields remain searchable in
-either view. Columns can be resized and scrolled; hovering a row shows full values.
+either view. Drag a header edge to resize a column; long text wraps onto additional
+lines. Click any header to sort, then click again to reverse the order. PID sorts
+numerically. Drag headers to change their positions, including action columns.
+Column widths, order and sorting are saved automatically and survive refresh,
+closing to the tray and restarting. These view changes do not send signals or
+restart monitoring. Hovering a row also shows its full values.
 
 Successful automatic saves do not add a status line. Write failures remain
 visible and retry while the window is open. Changes made by another picker are

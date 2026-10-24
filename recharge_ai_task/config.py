@@ -41,6 +41,7 @@ class AppConfig:
     poll_seconds: int = 30
     desktop_targets: list[dict] | None = None
     show_technical_columns: bool = False
+    table_layout: dict | None = None
 
     @classmethod
     def load(cls) -> AppConfig:
@@ -63,6 +64,7 @@ class AppConfig:
             poll_seconds=int(data.get("poll_seconds", 30)),
             desktop_targets=data.get("desktop_targets"),
             show_technical_columns=bool(data.get("show_technical_columns", False)),
+            table_layout=data.get("table_layout") if isinstance(data.get("table_layout"), dict) else None,
         )
 
     def save(self) -> None:
