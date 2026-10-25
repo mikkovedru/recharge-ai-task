@@ -7,6 +7,7 @@ from gi.repository import Gtk
 from .autostart import is_autostart_enabled, set_autostart
 from .config import AppConfig
 from .branding import set_window_icon
+from .window_layout import WindowLayout
 
 
 class SettingsDialog(Gtk.Dialog):
@@ -15,6 +16,8 @@ class SettingsDialog(Gtk.Dialog):
         set_window_icon(self)
         self.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Save settings", Gtk.ResponseType.OK)
         self.set_default_size(540, 390)
+        self.window_layout = WindowLayout(self, "settings")
+        self.connect("destroy", self.window_layout.close)
         config = AppConfig.load()
         grid = Gtk.Grid(column_spacing=12, row_spacing=12, margin=18)
         self.get_content_area().add(grid)

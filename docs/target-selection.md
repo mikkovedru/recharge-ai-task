@@ -92,6 +92,8 @@ dashboard and does not restart monitoring. All fields remain searchable in
 either view. Drag a header edge to resize a column; long text wraps onto additional
 lines. Click any header to sort, then click again to reverse the order. PID sorts
 numerically. Drag headers to change their positions, including action columns.
+Drag the wide dividers between the chat list, message editor and log to resize
+them. Window size, Settings dialog size and divider positions are remembered.
 Column widths, order and sorting are saved automatically and survive refresh,
 closing to the tray and restarting. These view changes do not send signals or
 restart monitoring. Hovering a row also shows its full values.

@@ -15,6 +15,7 @@ from gi.repository import Gdk, GLib, Gtk
 
 from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
+from .window_layout import WindowLayout
 from .config import AppConfig, config_path
 from .autostart import is_autostart_enabled, set_autostart
 from .quota import discover_codex, fetch_quota
@@ -33,6 +34,7 @@ class TargetPicker(Gtk.Window):
         set_window_icon(self)
         self.set_default_size(1120, 820)
         self.config = AppConfig.load()
+        self.window_layout = WindowLayout(self)
         self.selected = {t.key: t for t in self.config.targets()}
         self.targets = dict(self.selected)
         self.busy = False
@@ -240,7 +242,7 @@ class TargetPicker(Gtk.Window):
         self.prompt_scroller = Gtk.ScrolledWindow()
         self.prompt_scroller.set_shadow_type(Gtk.ShadowType.IN)
         self.prompt_scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        self.prompt_scroller.set_size_request(-1, 100)
+        self.prompt_scroller.set_size_request(100, 36)
         self.prompt_scroller.add(self.signal)
         prompt.pack_start(self.prompt_scroller, True, True, 0)
         box.pack_start(prompt, False, False, 0)
@@ -258,6 +260,20 @@ class TargetPicker(Gtk.Window):
         box.pack_start(self.send_row, False, False, 0)
         self.status = StatusLog()
         box.pack_start(self.status, False, False, 0)
+        # Each scrolling list and multiline editor gets a draggable boundary.
+        self.list_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for widget, expand in ((search_row, False), (scroller, True), (self.list_toolbar, False)):
+            box.remove(widget)
+            self.list_area.pack_start(widget, expand, expand, 0)
+        self.message_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for widget, expand in ((prompt, True), (self.send_row, False)):
+            box.remove(widget)
+            self.message_area.pack_start(widget, expand, expand, 0)
+        box.remove(self.status)
+        self.status.set_size_request(100, 36)
+        self.message_split = self.window_layout.pane("message_log", self.message_area, self.status, position=125)
+        self.main_split = self.window_layout.pane("targets", self.list_area, self.message_split, position=250)
+        box.pack_start(self.main_split, True, True, 0)
         self.connect("delete-event", lambda *_: self.busy)
         self.connect("destroy", self._destroy)
         self._timers = [GLib.timeout_add_seconds(2, self.poll_runtime),
@@ -390,6 +406,7 @@ class TargetPicker(Gtk.Window):
         self._render_runtime()
 
     def _destroy(self, *_):
+        self.window_layout.close()
         self.table_layout.close()
         self.closed = True
         for timer in self._timers:

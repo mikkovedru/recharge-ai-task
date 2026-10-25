@@ -115,11 +115,13 @@ def check():
         assert siblings[siblings.index(toolbar)-1] is window.table.get_parent()
         assert "Save selection" not in [button.get_label() for button in window.buttons]
         assert window.send_row.get_children() == [window.summary, window.send_button]
-        assert siblings[siblings.index(window.send_row)-1] is window.prompt_scroller.get_parent()
+        assert window.message_area.get_children() == [window.prompt_scroller.get_parent(), window.send_row]
+        assert window.main_split.get_child1() is window.list_area
+        assert window.message_split.get_child2() is window.status
         assert isinstance(window.signal, Gtk.TextView)
         assert window.signal.get_wrap_mode() == Gtk.WrapMode.WORD_CHAR
         assert isinstance(window.status, Gtk.ScrolledWindow)
-        assert window.status.get_allocated_height() >= 96 and not window.status.view.get_editable()
+        assert window.status.get_allocated_height() >= 36 and not window.status.view.get_editable()
         from recharge_ai_task.status_display import COLORS, TASK_STATES, GOAL_STATES, status_level
         # Each window gets its own threshold color, including recovery to normal.
         for primary, secondary in ((84.9,85), (85,100), (99.9,84.9), (100,99.9), (101,0), (0,0)):

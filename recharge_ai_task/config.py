@@ -42,6 +42,7 @@ class AppConfig:
     desktop_targets: list[dict] | None = None
     show_technical_columns: bool = False
     table_layout: dict | None = None
+    ui_layout: dict | None = None
 
     @classmethod
     def load(cls) -> AppConfig:
@@ -65,6 +66,7 @@ class AppConfig:
             desktop_targets=data.get("desktop_targets"),
             show_technical_columns=bool(data.get("show_technical_columns", False)),
             table_layout=data.get("table_layout") if isinstance(data.get("table_layout"), dict) else None,
+            ui_layout=data.get("ui_layout") if isinstance(data.get("ui_layout"), dict) else None,
         )
 
     def save(self) -> None:
