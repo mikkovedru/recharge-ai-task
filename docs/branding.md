@@ -31,3 +31,6 @@ python scripts/prepare_branding.py --symbol /path/to/symbol.png --lockup /path/t
 
 Python packages and frozen executables include runtime assets automatically.
 The Windows build uses the ICO for the CLI and combined desktop executable shell icons.
+
+Hover over the dashboard logo to see the installed program version. Click it to
+open the GitHub repository, or right-click and choose **Copy GitHub repository link**.

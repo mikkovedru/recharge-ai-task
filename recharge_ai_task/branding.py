@@ -1,6 +1,8 @@
 """Packaged Recharge AI-task artwork shared by the tray and GTK windows."""
 from pathlib import Path
 
+REPOSITORY_URL = "https://github.com/mikkovedru/recharge-ai-task"
+
 ASSETS = Path(__file__).resolve().parent / "assets"
 
 

@@ -13,6 +13,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk
 
+from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
 from .config import AppConfig, config_path
 from .autostart import is_autostart_enabled, set_autostart
@@ -121,7 +122,8 @@ class TargetPicker(Gtk.Window):
         dashboard_row.pack_start(dashboard, True, True, 0)
         self.logo = Gtk.Image.new_from_file(str(asset_path("logo-lockup.png")))
         self.logo.get_accessible().set_name("Recharge AI-task logo")
-        dashboard_row.pack_end(self.logo, False, False, 0)
+        self.logo_link = ProjectLogo(self.logo)
+        dashboard_row.pack_end(self.logo_link, False, False, 0)
         box.pack_start(dashboard_row, False, False, 0)
         self.selection_help = Gtk.Label(xalign=0)
         self.selection_help.set_markup("<b>Automatic quota recovery</b> · Choose Send message, Resume goal, or both for each recipient.\n"
