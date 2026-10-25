@@ -1,0 +1,294 @@
+"""Editable recipient plans, effective messages and continuation allowances."""
+from dataclasses import replace
+from gi.repository import GLib, Gtk, Pango
+
+from .config import AppConfig
+from .delivery_policy import Usage, UsageLedger, effective_limit, effective_message, status_advice, planned_actions
+
+
+class LimitControl(Gtk.Box):
+    def __init__(self, changed, *, inherit=False):
+        super().__init__(spacing=4)
+        self.updating = False
+        self.inherit = inherit
+        self.choice = Gtk.ComboBoxText()
+        if inherit:
+            self.choice.append("default", "Use global default")
+        self.choice.append("unlimited", "Unlimited")
+        self.choice.append("limited", "Limit to")
+        self.number = Gtk.SpinButton.new_with_range(0, 1000000, 1)
+        self.number.set_value(1)
+        self.number.set_width_chars(4)
+        self.number.set_no_show_all(True)
+        self.pack_start(self.choice, False, False, 0)
+        self.pack_start(self.number, False, False, 0)
+        self.set_value(None)
+        def update(*_):
+            self.number.set_visible(self.choice.get_active_id() == "limited")
+            if not self.updating:
+                changed()
+        self.choice.connect("changed", update)
+        self.number.connect("value-changed", update)
+
+    def value(self):
+        kind = self.choice.get_active_id()
+        return self.number.get_value_as_int() if kind == "limited" else -1 if self.inherit and kind == "unlimited" else None
+
+    def set_value(self, value):
+        self.updating = True
+        try:
+            kind = "default" if value is None and self.inherit else "unlimited" if value is None or value == -1 else "limited"
+            if kind == "limited":
+                self.number.set_value(value)
+            self.choice.set_active_id(kind)
+            self.number.set_visible(kind == "limited")
+        finally:
+            self.updating = False
+
+
+def wrapped(text=""):
+    label = Gtk.Label(label=text, xalign=0)
+    label.set_line_wrap(True)
+    label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+    label.set_max_width_chars(48)
+    label.set_selectable(True)
+    return label
+
+
+class RecipientPanel(Gtk.Box):
+    def __init__(self, picker):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.picker = picker
+        self.updating = False
+        self.rows = {}
+        self.selected_key = None
+        self.ledger_error = ""
+        self.ledger = None
+        heading = wrapped()
+        heading.set_markup("<b>Recipients &amp; actions</b>")
+        self.pack_start(heading, False, False, 0)
+        self.pack_start(picker.recipient_label, False, False, 0)
+        self.default_prompt = LimitControl(self._defaults_changed)
+        self.default_goal = LimitControl(self._defaults_changed)
+        self.default_controls = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.default_controls.set_max_children_per_line(4)
+        self.default_controls.set_min_children_per_line(1)
+        self.default_controls.set_column_spacing(8)
+        self.default_controls.set_row_spacing(2)
+        self.default_controls.add(Gtk.Label(label="Global limits per recipient:"))
+        for caption, control in (("Messages", self.default_prompt), ("Goal activations", self.default_goal)):
+            group = Gtk.Box(spacing=4)
+            group.pack_start(Gtk.Label(label=caption), False, False, 0)
+            group.pack_start(control, False, False, 0)
+            self.default_controls.add(group)
+        self.reset_all = Gtk.Button(label="Reset all recipient counts")
+        self.reset_all.connect("clicked", self._reset_all)
+        self.default_controls.add(self.reset_all)
+        self.default_controls.set_tooltip_text("Manual and automatic sends share each recipient's allowance. Counts survive restarts. Zero stops an action; use Reset counts to renew allowances.")
+        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+        self.list.connect("row-selected", self._row_selected)
+        self.list_scroller = Gtk.ScrolledWindow()
+        self.list_scroller.set_shadow_type(Gtk.ShadowType.IN)
+        self.list_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.list_scroller.set_size_request(250, 60)
+        self.list_scroller.add(self.list)
+        self.editor = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        self.editor_title = wrapped("Select a recipient to edit its actions and overrides")
+        self.editor.pack_start(self.editor_title, False, False, 0)
+        actions = Gtk.Box(spacing=8)
+        self.prompt = Gtk.CheckButton(label="Send message")
+        self.goal = Gtk.CheckButton(label="Resume goal")
+        for control in (self.prompt, self.goal):
+            control.connect("toggled", self._editor_changed)
+            actions.pack_start(control, False, False, 0)
+        self.reset = Gtk.Button(label="Reset counts")
+        self.reset.set_tooltip_text("Reset both used allowances for this recipient. This never sends anything.")
+        self.reset.connect("clicked", self._reset)
+        actions.pack_end(self.reset, False, False, 0)
+        self.editor.pack_start(actions, False, False, 0)
+        overrides = Gtk.Grid(column_spacing=6, row_spacing=4)
+        self.prompt_limit = LimitControl(self._editor_changed, inherit=True)
+        self.goal_limit = LimitControl(self._editor_changed, inherit=True)
+        for row, (caption, control) in enumerate((("Messages", self.prompt_limit), ("Goal activations", self.goal_limit))):
+            overrides.attach(Gtk.Label(label=caption, xalign=0), 0, row, 1, 1)
+            overrides.attach(control, 1, row, 1, 1)
+        self.editor.pack_start(overrides, False, False, 0)
+        self.advice = wrapped()
+        self.status_rules = Gtk.Expander(label="Status rules (verified live at delivery)")
+        self.status_rules.add(self.advice)
+        self.editor.pack_start(self.status_rules, False, False, 0)
+        self.custom = Gtk.CheckButton(label="Use a custom message for this recipient")
+        self.custom.connect("toggled", self._custom_toggled)
+        self.editor.pack_start(self.custom, False, False, 0)
+        self.message = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        self.message.set_left_margin(4)
+        self.message.set_right_margin(4)
+        self.message_buffer = self.message.get_buffer()
+        self.message_buffer.connect("changed", self._message_changed)
+        self.message_scroller = Gtk.ScrolledWindow()
+        self.message_scroller.set_shadow_type(Gtk.ShadowType.IN)
+        self.message_scroller.set_size_request(120, 48)
+        self.message_scroller.add(self.message)
+        self.editor.pack_start(self.message_scroller, True, True, 0)
+        self.editor_scroller = Gtk.ScrolledWindow()
+        self.editor_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.editor_scroller.set_size_request(250, 120)
+        self.editor_scroller.add(self.editor)
+        self.split = picker.window_layout.pane("recipient_list_editor", self.list_scroller, self.editor_scroller, position=150)
+        self.pack_start(self.split, True, True, 0)
+
+    def _usage(self):
+        try:
+            if self.ledger is None:
+                self.ledger = UsageLedger()
+            usage = self.ledger.snapshot()
+            self.ledger_error = ""
+            return usage
+        except Exception as exc:
+            error = f"Cannot read delivery allowances: {exc}"
+            if error != self.ledger_error:
+                self.picker._message(error, "error")
+            self.ledger_error = error
+            return {}
+
+    def render(self):
+        config = AppConfig.load()
+        usage = self._usage()
+        self.updating = True
+        try:
+            self.default_prompt.set_value(config.prompt_limit)
+            self.default_goal.set_value(config.goal_limit)
+            selected = self.picker.selected
+            for key in list(self.rows):
+                if key not in selected:
+                    self.list.remove(self.rows.pop(key))
+            for key, target in selected.items():
+                row = self.rows.get(key)
+                if row is None:
+                    row = Gtk.ListBoxRow()
+                    row.key = key
+                    body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin=6)
+                    row.title, row.identity, row.plan, row.allowance, row.preview = [wrapped() for _ in range(5)]
+                    for label in (row.title, row.identity, row.plan, row.allowance, row.preview):
+                        body.pack_start(label, False, False, 0)
+                    row.add(body)
+                    self.list.add(row)
+                    self.rows[key] = row
+                    row.show_all()
+                row.title.set_markup("<b>" + GLib.markup_escape_text(target.title) + "</b>")
+                row.identity.set_markup("<small>" + GLib.markup_escape_text(target.id) + "</small>")
+                row.set_tooltip_text(f"{target.id}\n{target.instance}")
+                prompt, goal = target.signal_actions()
+                pl, gl = effective_limit(target, "prompt", config), effective_limit(target, "goal", config)
+                pu, gu = usage.get((key, "prompt"), Usage()), usage.get((key, "goal"), Usage())
+                message = effective_message(target, self.picker._prompt_text())
+                automatic = planned_actions(target, config, usage, message)
+                manual = planned_actions(target, config, usage, message, manual=True)
+                plan = "Automatic / Send now: " + manual if automatic == manual else "Automatic: " + automatic + "\nSend now: " + manual
+                if self.ledger_error:
+                    plan = "Cannot verify allowances — delivery blocked"
+                row.plan.set_text(plan)
+                row.plan.set_tooltip_text("Preview uses the latest refresh; Goal state and allowances are rechecked at delivery.\n" +
+                    "Automatic: " + status_advice(target) + "\nSend now: " + status_advice(target, manual=True))
+                row.allowance.set_text(("Goal: " + gu.describe(gl) + (" (override)" if target.goal_limit is not None else " (default)") + "\n" if goal else "") +
+                    ("Message: " + pu.describe(pl) + (" (override)" if target.prompt_limit is not None else " (default)") if prompt else ""))
+                preview = " ".join(message.splitlines())
+                row.preview.set_text(("Custom: " if target.custom_prompt is not None else "Default: ") + (preview[:100] + "…" if len(preview) > 100 else preview) if prompt else "No message selected")
+                row.preview.set_tooltip_text(message if prompt else "")
+            if self.selected_key not in selected:
+                self.selected_key = next(iter(selected), None)
+            self.list.select_row(self.rows.get(self.selected_key))
+            self._load_editor(config)
+        finally:
+            self.updating = False
+
+    def _row_selected(self, _list, row):
+        if self.updating:
+            return
+        self.selected_key = row.key if row is not None else None
+        self.updating = True
+        try:
+            self._load_editor(AppConfig.load())
+        finally:
+            self.updating = False
+
+    def _load_editor(self, config):
+        target = self.picker.selected.get(self.selected_key)
+        self.editor.set_sensitive(target is not None)
+        if target is None:
+            self.editor_title.set_text("Select a recipient to edit its actions and overrides")
+            self.advice.set_text("")
+            self.message_buffer.set_text("")
+            return
+        self.editor_title.set_text("Overrides · " + target.id[:12])
+        self.editor_title.set_tooltip_text(f"{target.title}\n{target.id}\n{target.instance}")
+        self.prompt.set_active(target.send_prompt)
+        self.goal.set_active(target.send_goal)
+        self.goal.set_sensitive(target.kind == "thread")
+        self.prompt_limit.set_value(target.prompt_limit)
+        self.goal_limit.set_value(target.goal_limit)
+        self.custom.set_active(target.custom_prompt is not None)
+        self.message.set_editable(target.custom_prompt is not None)
+        text = effective_message(target, self.picker._prompt_text())
+        current = self.message_buffer.get_text(*self.message_buffer.get_bounds(), True)
+        if current != text:
+            self.message_buffer.set_text(text)
+        self.advice.set_text("Automatic: " + status_advice(target) + "\nSend now: " + status_advice(target, manual=True))
+
+    def _defaults_changed(self):
+        if self.updating:
+            return
+        try:
+            config = AppConfig.load()
+            config.prompt_limit = self.default_prompt.value()
+            config.goal_limit = self.default_goal.value()
+            config.save()
+            self.picker.config = config
+            self.picker._summary()
+            self.picker.poll_runtime()
+        except Exception as exc:
+            self.default_prompt.set_value(self.picker.config.prompt_limit)
+            self.default_goal.set_value(self.picker.config.goal_limit)
+            self.picker._message(f"Could not save default limits: {exc}", "error")
+
+    def _editor_changed(self, *_):
+        if self.updating:
+            return
+        target = self.picker.selected.get(self.selected_key)
+        if target is None:
+            return
+        self.picker.update_recipient(replace(target, send_prompt=self.prompt.get_active(), send_goal=self.goal.get_active(),
+            prompt_limit=self.prompt_limit.value(), goal_limit=self.goal_limit.value()))
+
+    def _custom_toggled(self, *_):
+        if self.updating:
+            return
+        target = self.picker.selected.get(self.selected_key)
+        if target is not None:
+            self.picker.update_recipient(replace(target, custom_prompt=effective_message(target, self.picker._prompt_text()) if self.custom.get_active() else None))
+
+    def _message_changed(self, *_):
+        if self.updating or not self.custom.get_active():
+            return
+        target = self.picker.selected.get(self.selected_key)
+        if target is not None:
+            self.picker.update_recipient(replace(target, custom_prompt=self.message_buffer.get_text(*self.message_buffer.get_bounds(), True)))
+
+    def _reset(self, *_):
+        if self.selected_key is None:
+            return
+        try:
+            (self.ledger or UsageLedger()).reset([self.selected_key])
+            self.picker._message("Recipient counts reset. No signals sent.")
+            self.render()
+        except Exception as exc:
+            self.picker._message(str(exc), "error")
+
+    def _reset_all(self, *_):
+        try:
+            ledger = self.ledger or UsageLedger()
+            ledger.reset({key for key, _action in ledger.snapshot()})
+            self.picker._message("All recipient counts reset. No signals sent.")
+            self.render()
+        except Exception as exc:
+            self.picker._message(str(exc), "error")

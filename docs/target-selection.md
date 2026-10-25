@@ -106,8 +106,8 @@ On, a red border when Off, and a yellow border while Stopping. It updates every
 two seconds. A stopping worker must finish before another starts. If the tray is absent, Start launches it.
 Closing the picker leaves the tray and active watch running.
 
-The overview groups **Monitoring**, **Recipients**, and **Next check** above
-the list. Monitoring reports the tray worker, independently of each chat's task
+The overview groups **Monitoring** and **Next check** above the list.
+**Recipients & actions** sits beside it with the actual recipient plans. Monitoring reports the tray worker, independently of each chat's task
 status. Recipients counts the selected signal destinations. Next check uses the
 worker's scheduled quota check or delivery retry, with a live countdown and the
 reason for waiting. It does not promise that a task will resume at that time.
@@ -306,3 +306,58 @@ the control backend remains unloaded. Its model provider points only to a closed
 local port; existing chats and external model services are never used. Live checks
 exercise discovery and GTK selection/search/save using isolated configuration.
 No test signal is sent to existing user chats.
+
+## Recipient messages and continuation limits
+
+**Recipients & actions** lists the chosen chats/windows, their IDs, automatic and
+manual action previews, used/remaining allowances and effective messages. Choose
+an entry to edit its actions, message and limits. Hover over its preview for the
+full message; **Status rules** explains the current status checks. The preview
+uses the latest refresh; the sender verifies live Goal state and allowances.
+Duplicate titles stay separate because preferences and counts use the chat ID
+and Codex profile, or the window identity.
+
+The **Global limits per recipient** controls beside the default message set
+separate limits for Messages and Goal activations. These are defaults for each
+recipient, rather than a shared pool. Each recipient can inherit a default,
+choose its own limit, or explicitly choose Unlimited. Zero prevents that action.
+**Use a custom message for this recipient** overrides the default, including
+multiline text. An empty custom message is an invalid draft; it never silently
+falls back to the default. Overrides survive refresh, deselection and restarting.
+
+Counts cover both **Send now** and automatic Desktop watch recovery. They last
+until explicitly reset, across quota resets, watch restarts and app restarts.
+Confirmed messages and native Goal activations consume their respective
+allowances. Already-active goals, protected or missing goals, and definitive
+failures consume no Goal activation allowance. An unknown acknowledgement or
+interrupted send reserves an allowance as **unconfirmed** to avoid duplicates.
+A successful Goal action remains counted if its later message fails.
+
+When both actions are selected, a reached Goal limit withholds the message too.
+Untick Resume goal to send a message independently. A reached Message limit still
+allows Goal-only activation. **Reset counts** renews both allowances for the
+chosen recipient; **Reset all recipient counts** renews all stored allowances.
+Neither reset sends anything or replays an earlier quota recovery. Resets refuse
+to run while a sender still has a delivery in progress. Check the chat before
+resetting unconfirmed deliveries. Counts live in `delivery.sqlite` beside the
+settings, so changing configuration does not erase them.
+
+These limits apply to the selected desktop recipients. The separate interactive
+PTY CLI wrapper continues to manage its own terminal session.
+
+## Does status affect sending?
+
+Checking an action saves a choice. **Send now** attempts it immediately;
+**Desktop watch** waits for quota recovery and its grace period (or a selected
+quota-stopped Goal at startup). A checked box is not a promise of delivery.
+
+| Selected action | Behavior |
+| --- | --- |
+| Send message only | Attempts the effective message regardless of cached task/goal status, subject to its allowance. Codex may reject a busy chat or unavailable quota/routing. Window recipients also require verified focus. |
+| Resume goal only | Requires a fixed chat ID and live Goal/task verification. Automatic recovery skips paused, blocked, budget-limited and completed goals and running/waiting tasks. Manual sending may resume a paused goal, including during an active task. A Goal already active needs no activation and consumes no Goal allowance. |
+| Both | Verifies/activates Goal first, then sends the message. An active turn receives the message through steering after verified Goal handling. If Goal is intentionally skipped because it is protected, already running, or absent, the independent message choice still applies. Failed or unconfirmed Goal verification withholds the message. Limits apply as described above. |
+
+When neither action is selected, nothing is sent. Status changes can invalidate
+a preview before delivery; the result log reports accepted, skipped and failed
+actions. The sender never removes a Goal's budget, changes its objective or sends
+an empty user message to imitate native Goal continuation.

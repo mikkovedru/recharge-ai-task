@@ -43,6 +43,8 @@ class AppConfig:
     show_technical_columns: bool = False
     table_layout: dict | None = None
     ui_layout: dict | None = None
+    prompt_limit: int | None = None
+    goal_limit: int | None = None
 
     @classmethod
     def load(cls) -> AppConfig:
@@ -67,6 +69,8 @@ class AppConfig:
             show_technical_columns=bool(data.get("show_technical_columns", False)),
             table_layout=data.get("table_layout") if isinstance(data.get("table_layout"), dict) else None,
             ui_layout=data.get("ui_layout") if isinstance(data.get("ui_layout"), dict) else None,
+            prompt_limit=data.get("prompt_limit"),
+            goal_limit=data.get("goal_limit"),
         )
 
     def save(self) -> None:
@@ -87,12 +91,14 @@ class AppConfig:
             return tuple(self.desktop_window_titles)
         return DEFAULT_WINDOW_TITLES
 
-    def targets(self):
+    def all_targets(self):
         from .targets import Target
         result = []
         for value in self.desktop_targets or []:
             target = Target.from_dict(value)
             prompt, goal = target.signal_actions(self.goal_mode)
-            if prompt or goal:
-                result.append(replace(target, send_prompt=prompt, send_goal=goal))
+            result.append(replace(target, send_prompt=prompt, send_goal=goal))
         return result
+
+    def targets(self):
+        return [t for t in self.all_targets() if any(t.signal_actions())]

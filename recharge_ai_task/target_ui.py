@@ -16,6 +16,8 @@ from gi.repository import Gdk, GLib, Gtk
 from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
 from .window_layout import WindowLayout
+from .recipient_ui import RecipientPanel
+from .delivery_policy import invalid_messages
 from .config import AppConfig, config_path
 from .autostart import is_autostart_enabled, set_autostart
 from .quota import discover_codex, fetch_quota
@@ -32,9 +34,10 @@ class TargetPicker(Gtk.Window):
         self.quit_on_close = quit_on_close
         super().__init__(title="Recharge AI-task")
         set_window_icon(self)
-        self.set_default_size(1120, 820)
+        self.set_default_size(1440, 980)
         self.config = AppConfig.load()
         self.window_layout = WindowLayout(self)
+        self.preferences = {t.key: t for t in self.config.all_targets()}
         self.selected = {t.key: t for t in self.config.targets()}
         self.targets = dict(self.selected)
         self.busy = False
@@ -78,7 +81,7 @@ class TargetPicker(Gtk.Window):
         self.watch_button = Gtk.Button(label="Start Desktop watch")
         self.watch_button.connect("clicked", self.toggle_watch)
         self.watch_button.set_sensitive(False)
-        watch_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        watch_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         watch_row.pack_start(self.watch_button, False, False, 0)
         watch_row.pack_start(self.watch_label, True, True, 0)
         overview = Gtk.Box(spacing=10, homogeneous=True)
@@ -95,7 +98,6 @@ class TargetPicker(Gtk.Window):
         self.recipient_label = Gtk.Label(xalign=0)
         self.recipient_label.set_line_wrap(True)
         self.recipient_label.set_max_width_chars(30)
-        card("Recipients", self.recipient_label)
         check = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.next_check_label = Gtk.Label(label="Checking…", xalign=0)
         self.next_check_detail = Gtk.Label(xalign=0)
@@ -169,9 +171,9 @@ class TargetPicker(Gtk.Window):
             if action == "send_goal":
                 column.set_cell_data_func(checkbox, self._goal_cell)
             self.table.append_column(column)
-            self.table_layout.register(action, column, index, 105)
-        columns = [("Title", 1, 260), ("Last active", 14, 160), ("Task status", 10, 130), ("Goal status", 11, 110),
-                   ("Project", 13, 150), ("Project path", 8, 300), ("Kind", 2, 80), ("Availability", 3, 160), ("ID", 4, 295),
+            self.table_layout.register(action, column, index, 95)
+        columns = [("Title", 1, 230), ("Last active", 14, 155), ("Task status", 10, 125), ("Goal status", 11, 105),
+                   ("Project", 13, 130), ("Project path", 8, 300), ("Kind", 2, 80), ("Availability", 3, 160), ("ID", 4, 295),
                    ("PID", 5, 95), ("Instance", 6, 260), ("Deep link", 7, 400),
                    ("Desktop client", 9, 300)]
         self.technical_columns = []
@@ -228,7 +230,7 @@ class TargetPicker(Gtk.Window):
         self.buttons.extend((self.refresh_button, self.copy_button, self.open_button))
         box.pack_start(self.list_toolbar, False, False, 0)
         prompt = Gtk.Box(spacing=8)
-        prompt_label = Gtk.Label(label="Message to send:", valign=Gtk.Align.START)
+        prompt_label = Gtk.Label(label="Default message:", valign=Gtk.Align.START)
         prompt_label.set_margin_top(6)
         prompt.pack_start(prompt_label, False, False, 0)
         self.signal = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
@@ -272,7 +274,11 @@ class TargetPicker(Gtk.Window):
         box.remove(self.status)
         self.status.set_size_request(100, 36)
         self.message_split = self.window_layout.pane("message_log", self.message_area, self.status, position=125)
-        self.main_split = self.window_layout.pane("targets", self.list_area, self.message_split, position=250)
+        self.recipient_panel = RecipientPanel(self)
+        self.message_area.pack_start(self.recipient_panel.default_controls, False, False, 0)
+        self.message_area.reorder_child(self.recipient_panel.default_controls, 0)
+        self.workspace_split = self.window_layout.pane("chat_recipients", self.list_area, self.recipient_panel, horizontal=True, position=960)
+        self.main_split = self.window_layout.pane("targets", self.workspace_split, self.message_split, position=480)
         box.pack_start(self.main_split, True, True, 0)
         self.connect("delete-event", lambda *_: self.busy)
         self.connect("destroy", self._destroy)
@@ -362,18 +368,22 @@ class TargetPicker(Gtk.Window):
             self._message("Resume goal needs a chat ID. Window recipients support Send message only.", "warning")
             return
         prompt, goal = row[0], row[12]
-        if action == "send_prompt":
-            prompt = not prompt
-        else:
-            goal = not goal
-        # Sorting by an action can move the row as soon as its value changes.
-        iterator = self.filtered.convert_iter_to_child_iter(row.iter)
-        self.store.set(iterator, [0, 12], [prompt, goal])
-        target = replace(target, send_prompt=prompt, send_goal=goal)
-        if prompt or goal:
+        self.update_recipient(replace(target,
+            send_prompt=not prompt if action == "send_prompt" else prompt,
+            send_goal=not goal if action == "send_goal" else goal))
+
+    def update_recipient(self, target):
+        self.preferences[target.key] = target
+        self.targets[target.instance + "\0" + target.id] = target
+        if any(target.signal_actions()):
             self.selected[target.key] = target
         else:
             self.selected.pop(target.key, None)
+        # Locate by identity. A checkbox change can reorder the source model.
+        for row in self.store:
+            if row[4] == target.id and row[6] == target.instance:
+                self.store.set(row.iter, [0, 12], [target.send_prompt, target.send_goal])
+                break
         self._preferences_changed()
 
     def _preferences_changed(self, *_):
@@ -384,7 +394,7 @@ class TargetPicker(Gtk.Window):
 
     @staticmethod
     def _signature(targets, text):
-        return (frozenset((t.key, *t.signal_actions()) for t in targets), text)
+        return (frozenset((t.key, *t.signal_actions(), t.custom_prompt, t.prompt_limit, t.goal_limit) for t in targets), text)
 
     def dirty(self):
         return self._signature(self.selected.values(), self._prompt_text()) != self.saved_signature
@@ -403,6 +413,8 @@ class TargetPicker(Gtk.Window):
         if message and message != self._save_notice:
             self._message(message, "error" if self.autosave_error else "warning")
         self._save_notice = message
+        if hasattr(self, "recipient_panel"):
+            self.recipient_panel.render()
         self._render_runtime()
 
     def _destroy(self, *_):
@@ -502,9 +514,8 @@ class TargetPicker(Gtk.Window):
 
     def _render_overview(self):
         count = len(self.selected)
-        self.recipient_label.set_markup(f"<b>{count} selected</b>\n" +
-            ("Choose Send message or Resume goal below." if not count else
-             "Only these recipients receive automatic signals."))
+        self.recipient_label.set_markup(f"<b>{count} selected</b> · " +
+            ("Choose actions in the chat list." if not count else "Choose an item below to edit overrides."))
         value, detail = watch_check_summary(self.runtime, time.time())
         self.next_check_label.set_markup("<b>" + GLib.markup_escape_text(value) + "</b>")
         self.next_check_detail.set_text(detail)
@@ -539,8 +550,7 @@ class TargetPicker(Gtk.Window):
             if not self.selected:
                 self._message("Enable Send message or Resume goal for at least one recipient before starting Desktop watch.", "warning")
                 return
-            if any(t.signal_actions()[0] for t in self.selected.values()) and not self._prompt_text().strip():
-                self._message("Enter a message for recipients with Send message enabled.", "warning")
+            if not self._messages_ready():
                 return
             command = "start-watch"
         def control():
@@ -562,6 +572,10 @@ class TargetPicker(Gtk.Window):
                         time.sleep(.2)
             if command == "start-watch" and live.get("per_target_signals") is not True:
                 raise RuntimeError("Restart the tray to use per-recipient Prompt / Goal signals; the running tray is an older version.")
+            uses_policies = self.config.prompt_limit is not None or self.config.goal_limit is not None or any(
+                t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in self.selected.values())
+            if command == "start-watch" and uses_policies and not live.get("recipient_policies"):
+                raise RuntimeError("Restart the tray to enforce recipient messages and continuation limits.")
             return tray_control.request(command)
         def show(value):
             self.runtime = value
@@ -633,6 +647,8 @@ class TargetPicker(Gtk.Window):
         self.startup_toggle.set_sensitive(not active)
         self.table.set_sensitive(not active)
         self.settings_button.set_sensitive(not active)
+        self.recipient_panel.set_sensitive(not active)
+        self.recipient_panel.default_controls.set_sensitive(not active)
         self._render_runtime()
 
     def _work(self, job, done):
@@ -653,10 +669,9 @@ class TargetPicker(Gtk.Window):
         threading.Thread(target=worker, daemon=True).start()
 
     def _apply_inventory(self, inventory):
-        live = {t.key: t for t in inventory.targets}
+        live = {t.key: t.with_preferences(self.preferences.get(t.key)) for t in inventory.targets}
         for key, saved in list(self.selected.items()):
-            self.selected[key] = replace(live.get(key, replace(saved, task_status="Unavailable", goal_status="Unavailable")),
-                                         send_prompt=saved.send_prompt, send_goal=saved.send_goal)
+            self.selected[key] = live.get(key, replace(saved, task_status="Unavailable", goal_status="Unavailable")).with_preferences(saved)
         targets = {**live, **{k: t for k, t in self.selected.items() if k not in live}}
         self.targets = {t.instance + "\0" + t.id: t for t in targets.values()}
         # Update existing rows in place so refresh preserves focus and scrolling.
@@ -743,7 +758,8 @@ class TargetPicker(Gtk.Window):
         # drafts may be saved, but sending/watching validates them separately.
         try:
             config = AppConfig.load()
-            config.desktop_targets = [t.to_dict() for t in self.selected.values()]
+            self.preferences.update(self.selected)
+            config.desktop_targets = [t.to_dict() for t in self.preferences.values()]
             config.continue_prompt = self._prompt_text()
             config.mode = "desktop"
             config.save()
@@ -761,14 +777,25 @@ class TargetPicker(Gtk.Window):
         self._background(lambda: tray_control.request("reload"), lambda *_: self.poll_runtime())
         return True
 
+    def _messages_ready(self):
+        try:
+            invalid = invalid_messages(self.selected.values(), self._prompt_text(), AppConfig.load())
+        except Exception as exc:
+            self._message(f"Cannot validate delivery settings: {exc}", "error")
+            return False
+        if invalid:
+            self._message("Enter a message for recipients with Send message enabled: " +
+                          ", ".join(t.title for t in invalid), "warning")
+            return False
+        return True
+
     def send(self, *_):
         if not self.selected:
             self._message("Select at least one target before sending.", "warning")
             return
         selected = list(self.selected.values())
         text = self._prompt_text()
-        if any(t.signal_actions()[0] for t in selected) and not text.strip():
-            self._message("Enter a message for recipients with Send message enabled.", "warning")
+        if not self._messages_ready():
             return
         self._message(f"Sending now to {len(selected)} selected recipients…", "success")
         def show(results):

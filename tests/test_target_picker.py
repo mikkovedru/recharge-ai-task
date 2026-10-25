@@ -115,8 +115,9 @@ def check():
         assert siblings[siblings.index(toolbar)-1] is window.table.get_parent()
         assert "Save selection" not in [button.get_label() for button in window.buttons]
         assert window.send_row.get_children() == [window.summary, window.send_button]
-        assert window.message_area.get_children() == [window.prompt_scroller.get_parent(), window.send_row]
-        assert window.main_split.get_child1() is window.list_area
+        assert window.message_area.get_children() == [window.recipient_panel.default_controls, window.prompt_scroller.get_parent(), window.send_row]
+        assert window.main_split.get_child1() is window.workspace_split
+        assert window.workspace_split.get_child1() is window.list_area
         assert window.message_split.get_child2() is window.status
         assert isinstance(window.signal, Gtk.TextView)
         assert window.signal.get_wrap_mode() == Gtk.WrapMode.WORD_CHAR

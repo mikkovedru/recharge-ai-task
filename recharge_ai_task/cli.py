@@ -143,18 +143,25 @@ def _cmd_targets(argv):
                 parser.error(f"Target {value!r} is unavailable or ambiguous; use its full key from --json")
             if matches[0].key not in {t.key for t in selection}:
                 selection.append(matches[0])
-        previous = {t.key: t for t in config.targets()}
-        config.desktop_targets = [replace(t,
-            send_prompt=previous[t.key].send_prompt if t.key in previous else True,
-            send_goal=previous[t.key].send_goal if t.key in previous else False).to_dict() for t in selection]
+        previous = {t.key: t for t in config.all_targets()}
+        def choose(target):
+            saved = previous.get(target.key)
+            active = saved is not None and any(saved.signal_actions())
+            return replace(target.with_preferences(saved), send_prompt=saved.send_prompt if active else True,
+                           send_goal=saved.send_goal if active else False)
+        chosen = [choose(t) for t in selection]
+        keys = {t.key for t in chosen}
+        inactive = [replace(t, send_prompt=False, send_goal=False) for key, t in previous.items() if key not in keys]
+        config.desktop_targets = [t.to_dict() for t in chosen + inactive]
         config.mode = "desktop"
         config.save()
     elif ns.clear:
-        config.desktop_targets = []
+        config.desktop_targets = [replace(t, send_prompt=False, send_goal=False).to_dict() for t in config.all_targets()]
         config.save()
     selected = {t.key: t for t in config.targets()}
+    preferences = {t.key: t for t in config.all_targets()}
     if ns.json:
-        print(json.dumps({"targets": [dict(t.to_dict(), key=t.key, selected=t.key in selected,
+        print(json.dumps({"targets": [dict(t.with_preferences(preferences.get(t.key)).to_dict(), key=t.key, selected=t.key in selected,
                 send_prompt=selected[t.key].send_prompt if t.key in selected else False,
                 send_goal=selected[t.key].send_goal if t.key in selected else False) for t in inventory.targets], "warnings": inventory.warnings}, indent=2, ensure_ascii=False))
     else:

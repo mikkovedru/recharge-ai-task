@@ -372,6 +372,13 @@ click headers to sort, and drag headers to reorder them. Long text wraps; column
 widths, positions and sorting are remembered between launches. The visible
 **Last active** column shows each chat's last update in Codex in local time.
 Chats sort newest first by default; you can choose and save another sort.
+The resizable **Recipients & actions** panel shows each selected item's
+automatic/manual plan, effective message and used/remaining allowances. Set global Message and Goal
+activation limits beside the default message, then override either limit or the
+message for individual recipients. Counts persist until explicitly reset and
+cover manual sends and automatic recovery. Unconfirmed sends keep their allowance.
+See [recipient policies and status rules](docs/target-selection.md#recipient-messages-and-continuation-limits)
+for action ordering, skipped actions and counter reset behavior.
 
 Settings now live in `~/.recharge-ai-task/config.json`. On the first default
 launch, existing settings from the previous name are copied byte for byte;

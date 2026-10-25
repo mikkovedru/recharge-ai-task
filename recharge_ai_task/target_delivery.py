@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from .codex_ipc import DesktopIPC, DeliveryUncertain
 from .targets import Target, discover_windows
+from .delivery_policy import ActionBudget, LimitReached, UsageLedger, effective_message
 
 _log = logging.getLogger("recharge-ai-task.delivery")
 
@@ -59,7 +60,7 @@ def _send_thread(target, text):
         desktop.send(target.id, text, _owner_for_delivery(desktop, target))
 
 
-def recover_target(target, text, *, manual=False, send_prompt=True, require_goal=False, enter_presses=1, key_delay=.12):
+def recover_target(target, text, *, manual=False, send_prompt=True, require_goal=False, enter_presses=1, key_delay=.12, actions=None):
     """Activate quota-stopped goals, then continue in the desktop owner.
 
     Explicit manual recovery may also resume paused goals. Automatic recovery
@@ -69,6 +70,8 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
         return DeliveryResult(target, False,
             "Native goal recovery requires a chat ID; select a chat or turn off Goal for this recipient", retryable=False)
     from .goal_control import NativeGoals
+    def perform(action, operation):
+        return operation() if actions is None else actions.perform(action, operation)
     try:
         if not target.instance or Path(target.endpoint).resolve() != (Path(target.instance) / "ipc/ipc.sock").resolve():
             raise ValueError("Desktop endpoint does not match the selected Codex profile")
@@ -101,7 +104,7 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                 if goal is not None and (goal["status"] in {"usageLimited", "paused"}
                         or manual and snapshot.get("goal") in {"paused", "usageLimited"}):
                     resumed = goals.resume(target.id, goal, allow_paused=manual, allow_active=manual,
-                        activate=lambda: desktop.resume_goal(target, goal))
+                        activate=lambda: perform("goal", lambda: desktop.resume_goal(target, goal)))
                     if not resumed:
                         return DeliveryResult(target, True, "Skipped — goal changed before recovery", skipped=True)
                 else:
@@ -124,9 +127,9 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                         raise DeliveryUncertain("Native Goal was activated, but its task state could not be verified; no prompt sent")
                 if send_prompt:
                     if goal is not None and task["type"] == "active":
-                        desktop.steer(target.id, text, owner)
+                        perform("prompt", lambda: desktop.steer(target.id, text, owner))
                     else:
-                        desktop.send(target.id, text, owner)
+                        perform("prompt", lambda: desktop.send(target.id, text, owner))
                 if goal is not None:
                     try:
                         after = goals.get(target.id)
@@ -137,13 +140,15 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                     except Exception as exc:
                         raise DeliveryUncertain("Continuation accepted, but the resulting goal state was not confirmed; check this chat") from exc
                 if not send_prompt:
+                    if not resumed:
+                        return DeliveryResult(target, True, "Goal already active — no activation sent", skipped=True)
                     return DeliveryResult(target, True,
                         "Native goal activation verified; current turn continues, no prompt sent" if task["type"] == "active" else
                         "Native goal activation verified in the desktop; no prompt sent")
                 return DeliveryResult(target, True,
                     "Native goal activation verified; continuation accepted" if resumed else
                     "No goal; continuation accepted" if goal is None else "Goal already active; continuation accepted")
-    except DeliveryUncertain as exc:
+    except (DeliveryUncertain, LimitReached) as exc:
         return DeliveryResult(target, False, str(exc), retryable=False)
     except Exception as exc:
         return DeliveryResult(target, False, str(exc))
@@ -216,27 +221,46 @@ def deliver_targets(targets, text, *, enter_presses=1, key_delay=.12):
 
 
 def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12):
-    """Honor each recipient's actions. Goal activation precedes its prompt."""
+    """Honor each recipient's actions, overrides and persistent allowances."""
+    from .config import AppConfig
     results, seen = [], set()
+    try:
+        config, ledger = AppConfig.load(), UsageLedger()
+    except Exception as exc:
+        return [DeliveryResult(t, False, f"Cannot read delivery allowances: {exc}", retryable=False) for t in targets]
     for target in targets:
         if target.key in seen:
             continue
         seen.add(target.key)
         prompt, goal = target.signal_actions()
-        if not prompt and not goal:
-            result = DeliveryResult(target, True, "Skipped — no signals selected", skipped=True)
-        elif prompt and not text.strip():
-            result = DeliveryResult(target, False, "Prompt message cannot be empty", retryable=False)
-        elif goal:
-            result = recover_target(target, text, manual=manual, send_prompt=prompt,
-                require_goal=True, enter_presses=enter_presses, key_delay=key_delay)
-            if result.skipped and prompt:
-                # Independent Prompt selection still applies if no resumable
-                # goal exists. A failed/unconfirmed goal action never falls through.
-                sent = deliver_targets([target], text, enter_presses=enter_presses, key_delay=key_delay)[0]
-                result = DeliveryResult(target, sent.success,
-                    f"Goal: {result.detail}; Prompt: {sent.detail}", sent.retryable, sent.skipped)
-        else:
-            result = deliver_targets([target], text, enter_presses=enter_presses, key_delay=key_delay)[0]
+        message = effective_message(target, text)
+        try:
+            budget = ActionBudget(ledger, target, config)
+            withheld = prompt and not budget.available("prompt")
+            if withheld:
+                prompt = False
+            if not prompt and not goal:
+                result = DeliveryResult(target, True, "Skipped — message limit reached" if withheld else "Skipped — no signals selected", skipped=True)
+            elif goal and not budget.available("goal"):
+                result = DeliveryResult(target, True, "Skipped — Goal limit reached; message withheld. Disable Resume goal to send a message independently.", skipped=True)
+            elif prompt and not message.strip():
+                result = DeliveryResult(target, False, "Prompt message cannot be empty", retryable=False)
+            elif goal:
+                result = recover_target(target, message, manual=manual, send_prompt=prompt,
+                    require_goal=True, enter_presses=enter_presses, key_delay=key_delay, actions=budget)
+                if result.skipped and prompt:
+                    # Preserve the independent message choice for protected or
+                    # missing goals. A failed/unconfirmed activation never falls through.
+                    sent = budget.perform("prompt", lambda: deliver_targets([target], message,
+                        enter_presses=enter_presses, key_delay=key_delay)[0])
+                    result = DeliveryResult(target, sent.success,
+                        f"Goal: {result.detail}; Prompt: {sent.detail}", sent.retryable, sent.skipped)
+            else:
+                result = budget.perform("prompt", lambda: deliver_targets([target], message,
+                    enter_presses=enter_presses, key_delay=key_delay)[0])
+            if withheld:
+                result = DeliveryResult(target, result.success, result.detail + "; message limit reached", result.retryable, result.skipped)
+        except Exception as exc:
+            result = DeliveryResult(target, False, str(exc), retryable=False)
         results.append(result)
     return results

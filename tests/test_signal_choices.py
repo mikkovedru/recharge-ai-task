@@ -95,3 +95,19 @@ def test_watch_restart_preserves_successes_and_retries_confirmed_failure(monkeyp
     watch.run_desktop_watch(watch.WatchConfig(desktop_targets=targets, continue_prompt='New', state=state), Stop())
     assert calls == [('b', 'Old'), ('b', 'New')]
     assert not state.pending and state.delivered == {target.key for target in targets}
+
+
+def test_cli_deselection_and_reselection_keep_message_and_limit_overrides(monkeypatch, capsys):
+    from recharge_ai_task import cli, targets
+    a = Target('thread','a','Same',send_prompt=True,send_goal=False,custom_prompt='Special',prompt_limit=2)
+    b = replace(a,id='b',custom_prompt=None,prompt_limit=None)
+    AppConfig(desktop_targets=[a.to_dict(),b.to_dict()]).save()
+    monkeypatch.setattr(targets,'discover_targets',lambda:targets.Inventory([replace(a,custom_prompt=None,prompt_limit=None),b]))
+    assert cli.main(['targets','--select','b','--json'])==0
+    assert [t.id for t in AppConfig.load().targets()]==['b']
+    assert next(t for t in AppConfig.load().all_targets() if t.id=='a').custom_prompt=='Special'
+    assert cli.main(['targets','--clear','--json'])==0
+    assert not AppConfig.load().targets()
+    assert cli.main(['targets','--select','a','--json'])==0
+    chosen,=AppConfig.load().targets()
+    assert chosen.custom_prompt=='Special' and chosen.prompt_limit==2 and chosen.send_prompt

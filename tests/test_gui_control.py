@@ -324,3 +324,29 @@ def test_frozen_desktop_finds_cli_without_relaunching_itself(monkeypatch, tmp_pa
     cli.touch()
     monkeypatch.setattr(tray.sys, "executable", str(desktop))
     assert tray._resolve_cli_exe() == [str(cli)]
+
+
+def test_active_watch_accepts_custom_messages_with_empty_default(monkeypatch):
+    from recharge_ai_task import tray
+    monkeypatch.setattr(tray, 'discover_codex', lambda _: 'codex')
+    monkeypatch.setattr(tray, 'is_autostart_enabled', lambda: False)
+    calls=[]
+    def run(config, stop):
+        calls.append(config.continue_prompt)
+        stop.wait(5)
+        return 0
+    monkeypatch.setattr(tray, 'run_desktop_watch', run)
+    target=Target('thread','custom','Custom',send_prompt=True,send_goal=False,custom_prompt='Specific')
+    AppConfig(desktop_targets=[target.to_dict()],continue_prompt='').save()
+    app=tray.TrayApp()
+    try:
+        app.start_desktop()
+        wait_until(lambda:bool(calls))
+        config=AppConfig.load()
+        config.prompt_limit=3
+        config.save()
+        app.control('status')
+        wait_until(lambda:len(calls)==2)
+        assert not app.control('status')['watch_pause_reason']
+    finally:
+        app.stop_service()

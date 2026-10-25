@@ -40,7 +40,7 @@ class SettingsDialog(Gtk.Dialog):
             widget.set_hexpand(True)
             grid.attach(widget, 1, index, 1, 1)
         grid.attach(self.autostart, 0, 5, 2, 1)
-        note = Gtk.Label(label="Message text and each recipient’s Send message / Resume goal choices are in the main window.\nThose choices save automatically for future quota recovery; Send now acts immediately.\nStartup launches the tray; Desktop watch starts when you turn it on.\nChanges to an active watch apply automatically.", xalign=0)
+        note = Gtk.Label(label="Message text, continuation limits and per-recipient overrides are in the main window.\nThose choices save automatically for future quota recovery; Send now acts immediately.\nStartup launches the tray; Desktop watch starts when you turn it on.\nChanges to an active watch apply automatically.", xalign=0)
         note.set_line_wrap(True)
         note.set_max_width_chars(64)
         grid.attach(note, 0, 6, 2, 1)

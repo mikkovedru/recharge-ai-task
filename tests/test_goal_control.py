@@ -564,3 +564,35 @@ def test_both_signals_steer_native_goal_turn_after_activation(monkeypatch):
     result = delivery.recover_target(TARGET, "User prompt", manual=True)
     assert result.success and state["resumes"] == 1
     assert state["steered"] == ["User prompt"]
+
+
+def test_native_goal_and_message_allowances_count_actual_actions(monkeypatch):
+    from recharge_ai_task.config import AppConfig
+    from recharge_ai_task.delivery_policy import UsageLedger
+    AppConfig(goal_limit=1, prompt_limit=1).save()
+    state = install_recovery(monkeypatch, status="paused", task="idle")
+    target = replace(TARGET, send_goal=True, send_prompt=True)
+    result = delivery.send_signals([target], "Custom", manual=True)[0]
+    assert result.success and state["resumes"] == 1 and state["sent"] == ["Custom"]
+    usage = UsageLedger().snapshot()
+    assert usage[(target.key, "goal")].used == usage[(target.key, "prompt")].used == 1
+    assert delivery.send_signals([target], "Custom", manual=True)[0].skipped
+    assert state["resumes"] == 1 and state["sent"] == ["Custom"]
+
+
+def test_already_active_goal_uses_no_activation_allowance(monkeypatch):
+    from recharge_ai_task.delivery_policy import UsageLedger
+    state = install_recovery(monkeypatch, status="active", task="idle")
+    target = replace(TARGET, send_goal=True, send_prompt=False)
+    assert delivery.send_signals([target], "", manual=True)[0].success
+    assert state["resumes"] == 0 and not UsageLedger().snapshot()
+
+
+def test_skipped_protected_goal_counts_only_the_independent_message(monkeypatch):
+    from recharge_ai_task.delivery_policy import UsageLedger
+    state = install_recovery(monkeypatch, status="complete", task="idle")
+    target = replace(TARGET, send_goal=True, send_prompt=True)
+    assert delivery.send_signals([target], "Custom", manual=True)[0].success
+    usage = UsageLedger().snapshot()
+    assert (target.key, "goal") not in usage and usage[(target.key, "prompt")].used == 1
+    assert state["resumes"] == 0 and state["sent"] == ["Custom"]

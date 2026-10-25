@@ -9,7 +9,7 @@ import sqlite3
 import stat
 import sys
 from contextlib import closing
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from urllib.parse import quote
 
@@ -33,6 +33,14 @@ class Target:
     send_goal: bool | None = None
     project_name: str = ""
     last_active_at: float | None = None
+    custom_prompt: str | None = None
+    # None inherits the global default; -1 explicitly allows unlimited sends.
+    prompt_limit: int | None = None
+    goal_limit: int | None = None
+
+    def with_preferences(self, saved):
+        return self if saved is None else replace(self, **{field: getattr(saved, field) for field in
+            ("send_prompt", "send_goal", "custom_prompt", "prompt_limit", "goal_limit")})
 
     def signal_actions(self, legacy_goal=False):
         return (True if self.send_prompt is None else self.send_prompt,
