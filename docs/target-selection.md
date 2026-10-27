@@ -384,3 +384,45 @@ Unrecognized nonempty task and Goal statuses are allowed by default. Only known
 exclusions (such as intentional pauses during automatic recovery, blocked or
 completed goals) suppress their actions. Missing/unreadable state is a verification
 failure, and chat identity, send limits and native acknowledgement still apply.
+
+
+## Status help and keyboard controls
+
+Hover over ⓘ beside Task status or Goal status, or press **F1**, for a
+compact eligibility list. Each row shows **Automatic Goal** and **Send now Goal**
+with green **✓ Continue** or red **✕ Skip** labels. Expand a status for its meaning.
+Errors and new nonempty statuses are eligible by default; only explicit exclusions
+are skipped. Missing/unreadable state remains a verification failure. Message-only
+signals do not use Goal-status gates; quota, routing and configured allowances
+still apply. Runtime status colors and continuation eligibility describe different
+things: a task can be in Error while its continuation is allowed.
+
+The list uses text and symbols alongside color and adapts to light/dark themes.
+Use Up/Down or PageUp/PageDown to scroll; Enter on Close or Escape dismisses it.
+Recipient lists and their selected overrides have visible grouping borders.
+
+| Shortcut | Action |
+| --- | --- |
+| Ctrl+F | Focus chat search |
+| Ctrl+R | Refresh chats and statuses |
+| Ctrl+Shift+R | Check quota now and wake the active monitor |
+| Ctrl+Enter | Send the selected actions now |
+| Ctrl+, | Open Settings |
+| F1 | Open status continuation rules |
+
+**Check quota now** updates the display and requests an immediate check from a
+running monitor. It does not start an inactive watch or bypass grace or recipient
+limits. The button indicates when a check is running. The recovery card shows
+**Send in** during grace, separately from the next quota poll.
+
+Settings highlights its default Save button: Enter saves and Escape cancels.
+Left/Right moves between its action buttons when one is focused; arrow keys keep
+their normal editing behavior in text fields. Enter in a main-window multiline
+message editor continues to insert a newline. The logo is keyboard-focusable;
+Enter/Space opens GitHub and Shift+F10 opens its copy-link menu.
+
+Status-help hovering does not take editor focus or sort the column. The list stays
+open while the pointer moves into it. Last active defaults to newest first; the
+first timestamp-header click also chooses newest first. Old sort preferences are
+migrated once, while column widths and order are preserved. Subsequent deliberate
+sort choices are remembered.

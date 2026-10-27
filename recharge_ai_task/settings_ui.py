@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import shlex
-from gi.repository import Gtk
+from gi.repository import Gdk, Gtk
 
 from .autostart import is_autostart_enabled, set_autostart
 from .config import AppConfig
@@ -15,6 +15,15 @@ class SettingsDialog(Gtk.Dialog):
         super().__init__(title="Recharge AI-task — Settings", transient_for=parent, modal=True)
         set_window_icon(self)
         self.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Save settings", Gtk.ResponseType.OK)
+        self.set_default_response(Gtk.ResponseType.OK)
+        save_button=self.get_widget_for_response(Gtk.ResponseType.OK)
+        save_button.set_can_default(True)
+        save_button.grab_default()
+        save_button.get_style_context().add_class("suggested-action")
+        save_button.set_tooltip_text("Save settings and apply monitoring changes (Enter)")
+        cancel_button=self.get_widget_for_response(Gtk.ResponseType.CANCEL)
+        cancel_button.set_tooltip_text("Close without saving settings (Escape)")
+        self.connect("key-press-event",self._dialog_keys)
         self.set_default_size(540, 390)
         self.window_layout = WindowLayout(self, "settings")
         self.connect("destroy", self.window_layout.close)
@@ -48,6 +57,14 @@ class SettingsDialog(Gtk.Dialog):
         self.error.set_line_wrap(True)
         grid.attach(self.error, 0, 7, 2, 1)
         self.show_all()
+
+    def _dialog_keys(self,_dialog,event):
+        buttons=[self.get_widget_for_response(Gtk.ResponseType.CANCEL),self.get_widget_for_response(Gtk.ResponseType.OK)]
+        focus=self.get_focus()
+        if event.keyval in (Gdk.KEY_Left,Gdk.KEY_Right) and focus in buttons:
+            buttons[1-buttons.index(focus)].grab_focus()
+            return True
+        return False
 
     def save_settings(self):
         args = shlex.split(self.args.get_text())

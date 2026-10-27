@@ -501,3 +501,11 @@ Choose targets before starting desktop watch. Local saved chats are included;
 account-wide ChatGPT history and disconnected remote hosts are not enumerated.
 See [the research, design and delivery notes](docs/target-selection.md) for protocol
 compatibility, focus requirements and per-target retry behavior.
+
+
+The status ⓘ buttons show a compact green/red continuation list for automatic
+and manual actions, including the default allowance for new statuses.
+**Check quota now** (**Ctrl+Shift+R**) wakes active monitoring so early resets
+and added usable credits are checked immediately. **Ctrl+F** searches, **Ctrl+R**
+refreshes chats, **Ctrl+Enter** sends and **F1** opens status rules.
+See [status help and keyboard controls](docs/target-selection.md#status-help-and-keyboard-controls).

@@ -42,3 +42,12 @@ def test_stopped_watch_does_not_display_an_old_countdown():
     runtime = {"desktop_watch": False,
                "watch_progress": {"phase": "waiting_quota", "next_check_at": 150}}
     assert watch_check_summary(runtime, 100) == ("—", "Desktop monitoring is off.")
+
+
+
+def test_recovery_countdown_uses_send_deadline_not_next_poll():
+    runtime={"desktop_watch":True,"watch_progress":{"phase":"grace_period","next_check_at":115,"recovery_at":160}}
+    value,reason=watch_check_summary(runtime,100)
+    assert value=="Send in 01:00" and "observed availability" in reason
+    runtime["watch_progress"]["recovery_at"]=3761
+    assert watch_check_summary(runtime,100)[0]=="Send in 01:01:01"

@@ -77,7 +77,7 @@ class TableLayout:
                     widget.set_text(text)
             elif isinstance(widget, Gtk.Container):
                 children = widget.get_children()
-                space = 20 if any(isinstance(child, Gtk.Image) for child in children) else 0
+                space = 24 if any(isinstance(child, (Gtk.Image, Gtk.Button)) for child in children) else 0
                 for child in children:
                     wrap(child, max(12, available - space))
         wrap(column.get_widget(), width)
@@ -115,7 +115,8 @@ class TableLayout:
                 previous = column
                 seen.add(key)
         key = self.saved.get("sort_column")
-        if not isinstance(key, str) or key not in self.columns:
+        migrate_default = self.default_sort == "last_active_at" and self.saved.get("sort_policy") != 2
+        if migrate_default or not isinstance(key, str) or key not in self.columns:
             key = self.default_sort
             descending = True
         else:
@@ -125,7 +126,7 @@ class TableLayout:
         self.restoring = False
 
     def _clicked(self, _column, key):
-        self.sort(key, not self.descending if self.sort_column == key else False)
+        self.sort(key, not self.descending if self.sort_column == key else key == "last_active_at")
 
     def sort(self, key, descending=False):
         self.sort_column, self.descending = key, descending
@@ -138,7 +139,7 @@ class TableLayout:
 
     def snapshot(self):
         keys = {column: key for key, (column, _index) in self.columns.items()}
-        return {"density": 2, "order": [keys[column] for column in self.table.get_columns()],
+        return {"density": 2, "sort_policy": 2, "order": [keys[column] for column in self.table.get_columns()],
                 "widths": {key: column.get_fixed_width() for key, (column, _index) in self.columns.items()},
                 "sort_column": self.sort_column, "descending": self.descending}
 

@@ -2,7 +2,25 @@
 
 from math import ceil
 
-COLORS = {"success": "#198038", "warning": "#b38f00", "error": "#c62828"}
+COLORS = {"success": "#137333", "warning": "#8a6200", "error": "#b3261e"}
+DARK_COLORS = {"success": "#73d99b", "warning": "#ffd166", "error": "#ff8a80"}
+
+
+def status_colors(widget):
+    if widget is None:
+        return COLORS
+    context = widget.get_style_context()
+    found,color = context.lookup_color("theme_bg_color")
+    if found:
+        dark = .2126*color.red + .7152*color.green + .0722*color.blue < .5
+    else:
+        color = context.get_background_color(0)
+        if color.alpha > .5:
+            dark = .2126*color.red + .7152*color.green + .0722*color.blue < .5
+        else:
+            color = context.get_color(0)
+            dark = .2126*color.red + .7152*color.green + .0722*color.blue > .7
+    return DARK_COLORS if dark else COLORS
 
 
 def watch_check_summary(runtime, now):
@@ -27,11 +45,17 @@ def watch_check_summary(runtime, now):
         return "Checking…", "Reading current quota availability."
     if phase == "delivering":
         return "Sending…", "Delivering the selected signals."
-    reasons = {"waiting_quota": "Waiting for quota to become available.",
+    reasons = {"waiting_quota": "Waiting for quota; early resets and added usable credits are checked too.",
                "quota_unavailable": "Quota could not be read; checking again.",
                "grace_period": "Quota is available; retaining the grace period.",
                "retry_pending": "A confirmed delivery failure is waiting for retry.",
                "monitoring": "Watching for quota changes."}
+    if phase == "grace_period" and isinstance(progress.get("recovery_at"),(int,float)):
+        remaining=max(0,ceil(progress["recovery_at"]-now))
+        hours,remainder=divmod(remaining,3600)
+        minutes,seconds=divmod(remainder,60)
+        countdown=f"{hours:02}:{minutes:02}:{seconds:02}" if hours else f"{minutes:02}:{seconds:02}"
+        return f"Send in {countdown}", "Quota recovered; grace is measured from observed availability, including early resets."
     due = progress.get("next_check_at")
     if phase not in reasons or not isinstance(due, (int, float)):
         return "Waiting…", "Waiting for a monitoring update."
@@ -75,5 +99,29 @@ def status_level(value, *, goal=False):
 
 def status_tooltip(value, *, goal=False):
     states = GOAL_STATES if goal else TASK_STATES
-    legend = "\n".join(f"{name}: {text}" for name, (_, text) in states.items())
-    return f"{'Goal' if goal else 'Task'} statuses\n{legend}"
+    detail = states.get(value,("normal","Unrecognized status: allowed by default."))[1]
+    automatic = "Continue" if continuation_allowed(value,goal=goal) else "Skip / unavailable"
+    manual = "Continue" if continuation_allowed(value,goal=goal,manual=True) else "Skip / unavailable"
+    return (f"{'Goal' if goal else 'Task'} statuses\n{value}: {detail}\n"
+            f"Automatic Goal: {automatic}\nSend now Goal: {manual}\n"
+            "Other nonempty new statuses are allowed. Message-only does not use these gates.")
+
+
+def continuation_allowed(value, *, goal=False, manual=False):
+    from .recovery_rules import goal_allowed, task_allowed
+    if value == "Unavailable" or goal and value == "No goal":
+        return False
+    if goal:
+        raw = {"Active":"active", "Paused":"paused", "Blocked":"blocked", "Usage limited":"usageLimited",
+               "Budget limited":"budgetLimited", "Complete":"complete", "Error":"error"}.get(value,value)
+        return goal_allowed(raw,manual=manual)
+    raw = "active" if value in {"Active","Running"} or value.startswith("Waiting for") else value
+    return task_allowed(raw,manual=manual)
+
+
+def status_rows(*, goal=False):
+    states = GOAL_STATES if goal else TASK_STATES
+    rows = [(value, continuation_allowed(value,goal=goal), continuation_allowed(value,goal=goal,manual=True), detail)
+            for value, (_level,detail) in states.items()]
+    rows.append(("Other / new statuses",True,True,"Nonempty unrecognized statuses are allowed by default. Native verification still applies."))
+    return sorted(rows,key=lambda row:(not row[1],row[0]))

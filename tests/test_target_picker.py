@@ -192,12 +192,11 @@ def check():
             assert isinstance(header, Gtk.Box)
             assert " ".join(header.get_children()[0].get_text().split()) == column.get_title()
             info = header.get_children()[1]
-            assert isinstance(info, Gtk.Image) and info.get_pixel_size() == 14
-            assert info.get_icon_name()[0] == "dialog-information-symbolic"
-            help_text = header.get_tooltip_text()
-            assert help_text.startswith(("Goal" if index == 11 else "Task") + " statuses\n")
-            assert "\n\n" not in help_text
-            assert len(help_text.splitlines()) == len(states) + 1
+            assert isinstance(info, Gtk.Button) and info.get_can_focus()
+            assert info.get_image().get_icon_name()[0] == "dialog-information-symbolic"
+            assert "F1" in info.get_tooltip_text()
+            info._build()
+            assert len(info.badges) == 2*(len(states)+1)
             renderer = column.get_cells()[0]
             original = window.store[0][index]
             for value in states:

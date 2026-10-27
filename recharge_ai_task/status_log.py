@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from gi.repository import GLib, Gtk
-from .status_display import COLORS
+from .status_display import COLORS, status_colors
 
 
 class StatusLog(Gtk.ScrolledWindow):
@@ -21,11 +21,17 @@ class StatusLog(Gtk.ScrolledWindow):
             self.buffer.create_tag(level, foreground=color)
         self.buffer.create_tag("normal")  # Inherit the normal theme text color.
         self.add(self.view)
+        self.view.connect("style-updated",self._colors)
+        self._colors()
         self.latest_text = ""
         self.latest_level = "normal"
         self._scroll_pending = False
         self._closed = False
         self.connect("destroy", self._destroy)
+
+    def _colors(self,*_):
+        for level,color in status_colors(self.view).items():
+            self.buffer.get_tag_table().lookup(level).set_property("foreground",color)
 
     def write(self, message, level="normal"):
         if not message:

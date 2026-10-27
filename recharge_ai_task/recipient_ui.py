@@ -12,12 +12,14 @@ class LimitControl(Gtk.Box):
         self.updating = False
         self.inherit = inherit
         self.choice = Gtk.ComboBoxText()
+        self.choice.set_tooltip_text("Choose inheritance, unlimited sends or a fixed limit (Alt+Down)")
         if inherit:
             self.choice.append("default", "Use global default")
         self.choice.append("unlimited", "Unlimited")
         self.choice.append("limited", "Limit to")
         self.number = Gtk.SpinButton.new_with_range(0, 1000000, 1)
         self.number.set_value(1)
+        self.number.set_tooltip_text("Maximum actions since the last count reset; 0 disables the action (Up / Down)")
         self.number.set_width_chars(4)
         self.number.set_no_show_all(True)
         self.pack_start(self.choice, False, False, 0)
@@ -98,6 +100,8 @@ class RecipientPanel(Gtk.Box):
         actions = Gtk.Box(spacing=8)
         self.prompt = Gtk.CheckButton(label="Send message")
         self.goal = Gtk.CheckButton(label="Resume goal")
+        self.prompt.set_tooltip_text("Select message delivery for this recipient (Space)")
+        self.goal.set_tooltip_text("Select native Goal activation; live status and allowance rules apply (Space)")
         for control in (self.prompt, self.goal):
             control.connect("toggled", self._editor_changed)
             actions.pack_start(control, False, False, 0)
@@ -118,6 +122,7 @@ class RecipientPanel(Gtk.Box):
         self.status_rules.add(self.advice)
         self.editor.pack_start(self.status_rules, False, False, 0)
         self.custom = Gtk.CheckButton(label="Use a custom message for this recipient")
+        self.custom.set_tooltip_text("Override the default message for only this recipient; edits save automatically (Space)")
         self.custom.connect("toggled", self._custom_toggled)
         self.editor.pack_start(self.custom, False, False, 0)
         self.message = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
@@ -133,7 +138,11 @@ class RecipientPanel(Gtk.Box):
         self.editor_scroller = Gtk.ScrolledWindow()
         self.editor_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.editor_scroller.set_size_request(250, 120)
-        self.editor_scroller.add(self.editor)
+        self.editor_frame=Gtk.Frame()
+        self.editor_frame.get_accessible().set_name("Selected recipient overrides")
+        self.editor.set_border_width(6)
+        self.editor_frame.add(self.editor)
+        self.editor_scroller.add(self.editor_frame)
         self.split = picker.window_layout.pane("recipient_list_editor", self.list_scroller, self.editor_scroller, position=150)
         self.pack_start(self.split, True, True, 0)
 

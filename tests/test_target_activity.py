@@ -60,7 +60,7 @@ a = Target("thread", "a", "Zulu", instance="profile", last_active_at=1792800000.
 b = Target("thread", "b", "Alpha", instance="profile", last_active_at=1792800000.8)
 unknown = Target("window", "window", "Window", instance="desktop")
 target_ui.discover_targets = lambda: Inventory([a, unknown, b])
-AppConfig().save()
+AppConfig(table_layout={"sort_column":"last_active_at","descending":False}).save()
 def pump(window):
     deadline = time.monotonic() + 3
     while window.discovery_busy or window.runtime_busy or window.quota_busy or Gtk.events_pending():

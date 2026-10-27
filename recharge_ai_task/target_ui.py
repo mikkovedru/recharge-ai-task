@@ -24,8 +24,9 @@ from .quota import discover_codex, fetch_quota
 from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target, discover_targets
-from .status_display import COLORS, status_level, status_tooltip, watch_check_summary
+from .status_display import COLORS, status_colors, status_level, status_tooltip, watch_check_summary
 from .status_log import StatusLog
+from .status_help import StatusInfoButton, status_markup
 from .branding import asset_path, set_window_icon
 
 
@@ -105,7 +106,7 @@ class TargetPicker(Gtk.Window):
         self.next_check_detail.set_max_width_chars(32)
         check.pack_start(self.next_check_label, False, False, 0)
         check.pack_start(self.next_check_detail, False, False, 0)
-        card("Next check", check)
+        card("Quota checks & recovery", check)
         dashboard.pack_start(overview, False, False, 0)
         startup_row = Gtk.Box(spacing=8)
         self.startup_toggle = Gtk.CheckButton()
@@ -115,7 +116,7 @@ class TargetPicker(Gtk.Window):
         startup_row.pack_start(self.startup_label, True, True, 0)
         dashboard.pack_start(startup_row, False, False, 0)
         dashboard.pack_start(self.quota_label, False, False, 0)
-        self.quota_button = Gtk.Button(label="Refresh quota")
+        self.quota_button = Gtk.Button(label="Check quota now")
         self.quota_button.connect("clicked", self.refresh_quota)
         self.settings_button = Gtk.Button(label="Settings…")
         self.settings_button.connect("clicked", self.settings)
@@ -177,6 +178,7 @@ class TargetPicker(Gtk.Window):
                    ("PID", 5, 95), ("Instance", 6, 260), ("Deep link", 7, 400),
                    ("Desktop client", 9, 300)]
         self.technical_columns = []
+        self.status_info = {}
         column_keys = {1: "title", 2: "kind", 3: "availability", 4: "id", 5: "pid",
                        6: "instance", 7: "deeplink", 8: "cwd", 9: "owner_id",
                        10: "task_status", 11: "goal_status", 13: "project_name", 14: "last_active_at"}
@@ -187,11 +189,10 @@ class TargetPicker(Gtk.Window):
                 column.set_cell_data_func(renderer, self._status_cell, index)
                 header = Gtk.Box(spacing=5)
                 header.pack_start(Gtk.Label(label=name), False, False, 0)
-                info = Gtk.Image.new_from_icon_name("dialog-information-symbolic", Gtk.IconSize.MENU)
-                info.set_pixel_size(14)
-                info.get_accessible().set_name(name + " information")
-                header.pack_start(info, False, False, 0)
-                header.set_tooltip_text(status_tooltip("Unavailable", goal=index == 11))
+                info = StatusInfoButton(goal=index == 11)
+                self.status_info[index] = info
+                header.pack_start(info,False,False,0)
+                header.set_tooltip_text("Hover over ⓘ for status recovery rules; keyboard help (F1).")
                 header.show_all()
                 column.set_widget(header)
             column.set_resizable(True)
@@ -207,6 +208,8 @@ class TargetPicker(Gtk.Window):
                                        sort_index=15 if index == 14 else None)
             if index == 14:
                 column.get_widget().set_tooltip_text("Last chat update recorded by Codex, shown in local time. Refreshes every 15 seconds. Unknown means Codex did not provide a timestamp.")
+        for index,info in self.status_info.items():
+            info.bind_column(self.table_layout.columns["goal_status" if index==11 else "task_status"][0])
         self.table_layout.restore()
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
@@ -275,11 +278,16 @@ class TargetPicker(Gtk.Window):
         self.status.set_size_request(100, 36)
         self.message_split = self.window_layout.pane("message_log", self.message_area, self.status, position=125)
         self.recipient_panel = RecipientPanel(self)
+        self.recipient_panel.set_border_width(8)
+        self.recipient_frame = Gtk.Frame()
+        self.recipient_frame.get_accessible().set_name("Recipient actions and overrides")
+        self.recipient_frame.add(self.recipient_panel)
         self.message_area.pack_start(self.recipient_panel.default_controls, False, False, 0)
         self.message_area.reorder_child(self.recipient_panel.default_controls, 0)
-        self.workspace_split = self.window_layout.pane("chat_recipients", self.list_area, self.recipient_panel, horizontal=True, position=960)
+        self.workspace_split = self.window_layout.pane("chat_recipients", self.list_area, self.recipient_frame, horizontal=True, position=960)
         self.main_split = self.window_layout.pane("targets", self.workspace_split, self.message_split, position=480)
         box.pack_start(self.main_split, True, True, 0)
+        self._install_shortcuts()
         self.connect("delete-event", lambda *_: self.busy)
         self.connect("destroy", self._destroy)
         self._timers = [GLib.timeout_add_seconds(2, self.poll_runtime),
@@ -289,6 +297,37 @@ class TargetPicker(Gtk.Window):
         self.refresh()
         self.poll_runtime()
         self.refresh_quota()
+
+    def _install_shortcuts(self):
+        group=Gtk.AccelGroup()
+        self.add_accel_group(group)
+        self.accelerators=group
+        for button,key,modifiers,tip in (
+            (self.refresh_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK,"Refresh chats and their statuses (Ctrl+R)"),
+            (self.quota_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK,"Check quota now and wake the active monitor; the grace period still applies (Ctrl+Shift+R)"),
+            (self.send_button,Gdk.KEY_Return,Gdk.ModifierType.CONTROL_MASK,"Apply the selected actions now, respecting each recipient's limits (Ctrl+Enter)"),
+            (self.settings_button,Gdk.KEY_comma,Gdk.ModifierType.CONTROL_MASK,"Open program settings (Ctrl+,)")):
+            button.add_accelerator("clicked",group,key,modifiers,Gtk.AccelFlags.VISIBLE)
+            button.set_tooltip_text(tip)
+        for button,icon in ((self.refresh_button,"view-refresh-symbolic"),(self.quota_button,"view-refresh-symbolic"),
+                            (self.settings_button,"emblem-system-symbolic"),(self.send_button,"mail-send-symbolic"),
+                            (self.copy_button,"edit-copy-symbolic"),(self.open_button,"go-jump-symbolic")):
+            button.set_image(Gtk.Image.new_from_icon_name(icon,Gtk.IconSize.BUTTON))
+            button.set_always_show_image(True)
+        self.watch_button.set_tooltip_text("Start or stop automatic quota recovery for selected recipients (Space / Enter)")
+        self.search.set_tooltip_text("Search chats by title, status, project or ID (Ctrl+F)")
+        self.connect("key-press-event",self._keyboard)
+
+    def _keyboard(self,_window,event):
+        if event.keyval == Gdk.KEY_f and event.state & Gdk.ModifierType.CONTROL_MASK:
+            self.search.grab_focus()
+            return True
+        if event.keyval == Gdk.KEY_F1:
+            column=self.table.get_cursor()[1]
+            index=11 if column is not None and column.get_title()=="Goal status" else 10
+            self.status_info[index].open()
+            return True
+        return False
 
     def _tooltip(self, table, x, y, keyboard, tooltip):
         context = table.get_tooltip_context(x, y, keyboard)
@@ -309,7 +348,10 @@ class TargetPicker(Gtk.Window):
             return True
         if name in ("Task status", "Goal status"):
             index = 11 if name == "Goal status" else 10
-            tooltip.set_text(status_tooltip(row[index], goal=index == 11))
+            if hasattr(tooltip,"set_markup"):
+                tooltip.set_markup(status_markup(row[index],goal=index == 11,widget=self.table))
+            else:
+                tooltip.set_text(status_tooltip(row[index],goal=index == 11))
             table.set_tooltip_cell(tooltip, path, column, None)
             return True
         tooltip.set_text(f"{row[1]}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}")
@@ -318,15 +360,16 @@ class TargetPicker(Gtk.Window):
 
     @staticmethod
     def _status_cell(_column, renderer, model, iterator, index):
+        colors = status_colors(_column.get_tree_view())
         text = model[iterator][index]
         level = status_level(text, goal=index == 11)
         # Reset all reusable renderer state, including after a colored row.
         renderer.set_property("foreground-set", False)
         markup = GLib.markup_escape_text(text)
         if index == 11 and text == "Complete":
-            markup = f"<span foreground='{COLORS['success']}'>✓</span> " + markup
+            markup = f"<span foreground='{colors['success']}'>✓</span> " + markup
         elif level != "normal":
-            renderer.set_property("foreground", COLORS[level])
+            renderer.set_property("foreground", colors[level])
         renderer.set_property("markup", markup)
 
     def _message(self, text, level="normal"):
@@ -490,6 +533,8 @@ class TargetPicker(Gtk.Window):
             context.remove_class(name)
         context.add_class("watch-stopping" if stopping or restarting else "watch-on" if alive else "watch-off")
         self.watch_button.set_label("Stop Desktop watch" if alive or requested else "Start Desktop watch")
+        self.watch_button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic" if alive or requested else "media-playback-start-symbolic",Gtk.IconSize.BUTTON))
+        self.watch_button.set_always_show_image(True)
         self.watch_button.set_sensitive(not self.busy and not self.runtime_busy and (not stopping or restarting) and not runtime.get("cli_running", False))
         self.send_button.set_sensitive(not self.busy and bool(self.selected))
         notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or (
@@ -590,9 +635,20 @@ class TargetPicker(Gtk.Window):
             return True
         self.quota_busy = True
         self.quota_button.set_sensitive(False)
+        self.quota_button.set_label("Checking quota…")
+        if _ and self.runtime and self.runtime.get("desktop_watch"):
+            if self.runtime.get("manual_quota_check"):
+                def checked(value,error):
+                    if error:
+                        self._message("Could not wake quota monitoring: " + error,"warning")
+                    self.poll_runtime()
+                self._background(lambda: tray_control.request("check-quota"),checked)
+            else:
+                self._message("Restart the tray to enable immediate quota checks; the display will still refresh.","warning")
         def show(value, error):
             self.quota_busy = False
             self.quota_button.set_sensitive(True)
+            self.quota_button.set_label("Check quota now")
             self.quota_error = error or ""
             if error and error != self._quota_notice:
                 self._message("Quota refresh failed: " + error, "error")
@@ -611,6 +667,7 @@ class TargetPicker(Gtk.Window):
         if self.quota is None:
             self.quota_label.set_text("Quota unavailable — see messages below" if self.quota_error else "Quota: loading…")
             return True
+        colors = status_colors(self.quota_label)
         def window_text(window):
             label = "5-hour" if window.window_duration_mins == 300 else "Weekly" if window.window_duration_mins == 10080 else f"{window.window_duration_mins}-minute"
             remaining = max(0, int(window.resets_at - time.time()))
@@ -622,8 +679,10 @@ class TargetPicker(Gtk.Window):
             text = GLib.markup_escape_text(f"{label}: {window.used_percent:g}% used")
             suffix = GLib.markup_escape_text(f" · resets {reset} ({countdown})")
             level = "error" if window.used_percent >= 100 else "warning" if window.used_percent >= 85 else None
-            return (f'<span foreground="{COLORS[level]}">{text}</span>' if level else text) + suffix
+            return (f'<span foreground="{colors[level]}">{text}</span>' if level else text) + suffix
         lines = [window_text(w) for w in (self.quota.primary, self.quota.secondary) if w is not None]
+        if self.quota.has_credits or self.quota.unlimited_credits:
+            lines.append("Additional credits are available" + (" · backend still reports a limit" if self.quota.rate_limit_reached or self.quota.spend_control_reached else " · usable without waiting for the included window reset"))
         age = max(0, int(time.time() - self.quota_updated))
         lines.append(f"Quota refreshed {age}s ago · automatic refresh every 60s" + (" · Latest refresh failed — see messages below" if self.quota_error else ""))
         self.quota_label.set_markup("\n".join(lines))

@@ -15,8 +15,9 @@ window.add(logo)
 assert __version__ in logo.get_tooltip_text()
 calls = []
 Gtk.show_uri_on_window = lambda *args: calls.append(args)
-assert logo._press(logo, SimpleNamespace(button=1,time=42))
-assert calls == [(window,REPOSITORY_URL,42)]
+assert logo.get_can_focus()
+logo.clicked()
+assert calls == [(window,REPOSITORY_URL,Gdk.CURRENT_TIME)]
 logo.menu.get_children()[0].activate()
 assert Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).wait_for_text() == REPOSITORY_URL
 assert not logo._press(logo, SimpleNamespace(button=2))
