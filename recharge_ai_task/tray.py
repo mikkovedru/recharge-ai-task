@@ -372,6 +372,10 @@ class TrayApp:
                 raise RuntimeError("Save at least one target before starting Desktop watch")
             discover_codex(config.codex_path)
             self.start_desktop()
+        elif command == "check-quota":
+            if self._watch_thread is None or not self._watch_thread.is_alive():
+                raise RuntimeError("Desktop watch is off")
+            self._watch_stop.wake()
         elif command == "stop-watch":
             with self._lock:
                 self._cancel_restart_locked()
@@ -392,7 +396,7 @@ class TrayApp:
             self._watch_error = f"Could not read saved watch settings: {exc}"
         thread = self._watch_thread
         alive = thread is not None and thread.is_alive()
-        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "auto_watch_restart": True,
+        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "manual_quota_check": True, "auto_watch_restart": True,
                 "restarting": self._restart_pending, "watch_requested": self._watch_requested,
                 "watch_pause_reason": self._watch_pause_reason,
                 "stopping": alive and self._watch_stop.is_set(),

@@ -33,13 +33,43 @@ class Quota:
     primary: RateWindow
     secondary: RateWindow | None
     rate_limit_reached: bool
+    has_credits: bool = False
+    unlimited_credits: bool = False
+    spend_control_reached: bool = False
 
     def exhausted_window(self) -> RateWindow | None:
-        if self.primary.used_percent >= 100:
-            return self.primary
-        if self.secondary is not None and self.secondary.used_percent >= 100:
-            return self.secondary
-        return None
+        windows = exhausted_windows(self)
+        return windows[0] if windows else None
+
+
+def exhausted_windows(quota):
+    # Positive extra-credit information can make a full included allowance
+    # usable. Explicit backend or spend-control blocks always take precedence.
+    credits = getattr(quota, "has_credits", False) or getattr(quota, "unlimited_credits", False)
+    if credits and not getattr(quota, "rate_limit_reached", False) and not getattr(quota, "spend_control_reached", False):
+        return []
+    return [w for w in (quota.primary, quota.secondary) if w is not None and w.used_percent >= 100]
+
+
+def quota_blocked(quota):
+    return bool(exhausted_windows(quota) or getattr(quota, "rate_limit_reached", False)
+                or getattr(quota, "spend_control_reached", False))
+
+
+def parse_quota(limits):
+    primary = limits.get("primary")
+    if not primary:
+        raise RuntimeError("account/rateLimits/read missing primary window")
+    def window(value):
+        return RateWindow(float(value["usedPercent"]), int(value["windowDurationMins"]), int(value["resetsAt"]))
+    credits = limits.get("credits")
+    credits = credits if isinstance(credits, dict) else {}
+    return Quota(plan_type=limits.get("planType", "unknown"), primary=window(primary),
+                 secondary=window(limits["secondary"]) if limits.get("secondary") else None,
+                 rate_limit_reached=limits.get("rateLimitReachedType") is not None,
+                 has_credits=credits.get("hasCredits") is True,
+                 unlimited_credits=credits.get("unlimited") is True,
+                 spend_control_reached=limits.get("spendControlReached") is True)
 
 
 def looks_like_codex_cli(path: str) -> bool:
@@ -162,29 +192,7 @@ def fetch_quota(codex_path: str | None = None, timeout: float = 15) -> Quota:
         if not limits:
             raise RuntimeError("account/rateLimits/read missing rateLimits field")
 
-        primary = limits.get("primary")
-        if not primary:
-            raise RuntimeError("account/rateLimits/read missing primary window")
-
-        secondary_raw = limits.get("secondary")
-        secondary = None
-        if secondary_raw:
-            secondary = RateWindow(
-                used_percent=float(secondary_raw["usedPercent"]),
-                window_duration_mins=int(secondary_raw["windowDurationMins"]),
-                resets_at=int(secondary_raw["resetsAt"]),
-            )
-
-        return Quota(
-            plan_type=limits.get("planType", "unknown"),
-            primary=RateWindow(
-                used_percent=float(primary["usedPercent"]),
-                window_duration_mins=int(primary["windowDurationMins"]),
-                resets_at=int(primary["resetsAt"]),
-            ),
-            secondary=secondary,
-            rate_limit_reached=limits.get("rateLimitReachedType") is not None,
-        )
+        return parse_quota(limits)
     finally:
         proc.kill()
         proc.wait(timeout=max(1, timeout))

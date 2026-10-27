@@ -80,7 +80,7 @@ When quota is exhausted, Recharge AI-task waits for recovery and the grace perio
 
 **Why PTY for CLI?** Usage limits appear in the Codex CLI session. A PTY can read output and write input like a real terminal — no IDE plugin required.
 
-**Why dual-channel parsing?** Terminal messages may change format; the official quota API is the fallback. We take the **later** reset time from both sources, then add a **60s grace** buffer to avoid edge-case jitter.
+**Why dual-channel parsing?** Terminal messages may change format. Live quota checks detect early resets and usable added credits; the default **60s grace** starts when recovery is observed. If the CLI quota API is unavailable, the later terminal/API reset forecast remains its fallback.
 
 **Desktop delivery:** Desktop mode reads the quota API and addresses explicitly selected recipients. Linux chat targets use the running desktop’s private routing socket; window targets use keyboard input in the selected window. See [target discovery and delivery](docs/target-selection.md) for compatibility and focus requirements.
 
@@ -279,7 +279,7 @@ Yes — use `desktop` mode or tray **Start Desktop Watch**. It uses the same quo
 It wraps **Codex CLI** in a terminal. IDE extensions are out of scope; run `recharge-ai-task-cli` in a terminal instead.
 
 **What happens at quota reset?**  
-Wait until `resets_at` from the official API (or parsed terminal message, whichever is later), plus 60 seconds grace, then send `Continue` or `/goal resume`.
+Detect availability through live checks, including manual early resets and usable additional credits, then wait the configured grace period (60 seconds by default) and send the selected actions. A forecast timestamp does not delay an observed early recovery.
 
 **Can I run it 24/7?**  
 Yes. Idle tray/watch uses negligible CPU; only Codex tasks consume meaningful resources.

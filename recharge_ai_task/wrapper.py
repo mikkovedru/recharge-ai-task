@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from .i18n import t
 from .parser import LimitWatcher, resolve_reset_at
 from .pty_backend import StopEvent, forward_stdin, sleep_with_proxy, spawn_pty
-from .quota import discover_codex, fetch_quota, looks_like_codex_cli
+from .quota import discover_codex, fetch_quota, looks_like_codex_cli, exhausted_windows, quota_blocked
 
 
 @dataclass
@@ -41,6 +41,43 @@ def _continue_prompt(config: WrapperConfig, first_goal_resume: bool) -> str:
     if config.goal_mode and first_goal_resume:
         return "/goal resume"
     return config.continue_prompt
+
+
+def wait_for_quota_recovery(pty, stop, codex, fallback_at, grace_seconds, initial=None):
+    """Poll while proxying terminal output, including early resets/refills."""
+    recovered_at = None
+    snapshot = initial
+    last_error = None
+    while not stop.is_set() and pty.isalive():
+        try:
+            quota = snapshot if snapshot is not None else fetch_quota(codex)
+            last_error = None
+        except Exception as exc:
+            if str(exc) != last_error:
+                _log(f"[recharge-ai-task-cli] Quota check unavailable: {exc}; retaining terminal-time fallback.")
+            last_error = str(exc)
+            if time.time() >= fallback_at:
+                return True
+            if not sleep_with_proxy(pty, stop, min(fallback_at, time.time() + 15)):
+                return False
+            snapshot = None
+            continue
+        now = time.time()
+        if quota_blocked(quota):
+            recovered_at = None
+            due = now + 15
+        else:
+            if recovered_at is None:
+                recovered_at = now
+                _log("[recharge-ai-task-cli] Quota is available now; starting the recovery grace period.")
+            due = recovered_at + grace_seconds
+            if now >= due:
+                return True
+            due = min(due, now + 15)
+        if not sleep_with_proxy(pty, stop, due):
+            return False
+        snapshot = None
+    return False
 
 
 def run_wrapper(config: WrapperConfig) -> int:
@@ -95,12 +132,14 @@ def run_wrapper(config: WrapperConfig) -> int:
 
         parsed_reset_at, raw = detected
         quota_reset_at = None
-        if looks_like_codex_cli(codex):
+        quota = None
+        quota_enabled = looks_like_codex_cli(codex)
+        if quota_enabled:
             try:
                 quota = fetch_quota(codex)
-                exhausted = quota.exhausted_window()
+                exhausted = exhausted_windows(quota)
                 if exhausted:
-                    quota_reset_at = exhausted.resets_at
+                    quota_reset_at = max(window.resets_at for window in exhausted)
             except Exception as exc:
                 _log(f"[recharge-ai-task-cli] {t('cli.quota_fallback_failed', error=exc)}")
 
@@ -126,7 +165,9 @@ def run_wrapper(config: WrapperConfig) -> int:
         watcher.reset()
 
         try:
-            if not sleep_with_proxy(pty, stop, wake_at):
+            ready = (wait_for_quota_recovery(pty, stop, codex, wake_at, config.grace_seconds, initial=quota)
+                     if quota_enabled else sleep_with_proxy(pty, stop, wake_at))
+            if not ready:
                 _log(f"[recharge-ai-task-cli] {t('cli.exited_before_continue')}")
                 stop.set()
                 return

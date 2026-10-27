@@ -350,3 +350,28 @@ def test_active_watch_accepts_custom_messages_with_empty_default(monkeypatch):
         assert not app.control('status')['watch_pause_reason']
     finally:
         app.stop_service()
+
+
+def test_manual_quota_check_wakes_the_worker_without_starting_another(monkeypatch):
+    from recharge_ai_task import tray
+    monkeypatch.setattr(tray,'discover_codex',lambda _:'codex')
+    monkeypatch.setattr(tray,'is_autostart_enabled',lambda:False)
+    checks=[]
+    def run(config,stop):
+        while not stop.is_set():
+            checks.append(1)
+            stop.wait(3600)
+        return 0
+    monkeypatch.setattr(tray,'run_desktop_watch',run)
+    AppConfig(desktop_targets=[Target('thread','a','A',send_prompt=True,send_goal=False).to_dict()]).save()
+    app=tray.TrayApp()
+    try:
+        with pytest.raises(RuntimeError,match='off'):app.control('check-quota')
+        app.start_desktop()
+        wait_until(lambda:len(checks)==1)
+        worker=app._watch_thread
+        assert app.control('check-quota')['manual_quota_check']
+        wait_until(lambda:len(checks)==2)
+        assert app._watch_thread is worker and worker.is_alive()
+    finally:
+        app.stop_service()

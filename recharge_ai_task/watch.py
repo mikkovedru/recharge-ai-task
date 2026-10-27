@@ -12,7 +12,7 @@ from .targets import Target
 from .target_delivery import deliver_targets, recover_target, send_signals
 from .goal_control import quota_stopped_targets
 from .i18n import t
-from .quota import discover_codex, fetch_quota
+from .quota import discover_codex, fetch_quota, exhausted_windows, quota_blocked
 from .pty_backend import StopEvent
 
 _log = logging.getLogger("recharge-ai-task.watch")
@@ -27,6 +27,11 @@ class WatchState:
     pending: bool = False
     wake_at: float = 0
     progress: dict = field(default_factory=dict)
+    waiting_for_quota: bool = False
+    recovered_at: float | None = None
+    expected_reset_at: float | None = None
+    repeated_block: set[tuple[int, int]] = field(default_factory=set)
+    repeated_block_count: int = 0
 
 
 @dataclass
@@ -45,11 +50,11 @@ class WatchConfig:
 
 def _poll_interval(used_percent: float, default: int) -> int:
     if used_percent >= 100:
-        return 5
+        return min(default, 5)
     if used_percent >= 95:
-        return 10
+        return min(default, 10)
     if used_percent >= 80:
-        return 20
+        return min(default, 20)
     return default
 
 
@@ -68,58 +73,75 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         return 1
     state = config.state if config.state is not None else WatchState()
     checked_at = None
+    available = None
 
     def wait(seconds, phase):
         # Publish one complete observation for the dashboard. Delivery accounting
         # remains private to the worker and is never controlled through this view.
         state.progress = {"phase": phase, "checked_at": checked_at,
-                          "next_check_at": time.time() + seconds}
+                          "next_check_at": time.time() + seconds,
+                          "quota_available": available, "recovered_at": state.recovered_at,
+                          "recovery_at": state.wake_at if state.pending and available else None,
+                          "expected_reset_at": state.expected_reset_at,
+                          "pending_recipients": sum(t.key not in state.delivered for t in targets) if state.pending else 0}
         stop.wait(seconds)
 
     _log_status(t("watch.started"))
 
     while not stop.is_set():
         state.progress = {"phase": "checking_quota", "checked_at": checked_at,
-                          "next_check_at": None}
+                          "next_check_at": None, "quota_available": None}
         try:
             quota = fetch_quota(codex)
         except Exception as exc:
+            available = None
             _log_status(t("cli.quota_fallback_failed", error=exc))
             wait(60, "quota_unavailable")
             continue
 
         checked_at = time.time()
 
-        exhausted = [window for window in (quota.primary, quota.secondary)
-                     if window is not None and window.used_percent >= 100]
+        exhausted = exhausted_windows(quota)
+        available = not quota_blocked(quota)
         used = max(quota.primary.used_percent, quota.secondary.used_percent if quota.secondary else 0)
 
-        if exhausted:
+        if not available:
             state.startup_checked = True
-            # Both short and weekly limits must recover before any recipient can
-            # continue. Keep the reset identity after delivery to reject stale
-            # snapshots of an already completed reset.
-            reset_cycle = {(w.window_duration_mins, w.resets_at) for w in exhausted}
-            next_wake = max(w.resets_at for w in exhausted) + config.grace_seconds
-            if reset_cycle - state.seen_resets:
-                state.seen_resets.update(reset_cycle)
+            # A flag-only limit is a real block even before percentages reach
+            # 100. Reset-credit inventory alone never counts as availability.
+            keys = {(w.window_duration_mins, w.resets_at) for w in exhausted}
+            if not keys:
+                keys = {(-1, quota.primary.resets_at)}
+            state.expected_reset_at = max((w.resets_at for w in exhausted), default=None)
+            if keys == state.repeated_block:
+                state.repeated_block_count += 1
+            else:
+                state.repeated_block, state.repeated_block_count = keys, 1
+            # A second exhaustion after an early refill may keep the same reset
+            # ID. Require two current-window observations so one stale frame
+            # cannot replay an already completed recovery.
+            repeated_current = (not state.pending and state.recovered_at is not None
+                and any(reset > checked_at for _duration, reset in keys)
+                and state.repeated_block_count >= 2)
+            if keys - state.seen_resets or repeated_current:
+                state.seen_resets.update(keys)
                 state.delivered.clear()
                 state.pending = True
-                state.wake_at = next_wake
-            else:
-                state.wake_at = max(state.wake_at, next_wake)
-            prompt = "selected Goal / Prompt signals"
-            wake_local = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(state.wake_at))
-            _log_status(t("watch.blocked", prompt=prompt, time=wake_local))
-            # Refresh quota after waiting; a passed reset timestamp alone does
-            # not prove that quota is available. Keep waits bounded for shutdown.
-            wait(min(60, max(5, state.wake_at - time.time())), "waiting_quota")
+            if state.pending:
+                state.waiting_for_quota = True
+                state.recovered_at = None
+                state.wake_at = 0
+            _log_status("Quota is unavailable; polling for recovery, including early resets and added credits.")
+            wait(max(1, min(15, _poll_interval(used, config.poll_seconds))), "waiting_quota")
             continue
 
-        if getattr(quota, "rate_limit_reached", False):
-            _log_status("Codex still reports a quota limit; waiting for availability.")
-            wait(30, "waiting_quota")
-            continue
+        state.repeated_block.clear()
+        state.repeated_block_count = 0
+        if state.waiting_for_quota:
+            state.waiting_for_quota = False
+            state.recovered_at = checked_at
+            state.wake_at = checked_at + config.grace_seconds
+            _log_status("Quota is available now; the recovery grace period starts from this check.")
 
         if not state.startup_checked and not state.pending:
             state.startup_checked = True
@@ -132,7 +154,8 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                 if candidates:
                     state.delivered = {target.key for target in targets} - candidates
                     state.pending = True
-                    state.wake_at = time.time() + config.grace_seconds
+                    state.recovered_at = checked_at
+                    state.wake_at = checked_at + config.grace_seconds
                     _log_status("Quota is available; recovering selected quota-stopped goals after the grace period.")
 
         if not state.pending:
@@ -142,11 +165,13 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
 
         remaining = state.wake_at - time.time()
         if remaining > 0:
-            wait(min(60, remaining), "grace_period")
+            wait(min(15, remaining), "grace_period")
             continue
 
         state.progress = {"phase": "delivering", "checked_at": checked_at,
-                          "next_check_at": None}
+                          "next_check_at": None, "quota_available": True,
+                          "recovered_at": state.recovered_at, "recovery_at": state.wake_at,
+                          "pending_recipients": sum(t.key not in state.delivered for t in targets)}
         for target in targets:
             if stop.is_set():
                 break

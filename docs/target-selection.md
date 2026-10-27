@@ -268,7 +268,8 @@ goal, so their Goal checkbox is disabled.
 
 This applies on every quota recovery, replacing the old once-per-watch first
 message behavior. Starting a watch after quota has recovered also finds selected
-usage-limited goals and recovers only those, after the grace period. Other chats
+usage-limited, errored or newly introduced resumable Goal states and recovers
+only those, after the grace period. Other chats
 receive no startup signal. Failed startup checks retry while the watch runs.
 
 A window recipient means the currently displayed chat and focused input in that
@@ -277,10 +278,21 @@ avoid this focus dependency. Window delivery validates the XID/PID and foregroun
 window before typing and submitting. Closing a window or reusing an ID causes a
 failure. Desktop settings and conversation drafts are not cleared.
 
-The watcher waits for every exhausted quota window (including the weekly
-window), keeps the grace period, then checks fresh quota before sending. A passed
-reset timestamp alone does not trigger delivery. Failed quota reads and a
-remaining rate-limit flag postpone delivery.
+The watcher polls all quota windows, including the weekly allowance. A manual
+reset or newly usable credits can recover quota before the forecast reset time.
+The grace period starts at the first check that observes availability; the old
+forecast never delays an early recovery. During exhaustion, checks occur at most
+15 seconds apart (normally every 5 seconds at 100%). Both windows must recover
+unless the backend confirms usable additional credits. Explicit rate-limit and
+spend-control blocks still postpone delivery. Unspent reset credits alone do not
+make quota available, and the app never consumes a reset credit for you.
+
+A passed reset timestamp alone does not trigger delivery. Failed quota reads
+postpone desktop delivery. The CLI wrapper also polls while waiting; when its
+quota API is unavailable, it retains the later terminal/API forecast as a fallback.
+A second exhaustion/refill can reuse the same forecast ID; repeated current-window
+exhaustion is confirmed before another recovery is armed, avoiding replay from
+one stale snapshot.
 
 The watcher tracks accepted recipients separately for each reset. Confirmed
 failures retry every 30 seconds while quota is available; this pending delivery

@@ -59,7 +59,7 @@ def run_snapshots(monkeypatch, snapshots, *, selected=(A,), grace=0, outcomes=()
 def test_overview_reports_actual_worker_wait(monkeypatch, snapshot, pending, wake_at, outcomes, phase):
     state = watch.WatchState(startup_checked=True, pending=pending, wake_at=wake_at)
     _, waits = run_snapshots(monkeypatch, [snapshot], outcomes=outcomes, state=state)
-    assert state.progress == {"phase": phase, "next_check_at": 100 + waits[0],
+    assert {key: state.progress[key] for key in ("phase", "next_check_at", "checked_at")} == {"phase": phase, "next_check_at": 100 + waits[0],
                               "checked_at": None if isinstance(snapshot, Exception) else 100}
 
 
@@ -77,9 +77,8 @@ def test_weekly_limit_must_also_reset(monkeypatch):
     both = replace(BLOCKED, secondary=RateWindow(100, 10080, 160))
     weekly = replace(AVAILABLE, secondary=both.secondary, rate_limit_reached=True)
     sent, waits = run_snapshots(monkeypatch, [both, weekly, AVAILABLE, AVAILABLE], grace=10)
-    assert waits[0] == 60
-    assert waits[1] == 10
-    assert len(sent) == 1 and sent[0][2] >= 170
+    assert waits[0] == waits[1] == 5
+    assert len(sent) == 1 and sent[0][2] == 120
 
 
 def test_failed_target_retries_after_quota_becomes_available(monkeypatch):
@@ -107,8 +106,8 @@ def test_new_reset_sends_once_again(monkeypatch):
 
 
 def test_grace_period_is_retained_after_api_recovers(monkeypatch):
-    sent, _ = run_snapshots(monkeypatch, [BLOCKED, AVAILABLE, AVAILABLE], grace=90)
-    assert len(sent) == 1 and sent[0][2] >= 190
+    sent, _ = run_snapshots(monkeypatch, [BLOCKED] + [AVAILABLE] * 8, grace=90)
+    assert len(sent) == 1 and sent[0][2] == 195
 
 
 def test_available_quota_without_observed_block_does_not_send(monkeypatch):
@@ -118,7 +117,7 @@ def test_available_quota_without_observed_block_does_not_send(monkeypatch):
 
 def test_limit_flag_without_full_window_blocks_delivery(monkeypatch):
     sent, _ = run_snapshots(monkeypatch, [BLOCKED, replace(AVAILABLE, rate_limit_reached=True), AVAILABLE])
-    assert len(sent) == 1 and sent[0][2] >= 135
+    assert len(sent) == 1 and sent[0][2] == 120
 
 
 def test_partial_stale_snapshot_does_not_rearm_completed_reset(monkeypatch):
@@ -184,3 +183,41 @@ def test_failed_startup_goal_check_retries_without_signalling_unknown_targets(mo
         def wait(self, seconds): waits.append(seconds)
     watch.run_desktop_watch(watch.WatchConfig(desktop_targets=(A, B), goal_mode=True, grace_seconds=0), Stop())
     assert checks == [2] and sent == ["b"]
+
+
+@pytest.mark.parametrize("grace", [0, 10])
+def test_early_reset_uses_observed_recovery_not_old_forecast(monkeypatch, grace):
+    blocked = replace(BLOCKED, primary=RateWindow(100,300,10000))
+    available = replace(blocked,primary=RateWindow(1,300,10000),rate_limit_reached=False)
+    sent, waits = run_snapshots(monkeypatch,[blocked,available,available,available],grace=grace)
+    assert len(sent)==1 and sent[0][2]==105+grace
+    assert waits[0]==5
+
+
+def test_added_credits_allow_recovery_with_full_included_window(monkeypatch):
+    ready=replace(BLOCKED,primary=RateWindow(100,300,10000),rate_limit_reached=False,has_credits=True)
+    sent,_=run_snapshots(monkeypatch,[replace(ready,has_credits=False,rate_limit_reached=True),ready,ready])
+    assert len(sent)==1 and sent[0][2]==105
+
+
+def test_flag_only_limit_arms_message_recovery(monkeypatch):
+    blocked=replace(BLOCKED,primary=RateWindow(50,300,10000))
+    ready=replace(blocked,rate_limit_reached=False)
+    sent,_=run_snapshots(monkeypatch,[blocked,ready,ready])
+    assert len(sent)==1
+
+
+def test_second_exhaustion_after_refill_can_keep_the_reset_id(monkeypatch):
+    blocked=replace(BLOCKED,primary=RateWindow(100,300,10000))
+    ready=replace(blocked,primary=RateWindow(1,300,10000),rate_limit_reached=False)
+    sent,_=run_snapshots(monkeypatch,[blocked,ready,ready,blocked,blocked,ready,ready])
+    assert len(sent)==2
+
+
+def test_reexhaustion_during_grace_restarts_grace_from_latest_recovery(monkeypatch):
+    blocked=replace(BLOCKED,primary=RateWindow(100,300,10000))
+    ready=replace(blocked,primary=RateWindow(1,300,10000),rate_limit_reached=False)
+    state=watch.WatchState()
+    sent,_=run_snapshots(monkeypatch,[blocked,ready,blocked,ready,ready],grace=10,state=state)
+    assert len(sent)==1 and sent[0][2]==130
+    assert state.recovered_at==120

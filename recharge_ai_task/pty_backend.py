@@ -10,15 +10,24 @@ from typing import Protocol
 class StopEvent:
     def __init__(self) -> None:
         self._flag = threading.Event()
+        self._wakeup = threading.Event()
 
     def set(self) -> None:
         self._flag.set()
+        self._wakeup.set()
 
     def is_set(self) -> bool:
         return self._flag.is_set()
 
+    def wake(self) -> None:
+        """Interrupt a wait to recheck state without stopping the worker."""
+        self._wakeup.set()
+
     def wait(self, timeout: float) -> bool:
-        return self._flag.wait(timeout)
+        if not self._flag.is_set():
+            self._wakeup.wait(timeout)
+            self._wakeup.clear()
+        return self._flag.is_set()
 
 
 class PtySession(Protocol):
