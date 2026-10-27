@@ -72,7 +72,7 @@ def test_unconfirmed_activation_is_never_success(failure):
     assert not any(method.endswith("/set") for method, _ in server.calls)
 
 
-@pytest.mark.parametrize("response", [{}, {"goal": []}, {"goal": {"threadId": "other", "status": "active"}}, {"goal": {"threadId": "chosen", "status": "future"}}])
+@pytest.mark.parametrize("response", [{}, {"goal": []}, {"goal": {"threadId": "other", "status": "active"}}, {"goal": {"threadId": "chosen", "status": ""}}])
 def test_unknown_goal_state_is_not_no_goal(response):
     server = GoalServer()
     server.call = lambda *args: response
@@ -112,7 +112,7 @@ def install_recovery(monkeypatch, *, status="usageLimited", task="systemError", 
         def __exit__(self, *args): pass
         def get(self, thread): return deepcopy(state["goal"])
         def resume(self, thread, expected, *, activate, allow_paused=False, allow_active=False):
-            assert expected["status"] in {"usageLimited", "active"} or allow_paused
+            assert expected["status"] != "paused" or allow_paused
             activate()
             return True
     class Desktop:
@@ -596,3 +596,53 @@ def test_skipped_protected_goal_counts_only_the_independent_message(monkeypatch)
     usage = UsageLedger().snapshot()
     assert (target.key, "goal") not in usage and usage[(target.key, "prompt")].used == 1
     assert state["resumes"] == 0 and state["sent"] == ["Custom"]
+
+
+@pytest.mark.parametrize("goal_status", ["usageLimited", "error", "systemError"])
+@pytest.mark.parametrize("task_status", ["systemError", "error"])
+@pytest.mark.parametrize("prompt", [False, True])
+def test_error_statuses_allow_native_goal_activation_and_selected_message(monkeypatch, goal_status, task_status, prompt):
+    from recharge_ai_task.delivery_policy import UsageLedger
+    state = install_recovery(monkeypatch, status=goal_status, task=task_status)
+    target = replace(TARGET, send_goal=True, send_prompt=prompt)
+    result = delivery.send_signals([target], "Continue")[0]
+    assert result.success and not result.skipped
+    assert state["resumes"] == 1 and state["sent"] == (["Continue"] if prompt else [])
+    assert UsageLedger().usage(target.key, "goal").used == 1
+
+
+@pytest.mark.parametrize("status", ["error", "systemError"])
+def test_native_error_goal_is_validated_and_resumed(status):
+    goal = {**GOAL, "status": status}
+    server = GoalServer(goal)
+    assert controller(server).get("chosen") == goal
+    assert controller(server).resume("chosen", goal, activate=server.activate_owner)
+    assert server.goal["status"] == "active"
+
+
+@pytest.mark.parametrize("status", ["error", "systemError"])
+def test_startup_includes_selected_error_goals(monkeypatch, status):
+    install_recovery(monkeypatch, status=status)
+    candidates, errors = goal_control.quota_stopped_targets([TARGET])
+    assert candidates == {TARGET.key} and not errors
+
+
+@pytest.mark.parametrize("status", ["future", "runningNew", "providerRecoverable"])
+def test_unknown_goal_status_defaults_to_native_activation(monkeypatch,status):
+    state=install_recovery(monkeypatch,status=status,task="futureTask")
+    target=replace(TARGET,send_goal=True,send_prompt=True)
+    result=delivery.send_signals([target],"Continue")[0]
+    assert result.success and state["resumes"]==1 and state["sent"]==["Continue"]
+
+
+def test_unknown_goal_status_is_accepted_by_native_controller():
+    goal={**GOAL,"status":"future"}
+    server=GoalServer(goal)
+    assert controller(server).get("chosen")==goal
+    assert controller(server).resume("chosen",goal,activate=server.activate_owner)
+
+
+def test_unknown_post_activation_status_does_not_reject_native_acknowledgement():
+    server=GoalServer()
+    def activate():server.goal["status"]="newActiveState"
+    assert controller(server).resume("chosen",GOAL,activate=activate)

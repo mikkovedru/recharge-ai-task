@@ -114,6 +114,11 @@ def test_clipboard_restore_failure_after_activation_remains_uncertain(monkeypatc
 
 @pytest.mark.parametrize('matching', [True, False])
 def test_sidebar_fallback_verifies_duplicate_titles_before_opening(monkeypatch, matching):
+    clock=[0]
+    def now():
+        clock[0]+=.1
+        return clock[0]
+    monkeypatch.setattr(ui,'time',SimpleNamespace(monotonic=now,sleep=lambda _:None))
     selected = ['other']
     clicked, verified = [], []
     wrong = Node('Duplicate title', action=lambda _: pytest.fail('Opened a different chat with the same title'))
@@ -183,3 +188,70 @@ def test_copy_identity_never_sends_escape_to_active_goal(monkeypatch, menu_stays
     assert ui.row_chat_id(123,row) == 'chosen'
     assert not state['menu']
     assert state['trigger_clicks'] == (2 if menu_stays_open else 1)
+
+
+@pytest.mark.parametrize("status", ["error", "systemError", "future"])
+def test_error_goal_can_use_native_resume_button(monkeypatch, status):
+    state, button, frame = fixture(monkeypatch)
+    state["goal"]["status"] = status
+    expected = deepcopy(state["goal"])
+    ui.resume_goal(TARGET, expected, 123)
+    assert state["clicked"] == 1 and state["goal"]["status"] == "active"
+
+
+def navigation_clock(monkeypatch):
+    clock=[0]
+    def now():
+        clock[0]+=.1
+        return clock[0]
+    monkeypatch.setattr(ui,'time',SimpleNamespace(monotonic=now,sleep=lambda _:None))
+    monkeypatch.setattr(ui.subprocess,'run',lambda *a,**kw:None)
+    monkeypatch.setattr(ui,'active_window',lambda _:1)
+
+
+def test_deeplink_waits_for_target_id_not_just_visible_window(monkeypatch):
+    navigation_clock(monkeypatch)
+    frame=Node('Frame','frame')
+    monkeypatch.setattr(ui,'visible_frame',lambda _:frame)
+    ids=iter(['other','other','chosen'])
+    monkeypatch.setattr(ui,'current_chat_id',lambda _:next(ids,'chosen'))
+    monkeypatch.setattr(ui,'sidebar_rows',lambda _:[])
+    assert ui.show_chat(TARGET,123) is frame
+
+
+def test_collapsed_project_is_expanded_before_exact_id_candidate_open(monkeypatch):
+    from dataclasses import replace
+    navigation_clock(monkeypatch)
+    state={'expanded':False,'selected':'other','clicked':[]}
+    frame=Node('Frame','frame')
+    def expand(_):
+        state['expanded']=True
+        return True
+    project=Node('A project',action=expand)
+    project.getState=lambda:SimpleNamespace(contains=lambda flag:state['expanded'] if flag==ui.pyatspi.STATE_EXPANDED else True)
+    chosen=Node('Duplicate title · Usage limited',children=[Node('Duplicate title','static')])
+    def select(_):
+        state['clicked'].append('chosen');state['selected']='chosen';return True
+    chosen.action=select
+    monkeypatch.setattr(ui,'visible_frame',lambda _:frame)
+    monkeypatch.setattr(ui,'current_chat_id',lambda _:state['selected'])
+    monkeypatch.setattr(ui,'sidebar_rows',lambda _:[project,chosen] if state['expanded'] else [project])
+    monkeypatch.setattr(ui,'row_chat_id',lambda pid,row:'chosen' if row is chosen else pytest.fail('Project used as chat identity'))
+    assert ui.show_chat(replace(TARGET,project_name='A project'),123) is frame
+    assert state['expanded'] and state['clicked']==['chosen']
+
+
+def test_stale_frame_and_accessible_row_are_requeried(monkeypatch):
+    navigation_clock(monkeypatch)
+    first,second=Node('Old frame','frame'),Node('New frame','frame')
+    frames=iter([first,second,second,second])
+    monkeypatch.setattr(ui,'visible_frame',lambda _:next(frames,second))
+    selection=['other'];selected=Node('Duplicate title',action=lambda _:selection.__setitem__(0,'chosen') or True)
+    stale=Node('Duplicate title')
+    monkeypatch.setattr(ui,'current_chat_id',lambda _:selection[0])
+    monkeypatch.setattr(ui,'sidebar_rows',lambda f:[stale] if f is first else [selected])
+    def identity(pid,row):
+        if row is stale:raise RuntimeError('Defunct accessibility row')
+        return 'chosen'
+    monkeypatch.setattr(ui,'row_chat_id',identity)
+    assert ui.show_chat(TARGET,123) is second

@@ -361,3 +361,14 @@ When neither action is selected, nothing is sent. Status changes can invalidate
 a preview before delivery; the result log reports accepted, skipped and failed
 actions. The sender never removes a Goal's budget, changes its objective or sends
 an empty user message to imitate native Goal continuation.
+
+
+Task **Error** does not suppress chosen messages or resumable Goal actions. Explicit
+Goal error states are also eligible for native activation, including startup
+recovery once quota is available. Identity, budget and activation verification
+still apply; intentional pauses and completed goals keep their usual handling.
+
+Unrecognized nonempty task and Goal statuses are allowed by default. Only known
+exclusions (such as intentional pauses during automatic recovery, blocked or
+completed goals) suppress their actions. Missing/unreadable state is a verification
+failure, and chat identity, send limits and native acknowledgement still apply.

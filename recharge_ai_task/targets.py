@@ -12,6 +12,7 @@ from contextlib import closing
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from urllib.parse import quote
+from .recovery_rules import valid_status
 
 
 @dataclass(frozen=True)
@@ -98,14 +99,14 @@ def task_status(value):
         waiting = [label for flag, label in (("waitingOnApproval", "Waiting for approval"),
             ("waitingOnUserInput", "Waiting for input")) if flag in flags]
         return " / ".join(waiting) if waiting else "Running"
-    return {"idle": "Idle", "notLoaded": "Not loaded", "systemError": "Error"}.get(kind, "Unavailable")
+    return {"idle": "Idle", "notLoaded": "Not loaded", "systemError": "Error", "error": "Error"}.get(kind, kind if valid_status(kind) else "Unavailable")
 
 
 def goal_status(value):
     return {"active": "Active", "paused": "Paused", "blocked": "Blocked",
         "usageLimited": "Usage limited", "usage_limited": "Usage limited",
         "budgetLimited": "Budget limited", "budget_limited": "Budget limited",
-        "complete": "Complete"}.get(value, "Unavailable")
+        "complete": "Complete", "error": "Error", "systemError": "Error"}.get(value, value if valid_status(value) else "Unavailable")
 
 
 def _saved_goals(home):

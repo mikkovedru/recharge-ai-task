@@ -166,3 +166,12 @@ def test_empty_ineligible_message_does_not_block_goal_or_watch():
     assert invalid_messages([target],'',AppConfig(goal_limit=0))==[]
     assert invalid_messages([target],'',AppConfig())==[target]
     assert invalid_messages([replace(target,custom_prompt='Custom')],'',AppConfig())==[]
+
+
+@pytest.mark.parametrize('manual',[False,True])
+def test_message_only_is_not_suppressed_by_error_labels(monkeypatch,manual):
+    sent=[]
+    monkeypatch.setattr(delivery,'_send_thread',lambda target,text:sent.append(text))
+    target=replace(T,task_status='Error',goal_status='Error')
+    assert delivery.send_signals([target],'Continue',manual=manual)[0].success
+    assert sent==['Continue']

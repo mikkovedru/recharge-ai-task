@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from .codex_ipc import DesktopIPC, DeliveryUncertain
 from .targets import Target, discover_windows
+from .recovery_rules import goal_allowed, task_allowed, valid_status, activation_verified
 from .delivery_policy import ActionBudget, LimitReached, UsageLedger, effective_message
 
 _log = logging.getLogger("recharge-ai-task.delivery")
@@ -81,10 +82,7 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
             goal = goals.get(target.id)
             if require_goal and goal is None:
                 return DeliveryResult(target, True, "Skipped — chat has no goal", skipped=True)
-            protected = {"blocked", "budgetLimited", "complete"}
-            if not manual:
-                protected.add("paused")
-            if goal is not None and goal["status"] in protected:
+            if goal is not None and not goal_allowed(goal["status"], manual=manual):
                 return DeliveryResult(target, True, f"Skipped — goal is {goal['status']}", skipped=True)
             if not target.endpoint:
                 raise RuntimeError("Desktop routing unavailable; open Codex and refresh targets")
@@ -92,16 +90,16 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                 owner = _owner_for_delivery(desktop, target)
                 snapshot = desktop.status_snapshot(target.id, owner)
                 task = snapshot.get("task")
-                if not isinstance(task, dict) or task.get("type") not in {"active", "idle", "systemError", "notLoaded"}:
+                if not isinstance(task, dict) or not valid_status(task.get("type")):
                     raise RuntimeError("Current task status is unavailable; no signal sent")
-                if task["type"] == "active" and not manual:
+                if not task_allowed(task["type"], manual=manual):
                     return DeliveryResult(target, True, "Skipped — task is already running or waiting for input", skipped=True)
                 if goal is None and snapshot.get("goal") == "complete":
                     return DeliveryResult(target, True, "Skipped — goal is complete", skipped=True)
                 resumed = False
                 if not manual and snapshot.get("goal") == "paused":
                     return DeliveryResult(target, True, "Skipped — desktop goal is paused", skipped=True)
-                if goal is not None and (goal["status"] in {"usageLimited", "paused"}
+                if goal is not None and (goal["status"] != "active"
                         or manual and snapshot.get("goal") in {"paused", "usageLimited"}):
                     resumed = goals.resume(target.id, goal, allow_paused=manual, allow_active=manual,
                         activate=lambda: perform("goal", lambda: desktop.resume_goal(target, goal)))
@@ -111,7 +109,7 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                     # Respect a pause or replacement that occurred during the
                     # owner/status lookup even when this began as a normal send.
                     fresh = goals.get(target.id)
-                    if fresh is not None and fresh["status"] != "active":
+                    if fresh is not None and not goal_allowed(fresh["status"], manual=manual):
                         return DeliveryResult(target, True, f"Skipped — goal is {fresh['status']}", skipped=True)
                     if goal is None and fresh is not None:
                         return DeliveryResult(target, True, "Skipped — a new goal appeared before recovery", skipped=True)
@@ -120,10 +118,10 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                         return DeliveryResult(target, True, "Skipped — goal changed before recovery", skipped=True)
                 if goal is not None:
                     snapshot = desktop.status_snapshot(target.id, owner)
-                    if snapshot.get("goal") not in {"active", "complete"}:
+                    if not activation_verified(snapshot.get("goal")):
                         raise DeliveryUncertain("Native Goal activation was not visible in the desktop; no prompt sent")
                     task = snapshot.get("task")
-                    if not isinstance(task, dict) or task.get("type") not in {"active", "idle", "systemError"}:
+                    if not isinstance(task, dict) or not valid_status(task.get("type")):
                         raise DeliveryUncertain("Native Goal was activated, but its task state could not be verified; no prompt sent")
                 if send_prompt:
                     if goal is not None and task["type"] == "active":
@@ -133,7 +131,7 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                 if goal is not None:
                     try:
                         after = goals.get(target.id)
-                        if after is None or after["status"] not in {"active", "complete"}:
+                        if after is None or not activation_verified(after["status"]):
                             raise ValueError("Goal did not remain active after continuation")
                         if any(after.get(k) != goal.get(k) for k in ("threadId", "objective", "createdAt")):
                             raise ValueError("Goal changed after continuation")

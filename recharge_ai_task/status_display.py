@@ -48,11 +48,12 @@ TASK_STATES = {
     "Waiting for approval": ("warning", "A turn is active but needs your approval before continuing."),
     "Waiting for input": ("warning", "A turn is active but needs your reply before continuing."),
     "Idle": ("normal", "No turn is currently running."),
-    "Error": ("error", "Codex reports a runtime error for this task."),
+    "Error": ("error", "Codex reports a task error, which can also follow quota exhaustion. This does not block selected messages or resumable goals."),
     "Not loaded": ("normal", "The saved chat is not loaded in the queried backend."),
     "Unavailable": ("warning", "The current state could not be read; this does not mean idle."),
 }
 GOAL_STATES = {
+    "Error": ("error", "Codex reports a goal error. Native Goal activation can still be attempted after quota recovers; it must be verified live."),
     "Active": ("success", "The goal is enabled and may continue automatically; check Task status for current activity."),
     "Paused": ("warning", "The goal is intentionally paused. Manual Goal signals may resume it; quota recovery leaves it paused."),
     "Usage limited": ("warning", "The goal stopped because account quota was exhausted. Goal signals can resume it when quota recovers."),

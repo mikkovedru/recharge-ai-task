@@ -9,6 +9,8 @@ from pathlib import Path
 from .codex_ipc import DeliveryUncertain
 from .targets import AppServer
 
+from .recovery_rules import GOAL_ERROR_STATUSES, goal_allowed, activation_verified, valid_status
+
 
 class NativeGoals:
     """Use an existing same-user daemon sharing the selected Codex profile.
@@ -51,7 +53,7 @@ class NativeGoals:
             raise ValueError("Codex did not return a goal state")
         goal = result["goal"]
         if goal is not None and (not isinstance(goal, dict) or goal.get("threadId") != thread_id
-                or goal.get("status") not in {"active", "paused", "blocked", "usageLimited", "budgetLimited", "complete"}):
+                or not valid_status(goal.get("status"))):
             raise ValueError("Codex returned an invalid goal identity or status")
         return goal
 
@@ -60,10 +62,8 @@ class NativeGoals:
         # edited, cleared or replaced in the meantime is left alone. Only an
         # explicit manual action may resume a goal already observed as paused.
         current = self.get(thread_id)
-        allowed = {"usageLimited", "paused"} if allow_paused else {"usageLimited"}
-        if allow_active:
-            allowed.add("active")
-        if (current is None or current.get("status") not in allowed
+        if (current is None or not goal_allowed(current.get("status"), manual=allow_paused)
+                or current.get("status") == "active" and not allow_active
                 or current.get("status") != expected.get("status")):
             return False
         identity = ("threadId", "objective", "createdAt", "tokenBudget")
@@ -74,7 +74,7 @@ class NativeGoals:
         activate()
         try:
             verified = self.get(thread_id)
-            if not isinstance(verified, dict) or verified.get("status") not in {"active", "complete"}:
+            if not isinstance(verified, dict) or not activation_verified(verified.get("status")):
                 raise ValueError("Goal did not become active")
             if any(verified.get(k) != current.get(k) for k in identity):
                 raise ValueError("Goal identity or budget changed")
@@ -87,7 +87,7 @@ class NativeGoals:
 
 
 def quota_stopped_targets(targets, stop=None):
-    """Find startup recovery candidates; failures are explicit, never no-goal."""
+    """Find quota-stopped or errored startup goals; failed reads remain explicit."""
     from contextlib import ExitStack
     candidates, errors = set(), []
     with ExitStack() as stack:
@@ -107,7 +107,7 @@ def quota_stopped_targets(targets, stop=None):
                 if isinstance(profile, str):
                     raise RuntimeError(profile)
                 goal = profile.get(target.id)
-                if goal is not None and goal["status"] == "usageLimited":
+                if goal is not None and goal_allowed(goal["status"]) and goal["status"] != "active":
                     candidates.add(target.key)
             except Exception as exc:
                 errors.append(f"{target.title} [{target.id}]: goal recovery check failed: {exc}")

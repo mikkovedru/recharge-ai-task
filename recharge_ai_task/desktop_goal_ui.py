@@ -183,43 +183,85 @@ def row_chat_id(pid, row):
 
 
 
+def _title_candidate(row, title):
+    # Accessible row names may include badges, while a child retains the title.
+    expected = " ".join(title.split()).casefold()
+    if not expected:
+        return False
+    for node in nodes(row):
+        name = " ".join((node.name or "").split()).casefold()
+        if name == expected or node is row and name.startswith(expected + " "):
+            return True
+    return False
+
+
+def _expand_project(frame, target, pid):
+    if not target.project_name:
+        return False
+    projects = [row for row in sidebar_rows(frame) if row.name == target.project_name
+                and row.getState().contains(pyatspi.STATE_EXPANDABLE)]
+    if len(projects) != 1 or projects[0].getState().contains(pyatspi.STATE_EXPANDED):
+        return False
+    active_window(pid)
+    if not projects[0].queryAction().doAction(0):
+        raise RuntimeError("Could not expand the selected chat's project")
+    return True
+
+
 def show_chat(target, pid):
-    """Use a deep link, or an exact-ID-verified native sidebar row."""
+    """Wait for canonical-ID navigation, retaining exact-ID sidebar fallback."""
     link = "codex://threads/" + quote(target.id, safe="")
     subprocess.run(["xdg-open", link], check=True, capture_output=True, timeout=8)
-    def ready():
+    # xdg-open acknowledges dispatch, not completed navigation. Re-read the
+    # active frame and sidebar after loading/project expansion on every pass.
+    deadline = time.monotonic() + 10
+    last_error = "the selected chat has not appeared in the desktop"
+    while time.monotonic() < deadline:
         try:
-            return visible_frame(pid)
-        except RuntimeError:
-            return None
-    frame = wait_for(ready, timeout=8)
-    try:
-        if current_chat_id(pid) == target.id:
-            return frame
-    except RuntimeError:
-        pass
-    # A title narrows candidates only. Verify each candidate's canonical ID
-    # before clicking it, including when two chats have the same title.
-    candidates = [row for row in sidebar_rows(frame) if row.name == target.title]
-    for row in candidates:
-        if row_chat_id(pid, row) != target.id:
-            continue
-        active_window(pid)
-        if not row.queryAction().doAction(0):
-            raise RuntimeError("Could not open the verified Codex chat; no Goal action sent")
-        def selected():
+            frame = visible_frame(pid)
             try:
-                return current_chat_id(pid) == target.id
-            except RuntimeError:
-                return False
-        wait_for(selected, timeout=8)
-        return visible_frame(pid)
-    raise RuntimeError("Could not open the exact selected chat ID; no Goal action sent")
+                if current_chat_id(pid) == target.id:
+                    return visible_frame(pid)
+            except InterruptedError:
+                raise
+            except Exception as exc:
+                last_error = str(exc)
+            candidates = [row for row in sidebar_rows(frame) if _title_candidate(row, target.title)]
+            if not candidates and _expand_project(frame, target, pid):
+                time.sleep(.1)
+                continue
+            for row in candidates:
+                if time.monotonic() >= deadline:
+                    break
+                try:
+                    identity = row_chat_id(pid, row)
+                except InterruptedError:
+                    raise
+                except Exception as exc:
+                    last_error = str(exc)
+                    continue
+                if identity != target.id:
+                    last_error = "same-title sidebar candidates have different chat IDs"
+                    continue
+                active_window(pid)
+                if not row.queryAction().doAction(0):
+                    raise RuntimeError("Could not open the verified Codex chat; no Goal action sent")
+                # The row click is asynchronous too. A fresh pass verifies the
+                # canonical selection; its label alone never authorizes a Goal.
+                time.sleep(.1)
+                break
+        except InterruptedError:
+            raise
+        except Exception as exc:
+            last_error = str(exc)
+        time.sleep(.05)
+    raise RuntimeError(f"Could not open the exact selected chat ID {target.id}: {last_error}; no Goal action sent")
 
 
 def resume_goal(target, expected, pid):
     from .goal_control import NativeGoals
-    if expected.get("status") not in {"paused", "usageLimited", "active"}:
+    from .recovery_rules import goal_allowed
+    if not goal_allowed(expected.get("status"), manual=True):
         raise RuntimeError("This Goal state cannot be resumed")
     snapshot = ClipboardSnapshot()
     clicked = False

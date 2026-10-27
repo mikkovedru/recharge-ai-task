@@ -18,7 +18,7 @@ from recharge_ai_task.codex_ipc import DesktopIPC
     ({"type": "active", "activeFlags": ["waitingOnApproval", "waitingOnUserInput"]}, "Waiting for approval / Waiting for input"),
     ({"type": "idle"}, "Idle"), ({"type": "systemError"}, "Error"),
     ({"type": "notLoaded"}, "Not loaded"), (None, "Unavailable"),
-    ({"type": "future"}, "Unavailable"),
+    ({"type": "future"}, "future"),
 ])
 def test_task_labels(state, label):
     assert targets.task_status(state) == label
@@ -28,7 +28,7 @@ def test_task_labels(state, label):
     ("active", "Active"), ("paused", "Paused"), ("blocked", "Blocked"),
     ("usageLimited", "Usage limited"), ("usage_limited", "Usage limited"),
     ("budgetLimited", "Budget limited"), ("budget_limited", "Budget limited"),
-    ("complete", "Complete"), (None, "Unavailable"), ("future", "Unavailable"),
+    ("complete", "Complete"), (None, "Unavailable"), ("future", "future"),
 ])
 def test_goal_labels(state, label):
     assert targets.goal_status(state) == label
