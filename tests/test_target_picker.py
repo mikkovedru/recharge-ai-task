@@ -115,10 +115,30 @@ def check():
         assert siblings[siblings.index(toolbar)-1] is window.table.get_parent()
         assert "Save selection" not in [button.get_label() for button in window.buttons]
         assert window.send_row.get_children() == [window.summary, window.send_button]
-        assert window.message_area.get_children() == [window.recipient_panel.default_controls, window.prompt_scroller.get_parent(), window.send_row]
-        assert window.main_split.get_child1() is window.workspace_split
-        assert window.workspace_split.get_child1() is window.list_area
+        assert window.message_area.get_children() == [window.default_editor.get_parent(), window.send_row]
+        assert window.recipient_panel.default_controls.get_parent() is window.recipient_panel
+        assert window.main_split.get_child1() is window.list_area
+        assert window.workspace_split.get_child1() is window.main_split
+        assert window.workspace_split.get_child2() is window.recipient_frame
         assert window.message_split.get_child2() is window.status
+        assert window.startup_toggle.get_parent().get_parent() is window.brand_area
+        assert window.logo_link.get_valign() == Gtk.Align.START
+        assert window.monitoring_card.get_allocated_width() < 300
+        assert window.prompt_scroller.get_allocated_width() < window.get_size().width * .6
+        assert window.status.get_allocated_width() < window.get_size().width * .6
+        assert window.recipient_frame.get_allocated_height() == window.workspace_split.get_allocated_height()
+        # Narrow layouts retain the editor, send controls and log without overlap.
+        window.resize(1120, 820)
+        until = time.monotonic() + .2
+        while time.monotonic() < until:
+            while Gtk.events_pending(): Gtk.main_iteration_do(False)
+            time.sleep(.003)
+        assert window.get_size().width <= 1120 and window.get_size().height <= 820
+        message_height = window.message_split.get_child1().get_allocated_height()
+        send_y = window.send_row.translate_coordinates(window.message_area, 0, 0)[1]
+        assert send_y >= window.default_editor.get_allocated_height()
+        assert send_y + window.send_row.get_allocated_height() <= message_height
+        assert window.status.get_allocated_height() >= 36
         assert isinstance(window.signal, Gtk.TextView)
         assert window.signal.get_wrap_mode() == Gtk.WrapMode.WORD_CHAR
         assert isinstance(window.status, Gtk.ScrolledWindow)

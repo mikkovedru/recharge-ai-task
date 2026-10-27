@@ -3,6 +3,7 @@ from dataclasses import replace
 from gi.repository import GLib, Gtk, Pango
 
 from .config import AppConfig
+from .resizable_editor import ResizableEditor
 from .delivery_policy import Usage, UsageLedger, effective_limit, effective_message, status_advice, planned_actions
 
 
@@ -72,21 +73,20 @@ class RecipientPanel(Gtk.Box):
         self.pack_start(picker.recipient_label, False, False, 0)
         self.default_prompt = LimitControl(self._defaults_changed)
         self.default_goal = LimitControl(self._defaults_changed)
-        self.default_controls = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE)
-        self.default_controls.set_max_children_per_line(4)
-        self.default_controls.set_min_children_per_line(1)
-        self.default_controls.set_column_spacing(8)
-        self.default_controls.set_row_spacing(2)
-        self.default_controls.add(Gtk.Label(label="Global limits per recipient:"))
-        for caption, control in (("Messages", self.default_prompt), ("Goal activations", self.default_goal)):
-            group = Gtk.Box(spacing=4)
-            group.pack_start(Gtk.Label(label=caption), False, False, 0)
-            group.pack_start(control, False, False, 0)
-            self.default_controls.add(group)
-        self.reset_all = Gtk.Button(label="Reset all recipient counts")
+        self.default_controls = Gtk.Grid(column_spacing=6, row_spacing=4)
+        self.default_controls.attach(Gtk.Label(label="Global limits per recipient:", xalign=0), 0, 0, 2, 1)
+        for row, (caption, control) in enumerate((("Messages", self.default_prompt), ("Goal activations", self.default_goal)), 1):
+            self.default_controls.attach(Gtk.Label(label=caption, xalign=0), 0, row, 1, 1)
+            self.default_controls.attach(control, 1, row, 1, 1)
+        self.reset_all = Gtk.Button(label="Reset all counts")
+        self.reset_all.set_tooltip_text("Reset message and Goal allowances for every recipient (Enter / Space)")
+        self.reset_all.set_valign(Gtk.Align.CENTER)
+        self.reset_all.set_halign(Gtk.Align.END)
+        self.reset_all.set_hexpand(True)
         self.reset_all.connect("clicked", self._reset_all)
-        self.default_controls.add(self.reset_all)
+        self.default_controls.attach(self.reset_all, 2, 0, 1, 3)
         self.default_controls.set_tooltip_text("Manual and automatic sends share each recipient's allowance. Counts survive restarts. Zero stops an action; use Reset counts to renew allowances.")
+        self.pack_start(self.default_controls, False, False, 0)
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.list.connect("row-selected", self._row_selected)
         self.list_scroller = Gtk.ScrolledWindow()
@@ -134,7 +134,8 @@ class RecipientPanel(Gtk.Box):
         self.message_scroller.set_shadow_type(Gtk.ShadowType.IN)
         self.message_scroller.set_size_request(120, 48)
         self.message_scroller.add(self.message)
-        self.editor.pack_start(self.message_scroller, True, True, 0)
+        self.message_resize = picker.window_layout.region("custom_message", ResizableEditor(self.message_scroller, height=100))
+        self.editor.pack_start(self.message_resize, False, False, 0)
         self.editor_scroller = Gtk.ScrolledWindow()
         self.editor_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.editor_scroller.set_size_request(250, 120)
@@ -143,7 +144,7 @@ class RecipientPanel(Gtk.Box):
         self.editor.set_border_width(6)
         self.editor_frame.add(self.editor)
         self.editor_scroller.add(self.editor_frame)
-        self.split = picker.window_layout.pane("recipient_list_editor", self.list_scroller, self.editor_scroller, position=150)
+        self.split = picker.window_layout.pane("recipient_list_editor", self.list_scroller, self.editor_scroller, position=.50)
         self.pack_start(self.split, True, True, 0)
 
     def _usage(self):

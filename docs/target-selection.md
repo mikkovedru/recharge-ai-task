@@ -93,7 +93,10 @@ either view. Drag a header edge to resize a column; long text wraps onto additio
 lines. Click any header to sort, then click again to reverse the order. PID sorts
 numerically. Drag headers to change their positions, including action columns.
 Drag the wide dividers between the chat list, message editor and log to resize
-them. Window size, Settings dialog size and divider positions are remembered.
+them. The message and log occupy the left half below the chat list; Recipients & actions
+uses the full right side. Drag the bottom-right corner of the default or custom
+message editor to change its width and height, or focus its grip and use Arrow
+keys. Editor sizes, window size, Settings dialog size and divider positions are remembered.
 Column widths, order and sorting are saved automatically and survive refresh,
 closing to the tray and restarting. These view changes do not send signals or
 restart monitoring. Hovering a row also shows its full values.
@@ -106,7 +109,13 @@ On, a red border when Off, and a yellow border while Stopping. It updates every
 two seconds. A stopping worker must finish before another starts. If the tray is absent, Start launches it.
 Closing the picker leaves the tray and active watch running.
 
-The overview groups **Monitoring** and **Next check** above the list.
+The overview has a compact **Monitoring** group and a two-column **Quota checks & recovery** group above the list.
+The left quota column reports the next check. The right shows the expected send
+time, a live countdown and pending message/Goal counts. A forecast includes the
+configured grace period and can move earlier when quota recovers early; a
+confirmed send countdown starts from observed usable quota. Counts say “up to”
+because live statuses and allowances can skip actions. Stopping watch clears
+the send schedule. Run-at-login controls sit below the logo at the top right.
 **Recipients & actions** sits beside it with the actual recipient plans. Monitoring reports the tray worker, independently of each chat's task
 status. Recipients counts the selected signal destinations. Next check uses the
 worker's scheduled quota check or delivery retry, with a live countdown and the

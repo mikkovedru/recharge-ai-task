@@ -221,3 +221,14 @@ def test_reexhaustion_during_grace_restarts_grace_from_latest_recovery(monkeypat
     sent,_=run_snapshots(monkeypatch,[blocked,ready,blocked,ready,ready],grace=10,state=state)
     assert len(sent)==1 and sent[0][2]==130
     assert state.recovered_at==120
+
+
+def test_pending_action_counts_exclude_delivered_recipients(monkeypatch):
+    a = replace(A, send_prompt=True, send_goal=False)
+    b = replace(B, send_prompt=False, send_goal=True)
+    c = replace(A, id="c", send_prompt=True, send_goal=True)
+    state = watch.WatchState(startup_checked=True, pending=True, delivered={a.key})
+    run_snapshots(monkeypatch, [RuntimeError("offline")], selected=(a,b,c), state=state)
+    assert state.progress["pending_recipients"] == 2
+    assert state.progress["pending_messages"] == 1
+    assert state.progress["pending_goals"] == 2

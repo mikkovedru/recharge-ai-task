@@ -66,6 +66,42 @@ def watch_check_summary(runtime, now):
     return (f"In {countdown}" if due > now else "Due now"), reasons[phase]
 
 
+def send_schedule_summary(runtime, now, grace_seconds=0):
+    """Separate a forecast quota reset from a confirmed recovery send time."""
+    from datetime import datetime
+
+    if not runtime or not runtime.get("desktop_watch") or any(runtime.get(k) for k in
+            ("stopping", "restarting", "watch_error", "watch_pause_reason")):
+        return "No send scheduled", "Monitoring is off or waiting.", "0 messages · 0 Goal activations"
+    progress = runtime.get("watch_progress") or {}
+    recipients = progress.get("pending_recipients", 0)
+    if not recipients:
+        return "No send scheduled", "Watching for quota recovery.", "0 messages · 0 Goal activations"
+    counts = (f"Up to {progress.get('pending_messages', 0)} messages · "
+              f"{progress.get('pending_goals', 0)} Goal activations · {recipients} recipients")
+    phase = progress.get("phase")
+    if phase == "delivering":
+        return "Sending now", "Live status and allowance rules apply.", counts
+    if phase == "quota_unavailable":
+        return "Waiting for usable quota", "Quota could not be read; send time unconfirmed.", counts
+    confirmed = progress.get("next_check_at") if phase == "retry_pending" else progress.get("recovery_at")
+    forecast = progress.get("expected_reset_at")
+    if isinstance(confirmed, (int, float)):
+        due, prefix = confirmed, "Send"
+    elif isinstance(forecast, (int, float)):
+        due, prefix = forecast + grace_seconds, "Forecast"
+    else:
+        return "Waiting for usable quota", "Send time is not known yet.", counts
+    remaining = max(0, ceil(due - now))
+    hours, rest = divmod(remaining, 3600)
+    minutes, seconds = divmod(rest, 60)
+    timer = f"{hours:02}:{minutes:02}:{seconds:02}"
+    when = datetime.fromtimestamp(due).strftime("%Y-%m-%d %H:%M:%S")
+    detail = (f"In {timer}" if remaining else "Due; checking usable quota") if prefix == "Send" else (
+        f"In {timer} · may send earlier" if remaining else "Awaiting usable quota; forecast passed")
+    return f"{prefix}: {when}", detail, counts
+
+
 TASK_STATES = {
     "Active": ("success", "Codex is working on a turn."),
     "Running": ("success", "Codex is working on a turn."),

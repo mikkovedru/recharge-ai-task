@@ -16,6 +16,7 @@ from gi.repository import Gdk, GLib, Gtk
 from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
 from .window_layout import WindowLayout
+from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
 from .delivery_policy import invalid_messages
 from .config import AppConfig, config_path
@@ -24,7 +25,7 @@ from .quota import discover_codex, fetch_quota
 from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target, discover_targets
-from .status_display import COLORS, status_colors, status_level, status_tooltip, watch_check_summary
+from .status_display import COLORS, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
 from .status_log import StatusLog
 from .status_help import StatusInfoButton, status_markup
 from .branding import asset_path, set_window_icon
@@ -37,7 +38,7 @@ class TargetPicker(Gtk.Window):
         set_window_icon(self)
         self.set_default_size(1440, 980)
         self.config = AppConfig.load()
-        self.window_layout = WindowLayout(self)
+        self.window_layout = WindowLayout(self, version=2)
         self.preferences = {t.key: t for t in self.config.all_targets()}
         self.selected = {t.key: t for t in self.config.targets()}
         self.targets = dict(self.selected)
@@ -82,20 +83,24 @@ class TargetPicker(Gtk.Window):
         self.watch_button = Gtk.Button(label="Start Desktop watch")
         self.watch_button.connect("clicked", self.toggle_watch)
         self.watch_button.set_sensitive(False)
-        watch_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        watch_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        watch_row.set_valign(Gtk.Align.START)
+        self.watch_label.set_halign(Gtk.Align.START)
         watch_row.pack_start(self.watch_button, False, False, 0)
-        watch_row.pack_start(self.watch_label, True, True, 0)
-        overview = Gtk.Box(spacing=10, homogeneous=True)
+        watch_row.pack_start(self.watch_label, False, False, 0)
+        overview = Gtk.Box(spacing=10)
 
-        def card(title, content):
+        def card(title, content, *, expand=True):
             frame = Gtk.Frame()
             body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=10)
             body.pack_start(Gtk.Label(label=title, xalign=0), False, False, 0)
             body.pack_start(content, True, True, 0)
             frame.add(body)
-            overview.pack_start(frame, True, True, 0)
+            overview.pack_start(frame, expand, expand, 0)
+            return frame
 
-        card("Monitoring", watch_row)
+        self.monitoring_card = card("Monitoring", watch_row, expand=False)
+        self.monitoring_card.set_size_request(260, -1)
         self.recipient_label = Gtk.Label(xalign=0)
         self.recipient_label.set_line_wrap(True)
         self.recipient_label.set_max_width_chars(30)
@@ -106,7 +111,19 @@ class TargetPicker(Gtk.Window):
         self.next_check_detail.set_max_width_chars(32)
         check.pack_start(self.next_check_label, False, False, 0)
         check.pack_start(self.next_check_detail, False, False, 0)
-        card("Quota checks & recovery", check)
+        self.send_time_label = Gtk.Label(xalign=0)
+        self.send_countdown_label = Gtk.Label(xalign=0)
+        self.send_actions_label = Gtk.Label(xalign=0)
+        sending = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        for label in (self.send_time_label, self.send_countdown_label, self.send_actions_label):
+            label.set_line_wrap(True)
+            label.set_max_width_chars(30)
+            sending.pack_start(label, False, False, 0)
+        checks = Gtk.Box(spacing=12)
+        checks.pack_start(check, True, True, 0)
+        checks.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 0)
+        checks.pack_start(sending, True, True, 0)
+        self.quota_card = card("Quota checks & recovery", checks)
         dashboard.pack_start(overview, False, False, 0)
         startup_row = Gtk.Box(spacing=8)
         self.startup_toggle = Gtk.CheckButton()
@@ -114,7 +131,9 @@ class TargetPicker(Gtk.Window):
         self.startup_toggle.connect("toggled", self.toggle_startup)
         startup_row.pack_start(self.startup_toggle, False, False, 0)
         startup_row.pack_start(self.startup_label, True, True, 0)
-        dashboard.pack_start(startup_row, False, False, 0)
+        self.startup_label.set_line_wrap(True)
+        self.startup_label.set_max_width_chars(26)
+        self.startup_toggle.set_valign(Gtk.Align.START)
         dashboard.pack_start(self.quota_label, False, False, 0)
         self.quota_button = Gtk.Button(label="Check quota now")
         self.quota_button.connect("clicked", self.refresh_quota)
@@ -128,7 +147,13 @@ class TargetPicker(Gtk.Window):
         self.logo = Gtk.Image.new_from_file(str(asset_path("logo-lockup.png")))
         self.logo.get_accessible().set_name("Recharge AI-task logo")
         self.logo_link = ProjectLogo(self.logo)
-        dashboard_row.pack_end(self.logo_link, False, False, 0)
+        self.logo_link.set_halign(Gtk.Align.END)
+        self.logo_link.set_valign(Gtk.Align.START)
+        self.brand_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.brand_area.set_valign(Gtk.Align.START)
+        self.brand_area.pack_start(self.logo_link, False, False, 0)
+        self.brand_area.pack_start(startup_row, False, False, 0)
+        dashboard_row.pack_end(self.brand_area, False, False, 0)
         box.pack_start(dashboard_row, False, False, 0)
         self.selection_help = Gtk.Label(xalign=0)
         self.selection_help.set_markup("<b>Automatic quota recovery</b> · Choose Send message, Resume goal, or both for each recipient.\n"
@@ -249,10 +274,11 @@ class TargetPicker(Gtk.Window):
         self.prompt_scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.prompt_scroller.set_size_request(100, 36)
         self.prompt_scroller.add(self.signal)
-        prompt.pack_start(self.prompt_scroller, True, True, 0)
+        self.default_editor = self.window_layout.region("default_message", ResizableEditor(self.prompt_scroller))
+        prompt.pack_start(self.default_editor, True, True, 0)
         box.pack_start(prompt, False, False, 0)
         self.signal_buffer.connect("changed", self._preferences_changed)
-        self.summary = Gtk.Label(xalign=0, selectable=True)
+        self.summary = Gtk.Label(xalign=0)
         self.summary.set_line_wrap(True)
         self.summary.set_max_width_chars(80)
         self.send_row = Gtk.Box(spacing=8)
@@ -271,22 +297,20 @@ class TargetPicker(Gtk.Window):
             box.remove(widget)
             self.list_area.pack_start(widget, expand, expand, 0)
         self.message_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        for widget, expand in ((prompt, True), (self.send_row, False)):
+        for widget, expand in ((prompt, False), (self.send_row, False)):
             box.remove(widget)
             self.message_area.pack_start(widget, expand, expand, 0)
         box.remove(self.status)
         self.status.set_size_request(100, 36)
-        self.message_split = self.window_layout.pane("message_log", self.message_area, self.status, position=125)
+        self.message_split = self.window_layout.pane("message_log", self.message_area, self.status, position=.72)
         self.recipient_panel = RecipientPanel(self)
         self.recipient_panel.set_border_width(8)
         self.recipient_frame = Gtk.Frame()
         self.recipient_frame.get_accessible().set_name("Recipient actions and overrides")
         self.recipient_frame.add(self.recipient_panel)
-        self.message_area.pack_start(self.recipient_panel.default_controls, False, False, 0)
-        self.message_area.reorder_child(self.recipient_panel.default_controls, 0)
-        self.workspace_split = self.window_layout.pane("chat_recipients", self.list_area, self.recipient_frame, horizontal=True, position=960)
-        self.main_split = self.window_layout.pane("targets", self.workspace_split, self.message_split, position=480)
-        box.pack_start(self.main_split, True, True, 0)
+        self.main_split = self.window_layout.pane("targets", self.list_area, self.message_split, position=.50)
+        self.workspace_split = self.window_layout.pane("chat_recipients", self.main_split, self.recipient_frame, horizontal=True, position=.50)
+        box.pack_start(self.workspace_split, True, True, 0)
         self._install_shortcuts()
         self.connect("delete-event", lambda *_: self.busy)
         self.connect("destroy", self._destroy)
@@ -555,7 +579,7 @@ class TargetPicker(Gtk.Window):
         except OSError:
             startup = "Unavailable"
         launched = "Yes" if runtime.get("launched_at_startup") else "No" if self.runtime else "Unknown (tray unavailable)"
-        self.startup_label.set_text(f"Run at login: {startup} · This tray started at login: {launched}")
+        self.startup_label.set_text(f"Run at login: {startup}\nThis tray started at login: {launched}")
 
     def _render_overview(self):
         count = len(self.selected)
@@ -564,6 +588,10 @@ class TargetPicker(Gtk.Window):
         value, detail = watch_check_summary(self.runtime, time.time())
         self.next_check_label.set_markup("<b>" + GLib.markup_escape_text(value) + "</b>")
         self.next_check_detail.set_text(detail)
+        scheduled, countdown, actions = send_schedule_summary(self.runtime, time.time(), self.config.grace_seconds)
+        self.send_time_label.set_markup("<b>" + GLib.markup_escape_text(scheduled) + "</b>")
+        self.send_countdown_label.set_text(countdown)
+        self.send_actions_label.set_text(actions)
 
     def toggle_startup(self, *_):
         if self._updating_startup or self.busy:

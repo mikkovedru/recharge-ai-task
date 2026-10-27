@@ -75,22 +75,27 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
     checked_at = None
     available = None
 
+    def observation(phase, next_check_at=None):
+        pending = [t for t in targets if t.key not in state.delivered] if state.pending else []
+        actions = [t.signal_actions(config.goal_mode) for t in pending]
+        return {"phase": phase, "checked_at": checked_at,
+                "next_check_at": next_check_at, "quota_available": available,
+                "recovered_at": state.recovered_at,
+                "recovery_at": state.wake_at if state.pending and available else None,
+                "expected_reset_at": state.expected_reset_at,
+                "pending_recipients": len(pending),
+                "pending_messages": sum(prompt for prompt, _goal in actions),
+                "pending_goals": sum(goal for _prompt, goal in actions)}
+
     def wait(seconds, phase):
-        # Publish one complete observation for the dashboard. Delivery accounting
-        # remains private to the worker and is never controlled through this view.
-        state.progress = {"phase": phase, "checked_at": checked_at,
-                          "next_check_at": time.time() + seconds,
-                          "quota_available": available, "recovered_at": state.recovered_at,
-                          "recovery_at": state.wake_at if state.pending and available else None,
-                          "expected_reset_at": state.expected_reset_at,
-                          "pending_recipients": sum(t.key not in state.delivered for t in targets) if state.pending else 0}
+        # Counts are estimates: live statuses and allowances are checked at send.
+        state.progress = observation(phase, time.time() + seconds)
         stop.wait(seconds)
 
     _log_status(t("watch.started"))
 
     while not stop.is_set():
-        state.progress = {"phase": "checking_quota", "checked_at": checked_at,
-                          "next_check_at": None, "quota_available": None}
+        state.progress = observation("checking_quota")
         try:
             quota = fetch_quota(codex)
         except Exception as exc:
@@ -168,10 +173,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
             wait(min(15, remaining), "grace_period")
             continue
 
-        state.progress = {"phase": "delivering", "checked_at": checked_at,
-                          "next_check_at": None, "quota_available": True,
-                          "recovered_at": state.recovered_at, "recovery_at": state.wake_at,
-                          "pending_recipients": sum(t.key not in state.delivered for t in targets)}
+        state.progress = observation("delivering")
         for target in targets:
             if stop.is_set():
                 break
@@ -189,6 +191,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
             if result.success or not result.retryable:
                 state.delivered.add(target.key)
             _log_status(f"{target.title} [{target.id}]: {result.detail}")
+            state.progress = observation("delivering")
 
         state.pending = any(target.key not in state.delivered for target in targets)
         wait(30, "retry_pending" if state.pending else "monitoring")

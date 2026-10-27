@@ -4,12 +4,16 @@ from .config import AppConfig
 
 
 class WindowLayout:
-    def __init__(self, window, namespace="dashboard"):
+    def __init__(self, window, namespace="dashboard", *, version=1):
         self.window, self.namespace = window, namespace
+        self.version = version
+        self.regions = {}
         saved = AppConfig.load().ui_layout or {}
         self.saved = saved.get(namespace, {}) if isinstance(saved, dict) else {}
         if not isinstance(self.saved, dict):
             self.saved = {}
+        if self.saved.get("layout_version") != version:
+            self.saved = dict(self.saved, panes={})
         size = self.saved.get("size")
         if not (isinstance(size, list) and len(size) == 2 and all(type(v) is int and 200 <= v <= 10000 for v in size)):
             size = list(window.get_default_size())
@@ -30,11 +34,20 @@ class WindowLayout:
     def pane(self, key, first, second, *, horizontal=False, position=200):
         pane = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL if horizontal else Gtk.Orientation.VERTICAL)
         pane.set_wide_handle(True)
-        pane.pack1(first, resize=True, shrink=False)
-        pane.pack2(second, resize=True, shrink=False)
+        pane.pack1(first, resize=True, shrink=True)
+        pane.pack2(second, resize=True, shrink=True)
         self.panes[key] = pane, position
         pane.connect("notify::position", self._changed)
         return pane
+
+    def region(self,key,widget):
+        self.regions[key]=widget
+        regions=self.saved.get("regions",{})
+        size=regions.get(key) if isinstance(regions,dict) else None
+        if isinstance(size,list) and len(size)==2 and type(size[0]) is int and type(size[1]) is int and -1<=size[0]<=4000 and 48<=size[1]<=4000:
+            widget.restore_size(*size)
+        widget.connect("resized",self._changed)
+        return widget
 
     def _mapped(self, *_):
         if self.ready:
@@ -45,7 +58,10 @@ class WindowLayout:
             positions = self.saved.get("panes", {})
             for key, (pane, default) in reversed(list(self.panes.items())):
                 value = positions.get(key, default) if isinstance(positions, dict) else default
-                pane.set_position(value if type(value) is int and 0 <= value <= 10000 else default)
+                extent=pane.get_allocated_width() if pane.get_orientation()==Gtk.Orientation.HORIZONTAL else pane.get_allocated_height()
+                if type(value) is float and 0<value<1:
+                    value=int(extent*value)
+                pane.set_position(value if type(value) is int and 0 <= value <= 10000 else 200)
             if step == 2:
                 self.ready = True
                 self.initial = self.snapshot()
@@ -57,7 +73,8 @@ class WindowLayout:
         GLib.idle_add(restore)
 
     def snapshot(self):
-        return {"size": list(self.window.get_size()),
+        return {"layout_version": self.version, "size": list(self.window.get_size()),
+                "regions": {key: widget.editor_size() for key,widget in self.regions.items()},
                 "panes": {key: pane.get_position() for key, (pane, _) in self.panes.items()}}
 
     def _changed(self, *_):

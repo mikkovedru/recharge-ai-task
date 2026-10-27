@@ -51,3 +51,25 @@ def test_recovery_countdown_uses_send_deadline_not_next_poll():
     assert value=="Send in 01:00" and "observed availability" in reason
     runtime["watch_progress"]["recovery_at"]=3761
     assert watch_check_summary(runtime,100)[0]=="Send in 01:01:01"
+
+
+def test_send_forecast_switches_to_observed_recovery_and_clears_when_stopped():
+    from recharge_ai_task.status_display import send_schedule_summary
+    progress = dict(phase="waiting_quota", pending_recipients=3,
+                    pending_messages=2, pending_goals=3, expected_reset_at=500)
+    runtime = dict(desktop_watch=True, watch_progress=progress)
+    title, timer, counts = send_schedule_summary(runtime, 100, 60)
+    assert title.startswith("Forecast:") and "00:07:40" in timer and "earlier" in timer
+    assert counts == "Up to 2 messages · 3 Goal activations · 3 recipients"
+    progress.update(phase="grace_period", recovery_at=180)
+    title, timer, _ = send_schedule_summary(runtime, 130, 60)
+    assert title.startswith("Send:") and timer == "In 00:00:50"
+    progress.update(phase="retry_pending", next_check_at=220)
+    assert send_schedule_summary(runtime, 200)[1] == "In 00:00:20"
+    progress["phase"] = "quota_unavailable"
+    assert "unconfirmed" in send_schedule_summary(runtime, 200)[1]
+    progress["phase"] = "delivering"
+    assert send_schedule_summary(runtime, 181)[0] == "Sending now"
+    runtime["stopping"] = True
+    assert send_schedule_summary(runtime, 181)[0] == "No send scheduled"
+    assert send_schedule_summary(runtime, 181)[2] == "0 messages · 0 Goal activations"
