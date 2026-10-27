@@ -817,6 +817,27 @@ class TargetPicker(Gtk.Window):
         self.refresh(automatic=True)
         return True
 
+    def highlight_recipient(self, key):
+        """Reveal the same stable recipient identity without changing its actions."""
+        target = self.selected.get(key)
+        if target is None:
+            return
+
+        def matching_path():
+            for row in self.filtered:
+                if row[4] == target.id and row[6] == target.instance:
+                    return row.path
+            return None
+
+        path = matching_path()
+        if path is None and self.search.get_text():
+            self.search.set_text("")
+            self.filtered.refilter()
+            path = matching_path()
+        if path is not None:
+            self.table.get_selection().select_path(path)
+            self.table.scroll_to_cell(path, self.title_column, True, .5, 0)
+
     def _row_target(self):
         model, iterator = self.table.get_selection().get_selected()
         if iterator is None:

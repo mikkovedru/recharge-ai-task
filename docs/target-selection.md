@@ -94,7 +94,12 @@ lines. Click any header to sort, then click again to reverse the order. PID sort
 numerically. Drag headers to change their positions, including action columns.
 Drag the wide dividers between the chat list, message editor and log to resize
 them. The message and log occupy the left half below the chat list; Recipients & actions
-uses the full right side. Drag the bottom-right corner of the default or custom
+uses the full right side, with global limits above the recipient list. Recipient text is display-only; click an item or use
+Up/Down to select it and highlight the same chat in the main list. A search that
+hides that chat clears when the recipient is selected. Re-selecting a recipient
+never sends signals. This panel shows titles and project/profile context rather
+than chat IDs; use the main list’s technical columns or Copy link / ID for those.
+Drag the bottom-right corner of the default or custom
 message editor to change its width and height, or focus its grip and use Arrow
 keys. Editor sizes, window size, Settings dialog size and divider positions are remembered.
 Column widths, order and sorting are saved automatically and survive refresh,

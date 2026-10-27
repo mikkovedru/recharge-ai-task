@@ -54,7 +54,7 @@ def wrapped(text=""):
     label.set_line_wrap(True)
     label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
     label.set_max_width_chars(48)
-    label.set_selectable(True)
+    label.set_selectable(False)
     return label
 
 
@@ -89,6 +89,8 @@ class RecipientPanel(Gtk.Box):
         self.pack_start(self.default_controls, False, False, 0)
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.list.connect("row-selected", self._row_selected)
+        self.list.connect("row-activated", self._row_activated)
+        self.list.set_tooltip_text("Choose a recipient to edit it and reveal the matching chat in the main list (Up / Down)")
         self.list_scroller = Gtk.ScrolledWindow()
         self.list_scroller.set_shadow_type(Gtk.ShadowType.IN)
         self.list_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -186,8 +188,9 @@ class RecipientPanel(Gtk.Box):
                     self.rows[key] = row
                     row.show_all()
                 row.title.set_markup("<b>" + GLib.markup_escape_text(target.title) + "</b>")
-                row.identity.set_markup("<small>" + GLib.markup_escape_text(target.id) + "</small>")
-                row.set_tooltip_text(f"{target.id}\n{target.instance}")
+                identity = target.project_name or target.cwd or target.kind.title()
+                row.identity.set_markup("<small>" + GLib.markup_escape_text(identity) + "</small>")
+                row.set_tooltip_text("\n".join(part for part in (target.project_name, target.cwd, target.instance) if part))
                 prompt, goal = target.signal_actions()
                 pl, gl = effective_limit(target, "prompt", config), effective_limit(target, "goal", config)
                 pu, gu = usage.get((key, "prompt"), Usage()), usage.get((key, "goal"), Usage())
@@ -216,11 +219,17 @@ class RecipientPanel(Gtk.Box):
         if self.updating:
             return
         self.selected_key = row.key if row is not None else None
+        if row is not None:
+            self.picker.highlight_recipient(row.key)
         self.updating = True
         try:
             self._load_editor(AppConfig.load())
         finally:
             self.updating = False
+
+    def _row_activated(self, _list, row):
+        if not self.updating:
+            self.picker.highlight_recipient(row.key)
 
     def _load_editor(self, config):
         target = self.picker.selected.get(self.selected_key)
@@ -230,8 +239,8 @@ class RecipientPanel(Gtk.Box):
             self.advice.set_text("")
             self.message_buffer.set_text("")
             return
-        self.editor_title.set_text("Overrides · " + target.id[:12])
-        self.editor_title.set_tooltip_text(f"{target.title}\n{target.id}\n{target.instance}")
+        self.editor_title.set_text("Overrides · " + target.title)
+        self.editor_title.set_tooltip_text("\n".join(part for part in (target.title, target.project_name, target.cwd, target.instance) if part))
         self.prompt.set_active(target.send_prompt)
         self.goal.set_active(target.send_goal)
         self.goal.set_sensitive(target.kind == "thread")

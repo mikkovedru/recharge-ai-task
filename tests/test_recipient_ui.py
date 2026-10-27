@@ -19,8 +19,8 @@ autostart.autostart_target=lambda:config_dir()/'test.desktop'
 target_ui.discover_codex=lambda _:'codex'
 target_ui.fetch_quota=lambda _:Quota('test',RateWindow(5,300,0),None,False)
 target_ui.tray_control.request=lambda *a,**kw:{'desktop_watch':False,'recipient_policies':True}
-a=Target('thread','a','Same title',instance='one',task_status='Idle',goal_status='Paused',send_prompt=True,send_goal=False)
-b=replace(a,id='b',instance='two')
+a=Target('thread','private-chat-id-a','Same title',instance='one',task_status='Idle',goal_status='Paused',send_prompt=True,send_goal=False)
+b=replace(a,id='private-chat-id-b',instance='two')
 target_ui.discover_targets=lambda:Inventory([a,b])
 sent=[]
 target_delivery._send_thread=lambda t,text:sent.append((t.key,text))
@@ -36,6 +36,26 @@ def make():
     return w
 w=make();p=w.recipient_panel
 assert len(p.rows)==2
+# Display labels allow row selection rather than accidental text selection.
+for row in p.rows.values():
+    for label in row.get_child().get_children():
+        assert not label.get_selectable()
+        assert 'private-chat-id' not in label.get_text()
+    assert 'private-chat-id' not in row.get_tooltip_text()
+# Duplicate titles are selected by stable profile/chat identity, even after sort.
+w.table_layout.sort('id', True)
+p.list.select_row(p.rows[b.key])
+assert w._row_target().key == b.key
+w.search.set_text('no matching chat');w.filtered.refilter()
+assert len(w.filtered)==0
+p.list.select_row(p.rows[a.key])
+assert w.search.get_text()=='' and w._row_target().key==a.key
+assert 'private-chat-id' not in p.editor_title.get_text()
+# Activating an already selected item re-highlights it without sending anything.
+w.table.get_selection().unselect_all()
+p.list.emit('row-activated',p.rows[a.key])
+assert w._row_target().key==a.key and sent==[]
+
 p.list.select_row(p.rows[a.key])
 p.default_prompt.choice.set_active_id('limited')
 p.default_prompt.number.set_value(3)
