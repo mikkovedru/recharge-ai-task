@@ -401,7 +401,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the remote and branch setup.
 
 ## Linux Mint Cinnamon
 
-The tray uses the blue 5h recharge logo on an opaque white background with a dark border and a yellow (idle) or green (running) status strip. When Cinnamon's native XApp status applet is active, it uses XApp; with legacy or collapsible trays it uses an opaque XEmbed drawing surface at the actual allocated size, avoiding GTK StatusIcon caches and clipping. Image paths bypass symbolic icon recoloring; status is also shown by the tooltip and bottom color strip. Both left and right clicks open the menu. Cinnamon still controls the panel's icon size and whether its XApp status applet is visible.
+The tray uses the blue 5h recharge logo on an opaque white background with a dark border and a yellow (idle) or green (running) status strip. When Cinnamon's native XApp status applet is active, it uses XApp; with legacy or collapsible trays it uses an opaque XEmbed drawing surface at the actual allocated size, avoiding GTK StatusIcon caches and clipping. Image paths bypass symbolic icon recoloring; status is also shown by the tooltip and bottom color strip. Double-click toggles the dashboard; right-click opens the menu. The icon reconnects if Cinnamon or its tray socket is replaced. Cinnamon still controls the panel's icon size and whether its XApp status applet is visible.
 
 ```bash
 sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-xapp-1.0 python3-pyatspi gir1.2-atspi-2.0 xdotool
@@ -427,7 +427,10 @@ recharge-ai-task-cli tray
 
 Starting the tray does not start quota monitoring or send any signals.
 If the app is already running, the tray command leaves the dashboard's current
-visibility unchanged. `recharge-ai-task` opens or restores its dashboard.
+visibility unchanged. Both launch forms repair the existing process's tray surface
+and refresh timer without restarting monitoring or CLI jobs. `recharge-ai-task`
+opens or restores its dashboard. Tray artwork fills the panel's physical pixel
+allocation, including scaled displays.
 Closing the dashboard keeps the tray and any active monitoring running.
 The old `recharge-ai-task-gui` and `recharge-ai-task-tray` commands remain
 compatibility launchers. CLI scripts must now use `recharge-ai-task-cli`;

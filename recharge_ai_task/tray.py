@@ -368,6 +368,16 @@ class TrayApp:
             pystray.MenuItem(t("tray.exit"), self.exit_app),
         )
 
+    def restore_tray(self):
+        if self._icon is None:
+            return
+        restore = getattr(self._icon, "ensure_visible", None)
+        if restore is not None:
+            restore()  # Native backends marshal this onto the GTK main loop.
+        else:
+            self._icon.visible = False
+            self._icon.visible = True
+
     def control(self, command):
         if command == "start-watch":
             if self._proc is not None and self._proc.poll() is None:
@@ -390,8 +400,10 @@ class TrayApp:
             if self._icon:
                 self._icon.menu = self._build_menu()
                 self._icon.update_menu()
-        elif command in {"open-gui", "open-settings"}:
-            self.open_targets(settings=command == "open-settings")
+        elif command in {"open-gui", "open-settings", "restore-tray"}:
+            self.restore_tray()
+            if command != "restore-tray":
+                self.open_targets(settings=command == "open-settings")
         elif command != "status":
             raise ValueError("Unknown tray command")
         # Polling also applies settings saved by another GUI or CLI process.
@@ -457,7 +469,7 @@ def main(argv=None) -> int:
     options = parser.parse_args(argv)
     show_gui = options.targets or options.settings
     settings = options.settings
-    command = ("open-settings" if settings else "open-gui") if show_gui else "status"
+    command = ("open-settings" if settings else "open-gui") if show_gui else "restore-tray"
     if sys.platform == "linux":
         from .tray_control import request
         try:

@@ -22,6 +22,13 @@ class XAppIcon(GtkIcon):
         self._update_icon()
 
     @mainloop
+    def ensure_visible(self):
+        self._status_icon.set_visible(False)
+        self._status_icon.set_icon_name(self._icon_path)
+        self._status_icon.set_tooltip_text(self.title)
+        self._status_icon.set_visible(True)
+
+    @mainloop
     def _show(self):
         self._status_icon.set_visible(True)
 

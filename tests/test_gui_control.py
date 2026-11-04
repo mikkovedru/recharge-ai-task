@@ -153,7 +153,7 @@ def test_simultaneous_gui_and_menu_start_create_one_watch(monkeypatch):
             thread.join(2)
 
 
-@pytest.mark.parametrize("args,command", [(["--targets"], "open-gui"), (["--settings"], "open-settings"), ([], "status")])
+@pytest.mark.parametrize("args,command", [(["--targets"], "open-gui"), (["--settings"], "open-settings"), ([], "restore-tray")])
 def test_tray_launch_reuses_existing_application(monkeypatch, args, command):
     from recharge_ai_task import tray
     calls = []
