@@ -71,5 +71,21 @@ def test_send_forecast_switches_to_observed_recovery_and_clears_when_stopped():
     progress["phase"] = "delivering"
     assert send_schedule_summary(runtime, 181)[0] == "Sending now"
     runtime["stopping"] = True
-    assert send_schedule_summary(runtime, 181)[0] == "No send scheduled"
+    assert send_schedule_summary(runtime, 181)[0] == "Stopping…"
     assert send_schedule_summary(runtime, 181)[2] == "0 messages · 0 Goal activations"
+
+
+def test_schedule_uses_worker_grace_and_shows_selected_plan_while_monitoring():
+    from recharge_ai_task.status_display import send_schedule_summary
+    progress = dict(phase="monitoring", updated_at=100, next_check_at=130,
+                    selected_recipients=2, selected_messages=1, selected_goals=2,
+                    pending_cycle=False, expected_reset_at=500, grace_seconds=120)
+    runtime = dict(desktop_watch=True,watch_progress=progress)
+    title,timer,counts = send_schedule_summary(runtime,100,0)
+    assert title.startswith('Next reset forecast:') and '00:08:40' in timer
+    assert counts == 'Selected, up to 1 messages · 2 Goal activations · 2 recipients'
+    assert send_schedule_summary(runtime,110,0)[1] != timer
+    assert send_schedule_summary(runtime,200,0)[0] == 'Worker update overdue'
+    assert send_schedule_summary(None,200)[0] == 'Schedule unavailable'
+    runtime['watch_progress'] = None
+    assert send_schedule_summary(runtime,200)[0] == 'Waiting for worker schedule'

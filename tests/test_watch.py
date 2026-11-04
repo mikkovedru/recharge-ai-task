@@ -232,3 +232,101 @@ def test_pending_action_counts_exclude_delivered_recipients(monkeypatch):
     assert state.progress["pending_recipients"] == 2
     assert state.progress["pending_messages"] == 1
     assert state.progress["pending_goals"] == 2
+
+
+def test_reset_between_polls_near_limit_sends_after_grace(monkeypatch):
+    # A ten-second poll can miss 100% before the reset entirely.
+    near = replace(AVAILABLE, primary=RateWindow(98, 300, 105))
+    reset = replace(AVAILABLE, primary=RateWindow(0, 300, 500))
+    sent, _ = run_snapshots(monkeypatch, [near, reset, reset], grace=10)
+    assert len(sent) == 1 and sent[0][2] == 120
+
+
+def test_early_refill_near_limit_without_observed_full_snapshot(monkeypatch):
+    near = replace(AVAILABLE, primary=RateWindow(99, 300, 10000))
+    refill = replace(near, primary=RateWindow(5, 300, 10000))
+    sent, _ = run_snapshots(monkeypatch, [near, refill, refill])
+    assert len(sent) == 1 and sent[0][2] == 110
+
+
+def test_small_quota_correction_does_not_trigger_recovery(monkeypatch):
+    near = replace(AVAILABLE, primary=RateWindow(96, 300, 10000))
+    correction = replace(near, primary=RateWindow(94, 300, 10000))
+    sent, _ = run_snapshots(monkeypatch, [near, correction])
+    assert not sent
+
+
+def test_worker_retries_only_message_after_verified_goal_success(monkeypatch):
+    from recharge_ai_task import target_delivery as delivery
+    from recharge_ai_task.config import AppConfig
+    from recharge_ai_task.delivery_policy import UsageLedger
+    target = replace(A, send_prompt=True, send_goal=True)
+    AppConfig(goal_limit=1, prompt_limit=1).save()
+    activations, prompts = [], []
+    def recover(t, text, **kwargs):
+        kwargs['actions'].perform('goal', lambda: activations.append(t.id))
+        kwargs['actions'].confirm_goal()
+        def fail():
+            raise RuntimeError('Prompt rejected after Goal activation')
+        try:
+            kwargs['actions'].perform('prompt', fail)
+        except RuntimeError as exc:
+            return DeliveryResult(t, False, str(exc))
+    monkeypatch.setattr(delivery, 'recover_target', recover)
+    monkeypatch.setattr(delivery, '_send_thread', lambda t, text: prompts.append((t.id,text)))
+    run_snapshots(monkeypatch, [BLOCKED, AVAILABLE, AVAILABLE], selected=(target,))
+    assert activations == ['a'] and prompts == [('a','Continue')]
+    usage = UsageLedger().snapshot()
+    assert usage[(target.key,'goal')].used == usage[(target.key,'prompt')].used == 1
+
+
+def test_checkpoint_preserves_recovery_and_prevents_duplicate_after_restart(monkeypatch):
+    from recharge_ai_task import watch_state
+    from recharge_ai_task.config import AppConfig
+    config = AppConfig(desktop_targets=[A.to_dict()])
+    path = watch_state.state_path(config)
+    state = watch.WatchState()
+    run_snapshots(monkeypatch, [BLOCKED], state=state)
+    watch_state.save(path,state)
+    restored = watch_state.load(path)
+    sent, _ = run_snapshots(monkeypatch, [AVAILABLE], state=restored)
+    assert len(sent) == 1
+    watch_state.save(path,restored)
+    sent, _ = run_snapshots(monkeypatch, [AVAILABLE], state=watch_state.load(path))
+    assert not sent
+
+
+def test_one_stale_near_limit_snapshot_does_not_replay_a_refill(monkeypatch):
+    near = replace(AVAILABLE, primary=RateWindow(99,300,10000))
+    refill = replace(near, primary=RateWindow(5,300,10000))
+    sent,_ = run_snapshots(monkeypatch,[near,refill,near,refill,refill])
+    assert len(sent)==1
+    sent,_ = run_snapshots(monkeypatch,[near,refill,near,near,refill])
+    assert len(sent)==2
+
+
+def test_restored_in_flight_recipient_is_reported_uncertain_not_replayed(monkeypatch):
+    from recharge_ai_task import watch_state
+    from recharge_ai_task.activity import ActivityLog
+    from recharge_ai_task.config import AppConfig
+    path=watch_state.state_path(AppConfig(desktop_targets=[A.to_dict()]))
+    state=watch.WatchState(startup_checked=True,pending=True,in_flight=(A.key,A.title))
+    watch_state.save(path,state)
+    restored=watch_state.load(path)
+    sent,_=run_snapshots(monkeypatch,[AVAILABLE],state=restored)
+    assert not sent and A.key in restored.delivered
+    assert ActivityLog().read()[-1]['status']=='uncertain'
+
+
+def test_pending_counts_respect_remaining_allowances(monkeypatch):
+    from recharge_ai_task.config import AppConfig
+    from recharge_ai_task.delivery_policy import UsageLedger
+    target=replace(A,send_prompt=True,send_goal=False)
+    AppConfig(prompt_limit=1).save()
+    ledger=UsageLedger()
+    attempt=ledger.reserve(target.key,'prompt',1);ledger.finish(attempt,'sent')
+    state=watch.WatchState(startup_checked=True,pending=True)
+    run_snapshots(monkeypatch,[RuntimeError('offline')],selected=(target,),state=state)
+    assert state.progress['pending_recipients']==0
+    assert state.progress['pending_messages']==0
+    assert state.progress['selected_recipients']==0

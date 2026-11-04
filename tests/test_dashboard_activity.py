@@ -67,7 +67,7 @@ assert w.status.buffer.get_text(*w.status.buffer.get_bounds(),True)==text
 reachable[0]=False
 history.record(target,'manual','goal','skipped','Goal already active')
 w.poll_runtime();pump(w)
-assert w.send_time_label.get_text()=='No send scheduled'
+assert w.send_time_label.get_text()=='Schedule unavailable'
 assert 'Manual · Sample chat [Project: not available] · Goal: skipped' in w.status.buffer.get_text(*w.status.buffer.get_bounds(),True)
 w.destroy()
 w=make()

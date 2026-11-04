@@ -70,35 +70,57 @@ def send_schedule_summary(runtime, now, grace_seconds=0):
     """Separate a forecast quota reset from a confirmed recovery send time."""
     from datetime import datetime
 
-    if not runtime or not runtime.get("desktop_watch") or any(runtime.get(k) for k in
-            ("stopping", "restarting", "watch_error", "watch_pause_reason")):
-        return "No send scheduled", "Monitoring is off or waiting.", "0 messages · 0 Goal activations"
+    zero = "0 messages · 0 Goal activations"
+    if runtime is None:
+        return "Schedule unavailable", "The tray could not be reached; no send time is confirmed.", zero
+    for flag, title, detail in (
+        ("stopping", "Stopping…", "Automatic sending is stopping."),
+        ("restarting", "Updating…", "Applying saved settings; waiting for the replacement worker."),
+        ("watch_error", "Monitoring needs attention", str(runtime.get("watch_error", ""))),
+        ("watch_pause_reason", "Monitoring is waiting", str(runtime.get("watch_pause_reason", "")))):
+        if runtime.get(flag):
+            return title, detail, zero
+    if not runtime.get("desktop_watch"):
+        return "No send scheduled", "Desktop monitoring is off.", zero
     progress = runtime.get("watch_progress") or {}
-    recipients = progress.get("pending_recipients", 0)
+    if not progress:
+        return "Waiting for worker schedule", "No scheduling update received; restart an older tray build.", zero
+    if progress.get("count_error"):
+        return "Allowances unavailable", progress["count_error"], "Action counts unavailable"
+    pending = progress.get("pending_cycle", bool(progress.get("pending_recipients")))
+    prefix_key = "pending" if pending else "selected"
+    recipients = progress.get(prefix_key + "_recipients", 0)
     if not recipients:
-        return "No send scheduled", "Watching for quota recovery.", "0 messages · 0 Goal activations"
-    counts = (f"Up to {progress.get('pending_messages', 0)} messages · "
-              f"{progress.get('pending_goals', 0)} Goal activations · {recipients} recipients")
+        return ("No eligible actions" if pending or "selected_recipients" in progress else "No send scheduled",
+                "Check selected actions and remaining allowances." if pending or "selected_recipients" in progress else "Watching for quota recovery.", zero)
+    counts = (f"{'Up to' if pending else 'Selected, up to'} {progress.get(prefix_key + '_messages', 0)} messages · "
+              f"{progress.get(prefix_key + '_goals', 0)} Goal activations · {recipients} recipients")
     phase = progress.get("phase")
+    updated = progress.get("updated_at")
+    if isinstance(updated, (int, float)) and now > max(updated + 45, (progress.get("next_check_at") or updated) + 10):
+        return "Worker update overdue", "Send time unconfirmed; waiting for monitoring to respond.", counts
     if phase == "delivering":
         return "Sending now", "Live status and allowance rules apply.", counts
     if phase == "quota_unavailable":
         return "Waiting for usable quota", "Quota could not be read; send time unconfirmed.", counts
     confirmed = progress.get("next_check_at") if phase == "retry_pending" else progress.get("recovery_at")
     forecast = progress.get("expected_reset_at")
-    if isinstance(confirmed, (int, float)):
-        due, prefix = confirmed, "Send"
+    if pending and isinstance(confirmed, (int, float)):
+        due, prefix = confirmed, "Retry" if phase == "retry_pending" else "Send"
     elif isinstance(forecast, (int, float)):
-        due, prefix = forecast + grace_seconds, "Forecast"
+        due = forecast + progress.get("grace_seconds", grace_seconds)
+        prefix = "Forecast" if pending else "Next reset forecast"
     else:
-        return "Waiting for usable quota", "Send time is not known yet.", counts
+        return "Waiting for usable quota" if pending else "Watching quota", "Send time is not known yet.", counts
     remaining = max(0, ceil(due - now))
     hours, rest = divmod(remaining, 3600)
     minutes, seconds = divmod(rest, 60)
     timer = f"{hours:02}:{minutes:02}:{seconds:02}"
     when = datetime.fromtimestamp(due).strftime("%Y-%m-%d %H:%M:%S")
-    detail = (f"In {timer}" if remaining else "Due; checking usable quota") if prefix == "Send" else (
+    detail = (f"In {timer}" if remaining else "Due; checking usable quota") if prefix in {"Send", "Retry"} else (
         f"In {timer} · may send earlier" if remaining else "Awaiting usable quota; forecast passed")
+    if not pending:
+        detail += " · sends require quota recovery"
     return f"{prefix}: {when}", detail, counts
 
 

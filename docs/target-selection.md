@@ -120,7 +120,12 @@ time, a live countdown and pending message/Goal counts. A forecast includes the
 configured grace period and can move earlier when quota recovers early; a
 confirmed send countdown starts from observed usable quota. Counts say “up to”
 because live statuses and allowances can skip actions. Stopping watch clears
-the send schedule. Run-at-login controls sit below the logo at the top right.
+the send schedule. Counts respect the current remaining allowances. While
+monitoring with no pending recovery, the right column shows a reset forecast
+and selected counts rather than claiming a send is scheduled. Missing or stale
+worker updates and allowance errors are displayed explicitly. Grace comes from
+the running worker, so unapplied settings cannot alter its countdown.
+Run-at-login controls sit below the logo at the top right.
 **Recipients & actions** sits beside it with the actual recipient plans. Monitoring reports the tray worker, independently of each chat's task
 status. Recipients counts the selected signal destinations. Next check uses the
 worker's scheduled quota check or delivery retry, with a live countdown and the
@@ -455,3 +460,15 @@ A definite failure before pressing Resume goal stays a failed, retryable attempt
 and releases its Goal allowance. An accepted activation whose state cannot be
 verified remains uncertain, keeps its allowance reserved and is not automatically
 replayed. An attempted UI operation alone is not evidence that a Goal was sent.
+
+
+## Recovery between quota checks
+
+Recovery also detects a reset/refill between polls after a near-limit observation
+(at least 95% used), even when no 100% snapshot was captured. Small percentage
+corrections do not trigger sending. Repeated refills with the same reset ID need
+two near-limit observations to avoid replaying a stale frame. Recovery checkpoints
+retain pending sends and verified actions across tray restarts. A confirmed Goal
+is not activated again when only its message needs retrying. See
+[watch recovery and delivery history](../doc/architecture/2026-11-04_watch-recovery-and-history.md)
+for the recovery rules and uncertainty handling.

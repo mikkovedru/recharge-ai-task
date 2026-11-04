@@ -69,6 +69,7 @@ class TrayApp:
         self._watch_error = ""
         self._watch_settings = None
         self._watch_state = None
+        self._watch_state_path = None
         self._watch_requested = False
         self._restart_pending = False
         self._restart_timer = None
@@ -153,8 +154,11 @@ class TrayApp:
             return
         if invalid_messages(self.config.targets(), self.config.continue_prompt, self.config):
             raise RuntimeError("Enter a prompt message for recipients with Prompt enabled")
-        if not restarting or self._watch_state is None:
-            self._watch_state = WatchState()
+        from . import watch_state
+        state_file = watch_state.state_path(self.config)
+        if not restarting or self._watch_state is None or self._watch_state_path != state_file:
+            self._watch_state = watch_state.load(state_file)
+        self._watch_state_path = state_file
         self._watch_requested = True
         self._watch_pause_reason = ""
         self._watch_stop = StopEvent()
@@ -167,6 +171,7 @@ class TrayApp:
             desktop_window_titles=self.config.window_titles(),
             desktop_targets=tuple(self.config.targets()),
             state=self._watch_state,
+            checkpoint=lambda state: watch_state.save(state_file, state),
         )
 
         self._watch_error = ""
@@ -396,7 +401,7 @@ class TrayApp:
             self._watch_error = f"Could not read saved watch settings: {exc}"
         thread = self._watch_thread
         alive = thread is not None and thread.is_alive()
-        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "manual_quota_check": True, "auto_watch_restart": True,
+        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 2,
                 "restarting": self._restart_pending, "watch_requested": self._watch_requested,
                 "watch_pause_reason": self._watch_pause_reason,
                 "stopping": alive and self._watch_stop.is_set(),
