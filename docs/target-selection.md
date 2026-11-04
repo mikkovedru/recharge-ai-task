@@ -91,9 +91,13 @@ profile, deep link and desktop client. This preference survives reopening the
 dashboard and does not restart monitoring. All fields remain searchable in
 either view. Drag a header edge to resize a column; long text wraps onto additional
 lines. Click any header to sort, then click again to reverse the order. PID sorts
-numerically. Drag headers to change their positions, including action columns.
-Drag the wide dividers between the chat list, message editor and log to resize
-them. The message and log occupy the left half below the chat list; Recipients & actions
+numerically. **Project** starts the list, including when an older saved layout
+is restored. You can still drag headers to change positions, including action
+columns, and subsequent deliberate changes are remembered. Headers use at most
+two lines, with full captions on hover; cell contents continue to wrap normally.
+Drag the wide dividers between the chat list and editors, and between the
+left workspace and recipients, to resize them. The log has no separate divider:
+it starts directly below the send summary and uses all remaining space. The message and log occupy the left half below the chat list; Recipients & actions
 uses the full right side, with global limits above the recipient list. Recipient text is display-only; click an item or use
 Up/Down to select it and highlight the same chat in the main list. A search that
 hides that chat clears when the recipient is selected. Re-selecting a recipient
@@ -101,7 +105,8 @@ never sends signals. This panel shows titles and project/profile context rather
 than chat IDs; use the main list’s technical columns or Copy link / ID for those.
 Drag the bottom-right corner of the default or custom
 message editor to change its width and height, or focus its grip and use Arrow
-keys. Editor sizes, window size, Settings dialog size and divider positions are remembered.
+keys. Growing the default editor uses spare log space first and enlarges the lower
+panel when needed; shrinking it gives that space back to the log. Editor sizes, window size, Settings dialog size and divider positions are remembered.
 Column widths, order and sorting are saved automatically and survive refresh,
 closing to the tray and restarting. These view changes do not send signals or
 restart monitoring. Hovering a row also shows its full values.
@@ -136,8 +141,10 @@ have distinct explanations. Stopping monitoring removes its old countdown.
 The list includes separate **Task status** and **Goal status** columns next to
 its title. Status and target discovery refresh every 15 seconds without clearing
 your choices; **Refresh** updates them immediately. Directly below the list,
-**Refresh** appears on the left, followed by the last refresh time, with
-**Copy link / ID** and **Open selected row** on the right. Below the multiline
+the last refresh time spans its own line. Below it, **Refresh** appears on the
+left, with **Copy link / ID** and **Open selected row** beside each other on the
+right. Those button labels wrap onto multiple lines when space is limited. Their
+height follows the displayed lines, so one-line captions keep a compact toolbar. Below the multiline
 message, the recipient summary shares a row with **Send now to N recipients** at the far
 right. Search also matches both status columns and the project name.
 
@@ -254,9 +261,12 @@ does not update the desktop owner's cached goal or its continuation dispatcher.
 The Linux adapter therefore opens the selected chat and uses its native **Resume
 goal** button through accessibility. It verifies the desktop process, copies only
 the selected sidebar chat's canonical deep link to check its exact ID, and restores
-all clipboard formats through the desktop clipboard manager. Titles are never used
-to choose the chat: if deep-link navigation does not select it, a title only narrows
-sidebar candidates, whose IDs are checked before opening any row. No objective,
+all clipboard formats through the desktop clipboard manager. A deep-link dispatch
+acknowledgement does not mean navigation is complete. The
+helper waits for the canonical selected ID, re-reads changing frames and sidebar
+rows, and can reveal a collapsed project. Titles and project labels only narrow
+candidates; canonical IDs are checked before opening any chat row. Decorated
+accessibility labels do not replace that ID check. No objective,
 budget or usage history is replaced.
 
 Activation must change the native button to **Pause goal** and be confirmed in
@@ -334,6 +344,13 @@ retains up to 1,000 events and is separate from allowance accounting.
 
 ## Validation
 
+The Cinnamon tray double-click integration test uses native pointer injection.
+It has missed injected toggles in batch and isolated runs. One diagnostic
+received only one button press from an injected double-click. That check depends
+on the active panel and pointer environment; the cause of the missing events
+remains unconfirmed. Recovery and delivery-history
+regressions use isolated settings and synthetic recipients.
+
 Regression tests cover duplicate titles and profiles, pagination, read-only
 metadata fallback, fragmented IPC frames, Unicode, pinned owner routing, partial
 fan-out failure, stale windows, focus changes, malformed turn acknowledgments,
@@ -362,7 +379,9 @@ separate limits for Messages and Goal activations. These are defaults for each
 recipient, rather than a shared pool. Each recipient can inherit a default,
 choose its own limit, or explicitly choose Unlimited. Zero prevents that action.
 **Use a custom message for this recipient** overrides the default, including
-multiline text. An empty custom message is an invalid draft; it never silently
+multiline text. With the checkbox off, the box previews the default message in
+a passive theme-colored tint and remains read-only. Enabling the checkbox
+restores the normal editor appearance. An empty custom message is an invalid draft; it never silently
 falls back to the default. Overrides survive refresh, deselection and restarting.
 
 Counts cover both **Send now** and automatic Desktop watch recovery. They last
@@ -449,18 +468,17 @@ their normal editing behavior in text fields. Enter in a main-window multiline
 message editor continues to insert a newline. The logo is keyboard-focusable;
 Enter/Space opens GitHub and Shift+F10 opens its copy-link menu.
 
-Status-help hovering does not take editor focus or sort the column. The list stays
-open while the pointer moves into it. Last active defaults to newest first; the
+Status-help hovering does not take editor focus or sort the column. The popup
+stays open while the pointer moves into it. Expanding an explanation or scrolling
+keeps it open until **Close** or **Escape**. Hover-only help closes shortly after
+the pointer leaves both its icon and popup. See the
+[GTK layout and popover notes](../doc/investigations/2026-11-04_gtk-table-and-popovers.md)
+for the sizing and pointer-handling constraints.
+
+Last active defaults to newest first; the
 first timestamp-header click also chooses newest first. Old sort preferences are
 migrated once, while column widths and order are preserved. Subsequent deliberate
 sort choices are remembered.
-
-
-A definite failure before pressing Resume goal stays a failed, retryable attempt
-and releases its Goal allowance. An accepted activation whose state cannot be
-verified remains uncertain, keeps its allowance reserved and is not automatically
-replayed. An attempted UI operation alone is not evidence that a Goal was sent.
-
 
 ## Recovery between quota checks
 
@@ -472,3 +490,10 @@ retain pending sends and verified actions across tray restarts. A confirmed Goal
 is not activated again when only its message needs retrying. See
 [watch recovery and delivery history](../doc/architecture/2026-11-04_watch-recovery-and-history.md)
 for the recovery rules and uncertainty handling.
+
+A definite failure before pressing Resume goal stays a failed, retryable attempt
+and releases its Goal allowance. An accepted activation whose state cannot be
+verified remains uncertain, keeps its allowance reserved and is not automatically
+replayed. An attempted UI operation alone is not evidence that a Goal was sent.
+See [exact-chat navigation](../doc/investigations/2026-11-04_exact-chat-goal-navigation.md)
+for the asynchronous navigation constraints.
