@@ -11,10 +11,11 @@ import time
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, GLib, Gtk
+from gi.repository import Gdk, GLib, Gtk, Pango
 
 from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
+from .wrapping_button import WrappingButton
 from .window_layout import WindowLayout
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
@@ -251,14 +252,17 @@ class TargetPicker(Gtk.Window):
         self.list_toolbar = Gtk.Box(spacing=8)
         self.refresh_button = Gtk.Button(label="Refresh")
         self.refresh_button.connect("clicked", self.refresh)
-        self.copy_button = Gtk.Button(label="Copy link / ID")
+        self.copy_button = WrappingButton(label="Copy link / ID")
         self.copy_button.connect("clicked", self.copy_row)
         self.list_toolbar.pack_start(self.refresh_button, False, False, 0)
-        self.list_toolbar.pack_start(self.inventory_status, True, True, 0)
+        self.toolbar_spacer = Gtk.Box()
+        self.list_toolbar.pack_start(self.toolbar_spacer, True, True, 0)
         self.list_toolbar.pack_start(self.copy_button, False, False, 0)
-        self.open_button = Gtk.Button(label="Open selected row")
+        self.open_button = WrappingButton(label="Open selected row")
         self.open_button.connect("clicked", self.open_row)
         self.list_toolbar.pack_start(self.open_button, False, False, 0)
+        for button in (self.refresh_button, self.copy_button, self.open_button):
+            button.set_valign(Gtk.Align.CENTER)
         self.buttons.extend((self.refresh_button, self.copy_button, self.open_button))
         box.pack_start(self.list_toolbar, False, False, 0)
         prompt = Gtk.Box(spacing=8)
@@ -297,8 +301,9 @@ class TargetPicker(Gtk.Window):
         box.pack_start(self.status, False, False, 0)
         # Each scrolling list and multiline editor gets a draggable boundary.
         self.list_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        for widget, expand in ((search_row, False), (scroller, True), (self.list_toolbar, False)):
-            box.remove(widget)
+        for widget, expand in ((search_row, False), (scroller, True), (self.inventory_status, False), (self.list_toolbar, False)):
+            if widget.get_parent() is box:
+                box.remove(widget)
             self.list_area.pack_start(widget, expand, expand, 0)
         self.message_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         for widget, expand in ((prompt, False), (self.send_row, False)):
@@ -306,15 +311,16 @@ class TargetPicker(Gtk.Window):
             self.message_area.pack_start(widget, expand, expand, 0)
         box.remove(self.status)
         self.status.set_size_request(100, 36)
-        self.message_split = self.window_layout.pane("message_log", self.message_area, self.status, position=.72)
+        self.message_area.pack_start(self.status, True, True, 0)
         self.recipient_panel = RecipientPanel(self)
         self.recipient_panel.set_border_width(8)
         self.recipient_frame = Gtk.Frame()
         self.recipient_frame.get_accessible().set_name("Recipient actions and overrides")
         self.recipient_frame.add(self.recipient_panel)
-        self.main_split = self.window_layout.pane("targets", self.list_area, self.message_split, position=.50)
+        self.main_split = self.window_layout.pane("targets", self.list_area, self.message_area, position=.50)
         self.workspace_split = self.window_layout.pane("chat_recipients", self.main_split, self.recipient_frame, horizontal=True, position=.50)
         box.pack_start(self.workspace_split, True, True, 0)
+        self.default_editor.connect("resized", self._resize_default_message)
         self._install_shortcuts()
         self.connect("delete-event", lambda *_: self.busy)
         self.connect("destroy", self._destroy)
@@ -342,9 +348,34 @@ class TargetPicker(Gtk.Window):
                             (self.copy_button,"edit-copy-symbolic"),(self.open_button,"go-jump-symbolic")):
             button.set_image(Gtk.Image.new_from_icon_name(icon,Gtk.IconSize.BUTTON))
             button.set_always_show_image(True)
+        for button in (self.copy_button, self.open_button):
+            self._wrap_button_label(button)
         self.watch_button.set_tooltip_text("Start or stop automatic quota recovery for selected recipients (Space / Enter)")
         self.search.set_tooltip_text("Search chats by title, status, project or ID (Ctrl+F)")
         self.connect("key-press-event",self._keyboard)
+
+    @staticmethod
+    def _wrap_button_label(button):
+        def labels(widget):
+            if isinstance(widget, Gtk.Label):
+                widget.set_line_wrap(True)
+                widget.set_line_wrap_mode(Pango.WrapMode.WORD)
+                widget.set_max_width_chars(24)
+                widget.set_justify(Gtk.Justification.CENTER)
+            elif isinstance(widget, Gtk.Container):
+                for child in widget.get_children():
+                    labels(child)
+        labels(button)
+
+    def _resize_default_message(self, editor):
+        # Consume spare log space first; enlarge the lower panel when necessary.
+        width = max(100, self.message_area.get_allocated_width())
+        summary_height = self.send_row.get_preferred_height_for_width(width)[0]
+        required = editor.editor_size()[1] + summary_height + self.status.get_preferred_height()[0] + 12
+        if self.message_area.get_allocated_height() < required:
+            extent = self.main_split.get_allocated_height()
+            minimum_list = self.list_area.get_preferred_height()[0]
+            self.main_split.set_position(max(minimum_list, extent - required - 5))
 
     def _keyboard(self,_window,event):
         if event.keyval == Gdk.KEY_f and event.state & Gdk.ModifierType.CONTROL_MASK:
@@ -550,7 +581,6 @@ class TargetPicker(Gtk.Window):
                 self.status.write(text, level, timestamp=event["created"])
                 self.activity_cursor = event["id"]
         self._background(lambda: ActivityLog().read(self.activity_cursor), show)
-
 
     def _render_runtime(self):
         if not hasattr(self, "watch_button"):

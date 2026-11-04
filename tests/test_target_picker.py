@@ -83,7 +83,7 @@ def check():
         assert "Editing them sends nothing now" in window.selection_help.get_text()
         assert "monitoring off" in window.summary.get_text()
         assert not window.send_button.get_sensitive()
-        assert "paused goal" in window.table.get_columns()[1].get_widget().get_tooltip_text()
+        assert "paused goal" in window.table_layout.columns["send_goal"][0].get_widget().get_tooltip_text()
         assert not window.technical_toggle.get_active()
         view_settings = AppConfig.load()
         watch_settings = target_ui.tray_control.watch_settings(view_settings)
@@ -110,17 +110,20 @@ def check():
         assert AppConfig.load().continue_prompt == view_settings.continue_prompt
         # The toolbar immediately follows the list: Refresh, status, Copy.
         toolbar = window.list_toolbar
-        assert toolbar.get_children() == [window.refresh_button, window.inventory_status, window.copy_button, window.open_button]
+        assert toolbar.get_children() == [window.refresh_button, window.toolbar_spacer, window.copy_button, window.open_button]
         siblings = toolbar.get_parent().get_children()
-        assert siblings[siblings.index(toolbar)-1] is window.table.get_parent()
+        assert siblings[siblings.index(toolbar)-1] is window.inventory_status
+        assert siblings[siblings.index(toolbar)-2] is window.table.get_parent()
         assert "Save selection" not in [button.get_label() for button in window.buttons]
         assert window.send_row.get_children() == [window.summary, window.send_button]
-        assert window.message_area.get_children() == [window.default_editor.get_parent(), window.send_row]
+        assert window.message_area.get_children() == [window.default_editor.get_parent(), window.send_row, window.status]
         assert window.recipient_panel.default_controls.get_parent() is window.recipient_panel
         assert window.main_split.get_child1() is window.list_area
         assert window.workspace_split.get_child1() is window.main_split
         assert window.workspace_split.get_child2() is window.recipient_frame
-        assert window.message_split.get_child2() is window.status
+        assert not hasattr(window, "message_split")
+        assert "message_log" not in window.window_layout.panes
+        assert window.message_area.get_children()[-1] is window.status
         assert window.startup_toggle.get_parent().get_parent() is window.brand_area
         assert window.logo_link.get_valign() == Gtk.Align.START
         assert window.monitoring_card.get_allocated_width() < 300
@@ -134,7 +137,7 @@ def check():
             while Gtk.events_pending(): Gtk.main_iteration_do(False)
             time.sleep(.003)
         assert window.get_size().width <= 1120 and window.get_size().height <= 820
-        message_height = window.message_split.get_child1().get_allocated_height()
+        message_height = window.message_area.get_allocated_height()
         send_y = window.send_row.translate_coordinates(window.message_area, 0, 0)[1]
         assert send_y >= window.default_editor.get_allocated_height()
         assert send_y + window.send_row.get_allocated_height() <= message_height

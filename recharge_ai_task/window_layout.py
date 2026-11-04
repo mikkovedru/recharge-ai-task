@@ -34,8 +34,8 @@ class WindowLayout:
     def pane(self, key, first, second, *, horizontal=False, position=200):
         pane = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL if horizontal else Gtk.Orientation.VERTICAL)
         pane.set_wide_handle(True)
-        pane.pack1(first, resize=True, shrink=True)
-        pane.pack2(second, resize=True, shrink=True)
+        pane.pack1(first, resize=True, shrink=not horizontal)
+        pane.pack2(second, resize=True, shrink=not horizontal)
         self.panes[key] = pane, position
         pane.connect("notify::position", self._changed)
         return pane

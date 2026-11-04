@@ -1,0 +1,29 @@
+# GTK table sizing and interactive status help
+
+## Wrapped button captions
+
+On GTK 3 in Cinnamon, the built-in button/alignment hierarchy measured a wrapped
+caption using its minimum width even when the allocated width could show one
+line. Copy and Open reserved 67 pixels of height, versus 29 for a plain Refresh
+button. The shared horizontal box then stretched Refresh to the same height.
+Setting vertical alignment alone only fixes Refresh.
+
+`WrappingButton` requests height for the available width. It reuses native
+measurements for theme padding, borders and icons, then asks the caption for its
+height at the remaining text width. One-line buttons measured 29 pixels in the
+same environment; captions still gain lines when space is limited. Centered
+vertical alignment prevents a shorter neighboring button from stretching.
+
+## Hover popovers
+
+A leave event can mean entering a child widget, rather than leaving the popup.
+The former 250ms timer also closed the popup without checking the pointer's
+current position. Timers scheduled by overlapping header and child crossings
+could therefore dismiss help while the user tried to expand an explanation.
+
+Ignore inferior-child crossings and check the current pointer against both
+anchor and popup rectangles before dismissing hover-only help. A short travel
+delay bridges the space between them. Clicking the info icon, expanding an
+explanation or scrolling retains the popup until Close/Escape. Hover opening
+remains nonmodal and preserves editor focus; F1 opening provides keyboard focus.
+
