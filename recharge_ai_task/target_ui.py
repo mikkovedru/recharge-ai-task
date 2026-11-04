@@ -28,6 +28,7 @@ from .targets import Target, discover_targets
 from .status_display import COLORS, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
 from .status_log import StatusLog
 from .status_help import StatusInfoButton, status_markup
+from .activity import target_label
 from .branding import asset_path, set_window_icon
 
 
@@ -47,6 +48,9 @@ class TargetPicker(Gtk.Window):
         self._updating_startup = False
         self.runtime = None
         self.runtime_busy = False
+        self.activity_busy = False
+        self.activity_cursor = 0
+        self.activity_error = ""
         self.quota_busy = False
         self.discovery_busy = False
         self.quota = None
@@ -509,6 +513,7 @@ class TargetPicker(Gtk.Window):
     def poll_runtime(self):
         if self.closed:
             return False
+        self.poll_activity()
         if self.runtime_busy:
             return True
         if self.autosave_error and not self.busy:
@@ -526,6 +531,26 @@ class TargetPicker(Gtk.Window):
             self._render_runtime()
         self._background(lambda: tray_control.request(timeout=1), show)
         return True
+
+    def poll_activity(self):
+        if self.closed or self.activity_busy:
+            return
+        from .activity import ActivityLog, display_event
+        self.activity_busy = True
+        def show(events, error):
+            self.activity_busy = False
+            if error:
+                if error != self.activity_error:
+                    self._message("Cannot read delivery history: " + error, "warning")
+                self.activity_error = error
+                return
+            self.activity_error = ""
+            for event in events:
+                text, level = display_event(event)
+                self.status.write(text, level, timestamp=event["created"])
+                self.activity_cursor = event["id"]
+        self._background(lambda: ActivityLog().read(self.activity_cursor), show)
+
 
     def _render_runtime(self):
         if not hasattr(self, "watch_button"):
@@ -912,10 +937,11 @@ class TargetPicker(Gtk.Window):
             failed = sum(not r.success for r in results)
             detail = "\n".join(f"{r.target.title} [{r.target.id}]: {r.detail}" for r in results)
             for result in results:
-                self._message(f"{result.target.title} [{result.target.id}]: {result.detail}",
+                self._message(f"{target_label(result.target)} [{result.target.id}]: {result.detail}",
                               "error" if not result.success else "warning" if result.skipped else "success")
             self._message(f"Signals: {accepted} accepted, {skipped} skipped, {failed} failed.",
                           "error" if failed else "warning" if skipped else "success")
+            self.poll_activity()
             self.refresh_statuses()
         self._work(lambda: send_signals(selected, text, manual=True), show)
 

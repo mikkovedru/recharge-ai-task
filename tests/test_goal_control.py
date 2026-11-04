@@ -646,3 +646,70 @@ def test_unknown_post_activation_status_does_not_reject_native_acknowledgement()
     server=GoalServer()
     def activate():server.goal["status"]="newActiveState"
     assert controller(server).resume("chosen",GOAL,activate=activate)
+
+
+def test_definite_pre_click_goal_failure_stays_retryable_and_not_uncertain(monkeypatch):
+    from recharge_ai_task.config import AppConfig
+    from recharge_ai_task.delivery_policy import UsageLedger
+    from recharge_ai_task.activity import ActivityLog
+    AppConfig(goal_limit=1).save()
+    state=install_recovery(monkeypatch,task='error')
+    def reject(self,target,expected):
+        raise RuntimeError('Could not open the exact selected chat ID; no Goal action sent')
+    monkeypatch.setattr(delivery.DesktopIPC,'resume_goal',reject)
+    target=replace(TARGET,send_prompt=False,send_goal=True,project_name='A project')
+    for _ in range(2):
+        result=delivery.send_signals([target],'Continue')[0]
+        assert not result.success and result.retryable and not result.uncertain
+    assert state['sent']==[] and state['steered']==[]
+    assert not UsageLedger().snapshot()
+    events=ActivityLog().read()
+    assert [e['status'] for e in events]==['attempting','failed','failed']*2
+    assert all(e['project_name']=='A project' for e in events)
+
+
+def test_acknowledged_goal_with_failed_state_read_remains_uncertain(monkeypatch):
+    from recharge_ai_task.config import AppConfig
+    from recharge_ai_task.delivery_policy import UsageLedger
+    from recharge_ai_task.activity import ActivityLog
+    AppConfig(goal_limit=1).save()
+    state=install_recovery(monkeypatch,task='error')
+    original=delivery.DesktopIPC.status_snapshot
+    def snapshot(self,thread,owner):
+        if state['resumes']:raise RuntimeError('State read failed after native activation')
+        return original(self,thread,owner)
+    monkeypatch.setattr(delivery.DesktopIPC,'status_snapshot',snapshot)
+    target=replace(TARGET,send_prompt=False,send_goal=True)
+    result=delivery.send_signals([target],'Continue')[0]
+    assert not result.success and result.uncertain and not result.retryable
+    assert UsageLedger().snapshot()[(target.key,'goal')].uncertain==1
+    assert [e['status'] for e in ActivityLog().read()]==['attempting','accepted','uncertain','uncertain']
+    assert state['sent']==[]
+
+
+def test_watch_retries_navigation_failure_with_unused_goal_allowance(monkeypatch):
+    from recharge_ai_task import watch
+    from recharge_ai_task.config import AppConfig
+    from recharge_ai_task.quota import Quota,RateWindow
+    from recharge_ai_task.activity import ActivityLog
+    AppConfig(goal_limit=1).save()
+    state=install_recovery(monkeypatch,task='error')
+    def reject(self,target,expected):
+        raise RuntimeError('Could not open the exact selected chat ID; no Goal action sent')
+    monkeypatch.setattr(delivery.DesktopIPC,'resume_goal',reject)
+    blocked=Quota('test',RateWindow(100,300,1000),None,True)
+    ready=Quota('test',RateWindow(0,300,2000),None,False)
+    quotas=iter([blocked,ready,ready])
+    monkeypatch.setattr(watch,'discover_codex',lambda _:'offline')
+    monkeypatch.setattr(watch,'fetch_quota',lambda _:next(quotas))
+    waits=[]
+    class Stop:
+        def is_set(self):return len(waits)>=3
+        def wait(self,seconds):waits.append(seconds)
+    target=replace(TARGET,send_prompt=False,send_goal=True,project_name='A project')
+    worker=watch.WatchState()
+    watch.run_desktop_watch(watch.WatchConfig(desktop_targets=(target,),grace_seconds=0,state=worker),Stop())
+    assert target.key not in worker.delivered and worker.pending
+    assert worker.progress['phase']=='retry_pending' and worker.progress['pending_goals']==1
+    assert [e['status'] for e in ActivityLog().read() if e['action']=='goal']==['attempting','failed']*2
+    assert state['sent']==[]

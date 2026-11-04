@@ -117,8 +117,29 @@ class UsageLedger:
 
 
 class ActionBudget:
-    def __init__(self, ledger, target, config):
+    def __init__(self, ledger, target, config, *, source="automatic", message=""):
         self.ledger, self.target, self.config = ledger, target, config
+        self.source, self.message = source, message
+        self.completed = set()
+        self.attempted = set()
+        self.outcomes = {}
+        self.attempt_ids = {}
+
+    def report(self, action, status, detail=""):
+        from .activity import record
+        self.outcomes[action] = status
+        record(self.target, self.source, action, status, detail, self.message if action == "prompt" else "")
+
+    def mark_uncertain(self, action, detail):
+        attempt = self.attempt_ids.get(action)
+        if attempt is not None:
+            self._finish(attempt, "uncertain", detail)
+        self.report(action, "uncertain", detail)
+
+    def confirm_goal(self):
+        self.completed.add("goal")
+        self.report("goal", "verified" if "goal" in self.attempted else "skipped",
+                    "Native Goal activation verified" if "goal" in self.attempted else "Goal already active; no activation needed")
 
     def limit(self, action):
         return effective_limit(self.target, action, self.config)
@@ -130,22 +151,31 @@ class ActionBudget:
 
     def perform(self, action, operation):
         attempt = self.ledger.reserve(self.target.key, action, self.limit(action))
+        self.attempted.add(action)
+        self.attempt_ids[action] = attempt
+        self.report(action, "attempting")
         try:
             result = operation()
         except DeliveryUncertain as exc:
             self._finish(attempt, "uncertain", str(exc))
+            self.report(action, "uncertain", str(exc))
             raise
         except BaseException as exc:
             # A hard process stop leaves the reserved slot pending. A normal
             # definitive rejection releases it; uncertain outcomes keep it used.
             if isinstance(exc, Exception):
                 self._finish(attempt, "failed", str(exc))
+                self.report(action, "failed", str(exc))
             raise
         if hasattr(result, "success") and (not result.success or result.skipped):
-            state = "uncertain" if not result.success and not result.retryable else "failed"
+            state = "uncertain" if getattr(result, "uncertain", False) else "failed"
             self._finish(attempt, state, result.detail)
+            self.report(action, "skipped" if result.skipped else state, result.detail)
         else:
             self._finish(attempt, "sent")
+            if action != "goal":
+                self.completed.add(action)
+            self.report(action, "accepted", "Native activation accepted; verifying" if action == "goal" else "Codex accepted the message")
         return result
 
     def _finish(self, attempt, state, detail=""):

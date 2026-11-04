@@ -33,7 +33,7 @@ class StatusLog(Gtk.ScrolledWindow):
         for level,color in status_colors(self.view).items():
             self.buffer.get_tag_table().lookup(level).set_property("foreground",color)
 
-    def write(self, message, level="normal"):
+    def write(self, message, level="normal", *, timestamp=None):
         if not message:
             return
         adjustment = self.get_vadjustment()
@@ -41,7 +41,8 @@ class StatusLog(Gtk.ScrolledWindow):
         self.latest_text, self.latest_level = message, level
         if self.buffer.get_char_count():
             self.buffer.insert(self.buffer.get_end_iter(), "\n")
-        entry = f"[{datetime.now().astimezone():%Y-%m-%d %H:%M:%S}] {message}"
+        moment = datetime.now().astimezone() if timestamp is None else datetime.fromtimestamp(timestamp).astimezone()
+        entry = f"[{moment:%Y-%m-%d %H:%M:%S}] {message}"
         self.buffer.insert_with_tags_by_name(self.buffer.get_end_iter(), entry, level)
         # Bound memory while preserving recent text and its tags.
         if self.buffer.get_line_count() > 1000:

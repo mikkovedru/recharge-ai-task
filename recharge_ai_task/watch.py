@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 from .desktop_input import DEFAULT_WINDOW_TITLES
 from .targets import Target
+from .activity import target_label
 from .target_delivery import deliver_targets, recover_target, send_signals
 from .goal_control import quota_stopped_targets
 from .i18n import t
@@ -190,7 +191,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                     enter_presses=config.enter_presses, key_delay=config.key_delay)[0]
             if result.success or not result.retryable:
                 state.delivered.add(target.key)
-            _log_status(f"{target.title} [{target.id}]: {result.detail}")
+            _log_status(f"{target_label(target)} [{target.id}]: {result.detail}")
             state.progress = observation("delivering")
 
         state.pending = any(target.key not in state.delivered for target in targets)

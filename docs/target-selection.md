@@ -316,7 +316,16 @@ Native recovery rechecks the current goal on confirmed retries, so an already
 activated goal is not activated again. A timeout or connection loss after native
 activation or turn submission is **uncertain**, so it is not automatically
 retried in the same reset; check that chat before retrying manually. Individual
-results appear in logs and in the selector's scrollable message area.
+results appear in logs and in the selector's scrollable message area. Automatic
+and manual sends share a bounded delivery history in `delivery.sqlite`. The
+dashboard reads new events every two seconds and reloads the most recent 200
+on reopening, even when the tray is unavailable. Each event identifies the
+recipient, Codex project name, message or Goal action, source and outcome.
+Older history without stored project metadata is retained with “Project: not
+available”; it is not guessed from a possibly duplicated chat title. Message events include
+the actual default/custom text. Accepted Goal requests and verified activation
+are distinct; failed, skipped and uncertain outcomes remain explicit. History
+retains up to 1,000 events and is separate from allowance accounting.
 
 ## Validation
 
@@ -440,3 +449,9 @@ open while the pointer moves into it. Last active defaults to newest first; the
 first timestamp-header click also chooses newest first. Old sort preferences are
 migrated once, while column widths and order are preserved. Subsequent deliberate
 sort choices are remembered.
+
+
+A definite failure before pressing Resume goal stays a failed, retryable attempt
+and releases its Goal allowance. An accepted activation whose state cannot be
+verified remains uncertain, keeps its allowance reserved and is not automatically
+replayed. An attempted UI operation alone is not evidence that a Goal was sent.

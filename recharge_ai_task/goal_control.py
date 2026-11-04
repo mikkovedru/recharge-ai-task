@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from .codex_ipc import DeliveryUncertain
+from .activity import target_label
 from .targets import AppServer
 
 from .recovery_rules import GOAL_ERROR_STATUSES, goal_allowed, activation_verified, valid_status
@@ -110,5 +111,5 @@ def quota_stopped_targets(targets, stop=None):
                 if goal is not None and goal_allowed(goal["status"]) and goal["status"] != "active":
                     candidates.add(target.key)
             except Exception as exc:
-                errors.append(f"{target.title} [{target.id}]: goal recovery check failed: {exc}")
+                errors.append(f"{target_label(target)} [{target.id}]: goal recovery check failed: {exc}")
     return candidates, errors

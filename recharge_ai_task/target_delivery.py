@@ -7,10 +7,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .codex_ipc import DesktopIPC, DeliveryUncertain
 from .targets import Target, discover_windows
+from .activity import target_label
 from .recovery_rules import goal_allowed, task_allowed, valid_status, activation_verified
 from .delivery_policy import ActionBudget, LimitReached, UsageLedger, effective_message
 
@@ -24,6 +25,8 @@ class DeliveryResult:
     detail: str
     retryable: bool = True
     skipped: bool = False
+    completed_actions: tuple[str, ...] = ()
+    uncertain: bool = False
 
 
 def open_target(target):
@@ -123,6 +126,8 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                     task = snapshot.get("task")
                     if not isinstance(task, dict) or not valid_status(task.get("type")):
                         raise DeliveryUncertain("Native Goal was activated, but its task state could not be verified; no prompt sent")
+                if goal is not None and actions is not None:
+                    actions.confirm_goal()
                 if send_prompt:
                     if goal is not None and task["type"] == "active":
                         perform("prompt", lambda: desktop.steer(target.id, text, owner))
@@ -147,9 +152,11 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                     "Native goal activation verified; continuation accepted" if resumed else
                     "No goal; continuation accepted" if goal is None else "Goal already active; continuation accepted")
     except (DeliveryUncertain, LimitReached) as exc:
-        return DeliveryResult(target, False, str(exc), retryable=False)
+        return DeliveryResult(target, False, str(exc), retryable=False, uncertain=isinstance(exc, DeliveryUncertain))
     except Exception as exc:
-        return DeliveryResult(target, False, str(exc))
+        unconfirmed = (actions is not None and "goal" not in actions.completed
+                       and actions.outcomes.get("goal") in {"accepted", "uncertain"})
+        return DeliveryResult(target, False, str(exc), retryable=not unconfirmed, uncertain=unconfirmed)
 
 
 def _send_window(target, text, enter_presses, key_delay):
@@ -210,10 +217,10 @@ def deliver_targets(targets, text, *, enter_presses=1, key_delay=.12):
                 raise ValueError(f"Unsupported target kind: {target.kind}")
             result = DeliveryResult(target, True, "Signal accepted")
         except DeliveryUncertain as exc:
-            result = DeliveryResult(target, False, str(exc), retryable=False)
+            result = DeliveryResult(target, False, str(exc), retryable=False, uncertain=isinstance(exc, DeliveryUncertain))
         except Exception as exc:
             result = DeliveryResult(target, False, str(exc))
-        _log.info("target=%s success=%s detail=%s", target.id, result.success, result.detail)
+        _log.info("target=%s %s success=%s detail=%s", target.id, target_label(target), result.success, result.detail)
         results.append(result)
     return results
 
@@ -221,10 +228,14 @@ def deliver_targets(targets, text, *, enter_presses=1, key_delay=.12):
 def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12):
     """Honor each recipient's actions, overrides and persistent allowances."""
     from .config import AppConfig
+    from .activity import record
+    source = "manual" if manual else "automatic"
     results, seen = [], set()
     try:
         config, ledger = AppConfig.load(), UsageLedger()
     except Exception as exc:
+        for target in targets:
+            record(target, source, "signals", "failed", f"Cannot read delivery allowances: {exc}")
         return [DeliveryResult(t, False, f"Cannot read delivery allowances: {exc}", retryable=False) for t in targets]
     for target in targets:
         if target.key in seen:
@@ -232,8 +243,9 @@ def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12)
         seen.add(target.key)
         prompt, goal = target.signal_actions()
         message = effective_message(target, text)
+        budget = None
         try:
-            budget = ActionBudget(ledger, target, config)
+            budget = ActionBudget(ledger, target, config, source=source, message=message)
             withheld = prompt and not budget.available("prompt")
             if withheld:
                 prompt = False
@@ -252,13 +264,24 @@ def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12)
                     sent = budget.perform("prompt", lambda: deliver_targets([target], message,
                         enter_presses=enter_presses, key_delay=key_delay)[0])
                     result = DeliveryResult(target, sent.success,
-                        f"Goal: {result.detail}; Prompt: {sent.detail}", sent.retryable, sent.skipped)
+                        f"Goal: {result.detail}; Prompt: {sent.detail}", sent.retryable, sent.skipped, uncertain=sent.uncertain)
             else:
                 result = budget.perform("prompt", lambda: deliver_targets([target], message,
                     enter_presses=enter_presses, key_delay=key_delay)[0])
             if withheld:
-                result = DeliveryResult(target, result.success, result.detail + "; message limit reached", result.retryable, result.skipped)
+                result = replace(result, detail=result.detail + "; message limit reached")
         except Exception as exc:
-            result = DeliveryResult(target, False, str(exc), retryable=False)
+            result = DeliveryResult(target, False, str(exc), retryable=False, uncertain=isinstance(exc, DeliveryUncertain))
+        if budget is not None:
+            result = replace(result, completed_actions=tuple(sorted(budget.completed)))
+            if result.uncertain:
+                for action in budget.attempted - budget.completed:
+                    if budget.outcomes.get(action) != "uncertain":
+                        budget.mark_uncertain(action, result.detail)
+            for action, enabled in (("goal", target.signal_actions()[1]), ("prompt", target.signal_actions()[0])):
+                if enabled and action not in budget.attempted and action not in budget.completed:
+                    record(target, source, action, "skipped", result.detail,
+                           message if action == "prompt" else "")
+        record(target, source, "signals", "skipped" if result.skipped else "verified" if result.success else "uncertain" if result.uncertain else "failed", result.detail)
         results.append(result)
     return results
