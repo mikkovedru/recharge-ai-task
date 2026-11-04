@@ -54,3 +54,29 @@ w.destroy()
 config=AppConfig.load();config.table_layout=None;config.save()
 w=make();assert w.table.get_columns()[0].get_title()=='Project';w.destroy()
 ''')
+
+
+@pytest.mark.skipif(os.environ.get('RECHARGE_AI_TASK_GUI_TESTS')!='1',reason='Requires GTK')
+def test_custom_preview_tracks_checkbox_in_both_themes():
+    run_gui(r'''
+w=make();panel=w.recipient_panel
+for dark in (False,True):
+    settings=Gtk.Settings.get_default()
+    settings.set_property('gtk-theme-name','Adwaita')
+    settings.set_property('gtk-application-prefer-dark-theme',dark)
+    panel.custom.set_active(False);pump(w)
+    passive=panel.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
+    assert not panel.message.get_editable() and not panel.message.get_cursor_visible()
+    assert 'Default message preview' in panel.message.get_tooltip_text()
+    panel.custom.set_active(True);pump(w)
+    active=panel.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
+    assert panel.message.get_editable() and panel.message.get_cursor_visible()
+    assert passive.to_string()!=active.to_string(),(dark,passive,active)
+    panel.message_buffer.set_text('Custom draft')
+    w._summary();pump(w)
+    assert panel.message.get_editable() and 'Custom draft' in panel.message_buffer.get_text(*panel.message_buffer.get_bounds(),True)
+w.destroy()
+w=make()
+assert w.recipient_panel.custom.get_active() and w.recipient_panel.message.get_editable()
+w.destroy()
+''')

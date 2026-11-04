@@ -36,6 +36,8 @@ def make():
     return w
 w=make();p=w.recipient_panel
 assert len(p.rows)==2
+assert not p.message.get_editable() and not p.message.get_cursor_visible()
+passive=p.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
 # Display labels allow row selection rather than accidental text selection.
 for row in p.rows.values():
     for label in row.get_child().get_children():
@@ -61,6 +63,10 @@ p.default_prompt.choice.set_active_id('limited')
 p.default_prompt.number.set_value(3)
 assert AppConfig.load().prompt_limit==3
 p.custom.set_active(True)
+pump(w)
+active=p.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
+assert p.message.get_editable() and p.message.get_cursor_visible()
+assert passive.to_string()!=active.to_string()
 p.message_buffer.set_text('Specific\nmessage')
 p.prompt_limit.choice.set_active_id('limited')
 p.prompt_limit.number.set_value(1)

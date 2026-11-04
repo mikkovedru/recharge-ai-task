@@ -45,3 +45,11 @@ anchor and popup rectangles before dismissing hover-only help. A short travel
 delay bridges the space between them. Clicking the info icon, expanding an
 explanation or scrolling retains the popup until Close/Escape. Hover opening
 remains nonmodal and preserves editor focus; F1 opening provides keyboard focus.
+
+## Inherited message preview
+
+The unchecked custom-message editor remains a readable, copyable default preview.
+It is non-editable, hides its editing cursor and uses the theme's background and
+foreground colors for a passive tint. The checked editor restores its native
+appearance. Avoid opacity or fixed light/dark colors, which can reduce contrast
+or conflict with the active GTK theme.

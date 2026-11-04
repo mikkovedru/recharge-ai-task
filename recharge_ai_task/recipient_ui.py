@@ -128,6 +128,9 @@ class RecipientPanel(Gtk.Box):
         self.custom.connect("toggled", self._custom_toggled)
         self.editor.pack_start(self.custom, False, False, 0)
         self.message = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
+        preview_css = Gtk.CssProvider()
+        preview_css.load_from_data(b"textview.inherited-message, textview.inherited-message text { background-color: @theme_bg_color; color: @theme_fg_color; }")
+        self.message.get_style_context().add_provider(preview_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.message.set_left_margin(4)
         self.message.set_right_margin(4)
         self.message_buffer = self.message.get_buffer()
@@ -238,6 +241,7 @@ class RecipientPanel(Gtk.Box):
             self.editor_title.set_text("Select a recipient to edit its actions and overrides")
             self.advice.set_text("")
             self.message_buffer.set_text("")
+            self._set_custom_appearance(False)
             return
         self.editor_title.set_text("Overrides · " + target.title)
         self.editor_title.set_tooltip_text("\n".join(part for part in (target.title, target.project_name, target.cwd, target.instance) if part))
@@ -247,7 +251,7 @@ class RecipientPanel(Gtk.Box):
         self.prompt_limit.set_value(target.prompt_limit)
         self.goal_limit.set_value(target.goal_limit)
         self.custom.set_active(target.custom_prompt is not None)
-        self.message.set_editable(target.custom_prompt is not None)
+        self._set_custom_appearance(target.custom_prompt is not None)
         text = effective_message(target, self.picker._prompt_text())
         current = self.message_buffer.get_text(*self.message_buffer.get_bounds(), True)
         if current != text:
@@ -279,11 +283,23 @@ class RecipientPanel(Gtk.Box):
         self.picker.update_recipient(replace(target, send_prompt=self.prompt.get_active(), send_goal=self.goal.get_active(),
             prompt_limit=self.prompt_limit.value(), goal_limit=self.goal_limit.value()))
 
+    def _set_custom_appearance(self, enabled):
+        self.message.set_editable(enabled)
+        self.message.set_cursor_visible(enabled)
+        context = self.message.get_style_context()
+        if enabled:
+            context.remove_class("inherited-message")
+        else:
+            context.add_class("inherited-message")
+        self.message.set_tooltip_text("Custom message for this recipient" if enabled else
+            "Default message preview. Enable the custom message checkbox to edit this recipient's message.")
+
     def _custom_toggled(self, *_):
         if self.updating:
             return
         target = self.picker.selected.get(self.selected_key)
         if target is not None:
+            self._set_custom_appearance(self.custom.get_active())
             self.picker.update_recipient(replace(target, custom_prompt=effective_message(target, self.picker._prompt_text()) if self.custom.get_active() else None))
 
     def _message_changed(self, *_):
@@ -291,6 +307,7 @@ class RecipientPanel(Gtk.Box):
             return
         target = self.picker.selected.get(self.selected_key)
         if target is not None:
+            self._set_custom_appearance(self.custom.get_active())
             self.picker.update_recipient(replace(target, custom_prompt=self.message_buffer.get_text(*self.message_buffer.get_bounds(), True)))
 
     def _reset(self, *_):
