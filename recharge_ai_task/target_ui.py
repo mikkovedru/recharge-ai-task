@@ -188,7 +188,7 @@ class TargetPicker(Gtk.Window):
         self.table.get_style_context().add_provider(density_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.table.set_has_tooltip(True)
         self.table.connect("query-tooltip", self._tooltip)
-        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at")
+        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at", leading_column="project_name")
         for label, index, action in (("Send message", 0, "send_prompt"), ("Resume goal", 12, "send_goal")):
             checkbox = Gtk.CellRendererToggle()
             checkbox.connect("toggled", self._toggle, action)

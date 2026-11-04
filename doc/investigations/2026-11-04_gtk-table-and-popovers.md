@@ -14,6 +14,25 @@ height at the remaining text width. One-line buttons measured 29 pixels in the
 same environment; captions still gain lines when space is limited. Centered
 vertical alignment prevents a shorter neighboring button from stretching.
 
+## Columns
+
+Unbounded explicit header wrapping made a 36-pixel Availability column request a
+180-pixel header. Headers now have at most two lines with ellipsis and full
+caption tooltips. Available label width subtracts native header button geometry,
+including information icons and sort indicators, rather than assuming fixed
+padding. Cell text remains fully wrapped.
+
+Width notifications arrive during GTK allocation. Applying wrapping and queuing
+more column resizes synchronously repeats layout work inside that pass.
+`TableLayout` groups geometry updates in an idle callback and then requests a
+complete resize/redraw. Narrowing and widening must settle with no pending
+geometry work, correct row heights, and unchanged recipient selection. Column
+width and order persistence is separate from drawing geometry.
+
+Project moves to the first position for fresh layouts and older saved layouts.
+A saved leading-column policy marks that migration, so a later deliberate user
+reorder remains effective.
+
 ## Hover popovers
 
 A leave event can mean entering a child widget, rather than leaving the popup.
@@ -26,4 +45,3 @@ anchor and popup rectangles before dismissing hover-only help. A short travel
 delay bridges the space between them. Clicking the info icon, expanding an
 explanation or scrolling retains the popup until Close/Escape. Hover opening
 remains nonmodal and preserves editor focus; F1 opening provides keyboard focus.
-

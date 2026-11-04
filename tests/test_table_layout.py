@@ -66,12 +66,23 @@ assert cell.get_property("wrap-mode") == Pango.WrapMode.WORD_CHAR
 assert cell.get_property("ellipsize") == Pango.EllipsizeMode.NONE
 title.set_fixed_width(310)
 events()
+original_header = title.get_button().get_allocated_height()
 wide = table.get_background_area(Gtk.TreePath.new_from_string("1"), title).height
 title.set_fixed_width(95)
 events()
 narrow = table.get_background_area(Gtk.TreePath.new_from_string("1"), title).height
 assert narrow > wide, (narrow, wide)
+# Very narrow headers must stay at two lines instead of growing the whole header.
+for width in (36,60,110,310,36,310):
+    title.set_fixed_width(width)
+    events()
+    assert title.get_button().get_allocated_height() <= original_header * 2 + 4
+    assert cell.get_property("wrap-width") == title.get_width()-6
+assert table.get_background_area(Gtk.TreePath.new_from_string("1"),title).height==wide
+assert layout.geometry_timer is None and not layout.geometry_pending
 # Reordering, resizing and sort survive closing, even before the debounce.
+title.set_fixed_width(95)
+events()
 table.move_column_after(pid, None)
 layout.close()
 assert not errors

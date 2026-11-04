@@ -79,7 +79,7 @@ def check():
         assert window.next_check_label.get_text() == "—"
         assert "monitoring is off" in window.next_check_detail.get_text()
         visible_titles = lambda: [c.get_title() for c in window.table.get_columns() if c.get_visible()]
-        assert visible_titles() == ["Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project"]
+        assert visible_titles() == ["Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status"]
         assert "Editing them sends nothing now" in window.selection_help.get_text()
         assert "monitoring off" in window.summary.get_text()
         assert not window.send_button.get_sensitive()
@@ -267,7 +267,7 @@ def check():
         assert window.send_button.get_label() == "Send now to 1 recipient"
         assert window.send_button.get_sensitive()
         assert not window.dirty() and not hasattr(window, "save_state")
-        assert [c.get_title() for c in window.table.get_columns()][:9] == ["Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project", "Project path", "Kind"]
+        assert [c.get_title() for c in window.table.get_columns()][:9] == ["Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project path", "Kind"]
         window.table.get_selection().select_path("0")
         target_ui.discover_targets = lambda: Inventory([alpha, replace(beta, task_status="Waiting for input", goal_status="Blocked")])
         window.refresh_statuses()

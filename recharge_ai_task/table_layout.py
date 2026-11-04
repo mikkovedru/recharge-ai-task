@@ -5,12 +5,16 @@ from .config import AppConfig
 
 
 class TableLayout:
-    def __init__(self, table, store, saved, message, *, default_sort=None):
+    def __init__(self, table, store, saved, message, *, default_sort=None, leading_column=None):
         self.table, self.store = table, store
         self.table.set_halign(Gtk.Align.START)
         self.saved = saved if isinstance(saved, dict) else {}
         self.message = message
         self.default_sort = default_sort
+        self.leading_column = leading_column
+        self.geometry_pending = set()
+        self.geometry_timer = None
+        self.closed = False
         self.columns = {}
         self.sort_column = None
         self.descending = False
@@ -30,7 +34,7 @@ class TableLayout:
         column.set_reorderable(True)
         column.set_clickable(True)
         column.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
-        column.set_min_width(36)
+        column.set_min_width(72 if key in {"task_status", "goal_status"} else 36)
         for cell in column.get_cells():
             cell.set_padding(2, 1)
         column.set_expand(False)
@@ -45,15 +49,14 @@ class TableLayout:
         column.connect("clicked", self._clicked, key)
         column.connect("notify::fixed-width", self._changed)
         self._header_width(column)
-        column.connect("notify::width", self._header_width)
-        column.connect("notify::fixed-width", self._header_width)
+        column.connect("notify::width", self._queue_geometry)
+        column.connect("notify::fixed-width", self._queue_geometry)
+        column.connect("notify::sort-indicator", self._queue_geometry)
         if renderer is not None:
             renderer.set_property("ellipsize", Pango.EllipsizeMode.NONE)
             renderer.set_property("wrap-mode", Pango.WrapMode.WORD_CHAR)
             renderer.set_property("yalign", 0)
             self._wrap(column, None, renderer)
-            column.connect("notify::width", self._wrap, renderer)
-            column.connect("notify::fixed-width", self._wrap, renderer)
         self.store.set_sort_func(index, self._compare, index if sort_index is None else sort_index)
 
     @staticmethod
@@ -66,13 +69,23 @@ class TableLayout:
             if isinstance(widget, Gtk.Label):
                 caption = getattr(widget, "_table_caption", widget.get_text())
                 widget._table_caption = caption
+                widget.set_ellipsize(Pango.EllipsizeMode.END)
+                button = column.get_button()
+                if button is not None and button.get_visible():
+                    reserved = max(0, button.get_preferred_width()[0] - widget.get_preferred_width()[0])
+                    available = max(12, (column.get_width() or column.get_fixed_width()) - reserved)
                 layout = widget.create_pango_layout(caption)
                 layout.set_width(available * Pango.SCALE)
                 layout.set_wrap(Pango.WrapMode.WORD_CHAR)
                 encoded = caption.encode("utf-8")
                 lines = [encoded[line.start_index:line.start_index + line.length].decode("utf-8").strip()
                          for line in layout.get_lines_readonly()]
-                text = "\n".join(lines)
+                text = "\n".join(lines[:2])
+                if len(lines) > 2:
+                    text += "…"
+                widget.set_ellipsize(Pango.EllipsizeMode.END)
+                if not widget.get_tooltip_text():
+                    widget.set_tooltip_text(caption)
                 if widget.get_text() != text:
                     widget.set_text(text)
             elif isinstance(widget, Gtk.Container):
@@ -88,6 +101,28 @@ class TableLayout:
         if renderer.get_property("wrap-width") != width:
             renderer.set_property("wrap-width", width)
             column.queue_resize()
+
+    def _queue_geometry(self, column, *_):
+        if self.closed:
+            return
+        self.geometry_pending.add(column)
+        if self.geometry_timer is None:
+            self.geometry_timer = GLib.idle_add(self._refresh_geometry)
+
+    def _refresh_geometry(self):
+        self.geometry_timer = None
+        pending, self.geometry_pending = self.geometry_pending, set()
+        for column in pending:
+            self._header_width(column)
+            for renderer in column.get_cells():
+                if isinstance(renderer, Gtk.CellRendererText):
+                    self._wrap(column, None, renderer)
+        if pending:
+            # Resize notifications arrive during GTK's allocation pass. Apply
+            # wrapping once afterwards, then redraw all affected row geometry.
+            self.table.queue_resize()
+            self.table.queue_draw()
+        return False
 
     @staticmethod
     def _compare(model, first, second, index):
@@ -106,6 +141,9 @@ class TableLayout:
 
     def restore(self):
         order = self.saved.get("order")
+        if self.leading_column in self.columns and self.saved.get("leading_column") != self.leading_column:
+            previous_order = order if isinstance(order, list) else list(self.columns)
+            order = [self.leading_column] + [key for key in previous_order if key != self.leading_column]
         previous = None
         seen = set()
         for key in order if isinstance(order, list) else []:
@@ -139,12 +177,12 @@ class TableLayout:
 
     def snapshot(self):
         keys = {column: key for key, (column, _index) in self.columns.items()}
-        return {"density": 2, "sort_policy": 2, "order": [keys[column] for column in self.table.get_columns()],
+        return {"density": 2, "sort_policy": 2, "leading_column": self.leading_column, "order": [keys[column] for column in self.table.get_columns()],
                 "widths": {key: column.get_fixed_width() for key, (column, _index) in self.columns.items()},
                 "sort_column": self.sort_column, "descending": self.descending}
 
     def _changed(self, *_):
-        if self.restoring:
+        if self.restoring or self.closed:
             return
         self.dirty = True
         if self.timer is not None:
@@ -164,6 +202,11 @@ class TableLayout:
         return False
 
     def close(self):
+        self.closed = True
+        if self.geometry_timer is not None:
+            GLib.source_remove(self.geometry_timer)
+            self.geometry_timer = None
+        self.geometry_pending.clear()
         if self.timer is not None:
             GLib.source_remove(self.timer)
             self.timer = None
