@@ -18,7 +18,7 @@ OUT="$ROOT/dist/recharge-ai-task-linux-x86_64.tar.gz"
 [[ -f "$LEGACY_GUI" ]] || { echo "Missing $LEGACY_GUI — run scripts/build_linux.sh first" >&2; exit 1; }
 
 rm -f "$OUT"
-tar -czf "$OUT" -C "$ROOT/dist" recharge-ai-task recharge-ai-task-cli recharge-ai-task-tray recharge-ai-task-gui
+tar -czf "$OUT" -C "$ROOT/dist" recharge-ai-task recharge-ai-task-cli recharge-ai-task-tray recharge-ai-task-gui install-desktop.sh
 
 HASH="$(sha256sum "$OUT" | awk '{print $1}')"
 echo ""

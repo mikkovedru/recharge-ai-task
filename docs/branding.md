@@ -34,3 +34,26 @@ The Windows build uses the ICO for the CLI and combined desktop executable shell
 
 Hover over the dashboard logo to see the installed program version. Click it to
 open the GitHub repository, or right-click and choose **Copy GitHub repository link**.
+
+## Linux file-manager and menu icons
+
+Linux ELF files do not provide the shell icon resource used by Windows executables.
+Nemo obtains a custom icon from GIO's `metadata::custom-icon` attribute. The desktop
+app copies its approved 256-pixel artwork to the user's persistent data directory
+and assigns that file URI to both executables and matching command symlinks.
+The default location is `~/.local/share/recharge-ai-task/icon.png`; `XDG_DATA_HOME`
+is respected. The installer also creates GUI and terminal CLI entries under
+`~/.local/share/applications/`. It does not replace the file type's generic icon
+for unrelated executables.
+
+Frozen desktop launches refresh this integration. Isolated profiles configured
+with `RECHARGE_AI_TASK_CONFIG_DIR` skip automatic installation. Source/package
+installs can opt in with `recharge-ai-task --install-desktop`. Release archives
+include `install-desktop.sh` to run the same command relative to their location.
+Run it again after moving the release. Icons on raw files depend on Nemo/GVfs
+metadata support; branded desktop launchers also work where that metadata is
+unavailable. Installation reports partial failures instead of silently claiming
+that file icons were assigned.
+
+See [tray reconnection](../doc/investigations/2026-11-04_cinnamon-tray-reconnection.md)
+for the separate native panel lifecycle issue.

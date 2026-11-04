@@ -22,6 +22,7 @@ def _parser() -> argparse.ArgumentParser:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--tray", action="store_true", help="Start directly in the system tray without opening the dashboard")
     mode.add_argument("--settings", action="store_true", help="Open dashboard settings (Linux)")
+    mode.add_argument("--install-desktop", action="store_true", help="Install Linux menu launchers and file-manager icons, then exit")
     mode.add_argument("--targets", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--autostart", action="store_true", help="Start in the tray and record that this launch was at login")
     parser.epilog = "For terminal commands, use recharge-ai-task-cli (for example: recharge-ai-task-cli quota)."

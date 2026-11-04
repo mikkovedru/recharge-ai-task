@@ -38,10 +38,13 @@ for launcher in gui tray; do
 done
 
 echo ""
+install -m 755 scripts/install_desktop.sh dist/install-desktop.sh
+
 echo "Output:"
 echo "  dist/recharge-ai-task"
 echo "  dist/recharge-ai-task-tray (compatibility launcher)"
 echo "  dist/recharge-ai-task-cli"
+echo "  dist/install-desktop.sh (menu and file-manager icons)"
 echo "  dist/recharge-ai-task-gui (compatibility launcher)"
 echo ""
 echo "Linux desktop mode also requires: sudo apt install xdotool"

@@ -417,6 +417,15 @@ Alternatively, run from source with `bash scripts/run_tray.sh`. The launcher wor
 ## Combined dashboard and tray
 
 `recharge-ai-task` contains the dashboard and tray in one executable.
+On Linux, the frozen desktop app installs persistent menu and file-manager icons
+for both executables on normal launch. To install or refresh these without opening
+the app, run `recharge-ai-task --install-desktop`, or `./install-desktop.sh` beside
+the unpacked release. Nemo uses per-file GIO metadata for raw executable icons;
+that metadata is local to your user and does not travel inside the release archive.
+Re-run the installer after moving the release directory. It also handles matching
+command symlinks in `~/.local/bin`. GUI launchers open the dashboard; the CLI
+launcher runs in a terminal. See [Linux desktop integration](docs/branding.md#linux-file-manager-and-menu-icons).
+
 On Linux, normal launch opens the dashboard and starts its tray icon. To start
 with only the icon, run either command:
 

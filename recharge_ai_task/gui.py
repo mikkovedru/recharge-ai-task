@@ -24,6 +24,16 @@ def main(argv=None):
         parser.error("The graphical dashboard requires Linux GTK")
     if options.autostart and (options.targets or options.settings):
         parser.error("--autostart starts in the tray; it cannot open dashboard settings or targets")
+    if options.install_desktop:
+        if sys.platform != "linux":
+            parser.error("--install-desktop requires Linux")
+        if options.autostart:
+            parser.error("--install-desktop cannot be combined with --autostart")
+        from .desktop_integration import install_main
+        return install_main()
+    if sys.platform == "linux":
+        from .desktop_integration import install_on_launch
+        install_on_launch()
     tray_only = options.tray or options.autostart or sys.platform == "win32"
     tray_args = [] if tray_only else ["--settings" if options.settings else "--targets"]
     if options.autostart:

@@ -56,3 +56,11 @@ GDK and X dimensions agreed at 1×. That observation does not establish the exac
 cause of every previously perceived size change. The application follows the
 space allocated by the panel; it does not override panel sizing or collapse
 preferences.
+
+## File-manager icons are separate
+
+Nemo's [custom-icon handling](https://github.com/linuxmint/nemo/blob/master/libnemo-private/nemo-file.c)
+reads per-file custom icon metadata before its generic file-type icon. Executable
+metadata points to persistent artwork, never PyInstaller's temporary extraction
+directory. See [branding and desktop integration](../../docs/branding.md#linux-file-manager-and-menu-icons)
+for the installation command and portability limits.
