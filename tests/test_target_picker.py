@@ -50,6 +50,8 @@ def idle():
         while Gtk.events_pending(): Gtk.main_iteration_do(False)
         assert time.monotonic() < deadline
         time.sleep(.005)
+def path_for(identity):
+    return next(str(i) for i,row in enumerate(window.filtered) if row[4]==identity)
 def check():
     if window.busy or window.runtime_busy or window.quota_busy or window.discovery_busy:
         return True
@@ -299,7 +301,7 @@ def check():
         assert "start-watch" not in commands
         window.search.set_text("")
         window.filtered.refilter()
-        window._toggle(None, "0")
+        window._toggle(None, path_for("alpha"))
         window.signal_buffer.set_text("Continue")
         saved = AppConfig.load()
         assert {t.id for t in saved.targets()} == {"alpha", "beta"}
@@ -320,9 +322,9 @@ def check():
         target_ui.send_signals = send_signals
         assert window.send_button.get_label() == "Send now to 2 recipients"
         assert not hasattr(window, "goal")
-        window._toggle(None, "1", "send_goal")  # beta: both
+        window._toggle(None, path_for("beta"), "send_goal")  # beta: both
         assert {t.id: t.signal_actions() for t in AppConfig.load().targets()}["beta"] == (True, True)
-        window._toggle(None, "1", "send_prompt")  # beta: Goal only
+        window._toggle(None, path_for("beta"), "send_prompt")  # beta: Goal only
         assert window.selected[beta.key].signal_actions() == (False, True)
         window.refresh_statuses()
         idle()
@@ -349,12 +351,12 @@ def check():
         assert "start-watch" not in commands
         runtime["per_target_signals"] = True
         # Blank text is valid for Goal-only recipients, and invalid for Prompt.
-        window._toggle(None, "0", "send_prompt")
+        window._toggle(None, path_for("alpha"), "send_prompt")
         window.signal_buffer.set_text(" ")
         window.send()
         idle()
         assert deliveries[-1] == ([("beta", False, True)], " ", True)
-        window._toggle(None, "0", "send_prompt")
+        window._toggle(None, path_for("alpha"), "send_prompt")
         window.send()
         assert "Enter a message" in window.status.latest_text and window.status.latest_level == "warning"
         window.signal_buffer.set_text("Continue")
@@ -430,16 +432,16 @@ def check():
         assert "Desktop watch: Off" in window.watch_label.get_text()
         assert "watch-off" in window.watch_label.get_style_context().list_classes()
         # Deselecting the last action removes that recipient on disk immediately.
-        window._toggle(None, "1", "send_goal")
+        window._toggle(None, path_for("beta"), "send_goal")
         assert {t.id for t in AppConfig.load().targets()} == {"alpha"}
-        window._toggle(None, "1", "send_goal")
+        window._toggle(None, path_for("beta"), "send_goal")
         assert {t.id: t.signal_actions() for t in AppConfig.load().targets()} == {"alpha": (True, False), "beta": (False, True)}
         # Failed writes remain visibly unsaved and retry without losing choices.
         idle()
         before = AppConfig.load().desktop_targets
         original_save = AppConfig.save
         AppConfig.save = lambda _: (_ for _ in ()).throw(OSError("disk unavailable <test>"))
-        window._toggle(None, "1", "send_prompt")
+        window._toggle(None, path_for("beta"), "send_prompt")
         assert AppConfig.load().desktop_targets == before
         assert window.dirty() and window.status.latest_level == "error" and "Could not save automatically" in window.status.latest_text
         assert "<test>" in window.status.latest_text

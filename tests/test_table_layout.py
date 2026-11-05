@@ -108,3 +108,37 @@ invalid.close()
 window.destroy()
 '''], capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(os.environ.get("RECHARGE_AI_TASK_GUI_TESTS") != "1", reason="Requires GTK")
+def test_selected_message_or_goal_is_pinned_for_every_column_and_direction():
+    result = subprocess.run([sys.executable, "-c", r'''
+from gi.repository import Gtk
+from recharge_ai_task.table_layout import TableLayout
+store=Gtk.ListStore(bool,str,str,str,str,str,str,bool)
+for row in [(False,'Alpha','thread','','a','1','profile',False),
+            (True,'Zulu','thread','','z','99','profile',False),
+            (False,'Beta','thread','','b','20','profile',True),
+            (True,'Middle','thread','','m','30','profile',True)]:
+    store.append(row)
+table=Gtk.TreeView(model=store)
+layout=TableLayout(table,store,{},lambda *a:None,selected_columns=(0,7))
+for i in range(8):
+    cell=Gtk.CellRendererText();col=Gtk.TreeViewColumn(str(i),cell)
+    table.append_column(col);layout.register(str(i),col,i,100)
+for key in layout.columns:
+    for descending in (False,True):
+        layout.sort(key,descending)
+        assert [bool(r[0] or r[7]) for r in store]==[True,True,True,False],(key,descending)
+layout.sort('1',True)
+assert [r[4] for r in store]==['z','m','b','a']
+# Changing either action reorders immediately, regardless of current sort key.
+for row in store:
+    if row[4]=='a':store.set(row.iter,[7],[True]);break
+assert [r[4] for r in store]==['z','m','b','a']
+for row in store:
+    if row[4]=='z':store.set(row.iter,[0],[False]);break
+assert [r[4] for r in store]==['m','b','a','z']
+layout.close()
+'''],capture_output=True,text=True,timeout=10)
+    assert result.returncode==0,result.stdout+result.stderr

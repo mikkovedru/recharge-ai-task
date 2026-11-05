@@ -82,6 +82,11 @@ try:
     # A recipient count label wraps inside its action column.
     w.update_recipient(Target('thread','0','Synthetic chat 0',send_prompt=True,send_goal=False));pump(w)
     assert target_ui.WrappingButton._label(w.send_button).get_layout().get_line_count()>1
+    for key in w.table_layout.columns:
+        for descending in (False,True):
+            w.table_layout.sort(key,descending)
+            assert [bool(row[0] or row[12]) for row in w.filtered]==[True]+[False]*7,(key,descending)
+    pump(w)
     send_y=w.send_row.translate_coordinates(w.message_area,0,0)[1]
     log_y=w.status.translate_coordinates(w.message_area,0,0)[1]
     assert log_y==send_y+w.send_row.get_allocated_height()+w.message_area.get_spacing()
@@ -118,6 +123,11 @@ try:
         assert sample.get_allocated_height()<=w.refresh_button.get_allocated_height()+2
         probe.destroy()
     assert w.get_size().height<=820
+    bounds=w.table.get_background_area(Gtk.TreePath.new_from_string('1'),w.title_column)
+    x,y=w.table.convert_bin_window_to_widget_coords(8,bounds.y)
+    strip=Gdk.pixbuf_get_from_window(w.table.get_window(),x,y,1,7)
+    pixels=strip.get_pixels();stride=strip.get_rowstride()
+    assert sum(abs(pixels[i]-pixels[5*stride+i]) for i in range(3))>100,'Missing selected-recipient divider'
     assert w.table.get_parent().get_allocated_height()>=59
     assert w.search.translate_coordinates(w.list_area,0,0)[1]>=0
     image=Gdk.pixbuf_get_from_window(w.get_window(),0,0,*w.get_size())

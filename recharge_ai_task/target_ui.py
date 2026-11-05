@@ -186,9 +186,10 @@ class TargetPicker(Gtk.Window):
         """)
         self.table.get_style_context().add_class("recipient-table")
         self.table.get_style_context().add_provider(density_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.table.connect_after("draw", self._draw_recipient_divider)
         self.table.set_has_tooltip(True)
         self.table.connect("query-tooltip", self._tooltip)
-        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at", leading_column="project_name")
+        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at", leading_column="project_name", selected_columns=(0, 12))
         for label, index, action in (("Send message", 0, "send_prompt"), ("Resume goal", 12, "send_goal")):
             checkbox = Gtk.CellRendererToggle()
             checkbox.connect("toggled", self._toggle, action)
@@ -457,6 +458,25 @@ class TargetPicker(Gtk.Window):
             self.config = config
         except Exception as exc:
             self._message(f"Could not save table view: {exc}", "error")
+
+    def _draw_recipient_divider(self, table, cr):
+        selected_seen = False
+        for row in self.filtered:
+            if row[0] or row[12]:
+                selected_seen = True
+            elif selected_seen:
+                bounds = table.get_background_area(row.path, self.title_column)
+                _x, y = table.convert_bin_window_to_widget_coords(0, bounds.y)
+                header_height = table.convert_bin_window_to_widget_coords(0, 0)[1]
+                if y > header_height:
+                    color = table.get_style_context().get_color(Gtk.StateFlags.NORMAL)
+                    cr.set_source_rgba(color.red, color.green, color.blue, .8)
+                    cr.set_line_width(3)
+                    cr.move_to(0, y)
+                    cr.line_to(table.get_allocated_width(), y)
+                    cr.stroke()
+                break
+        return False
 
     def _visible(self, model, iterator, _data):
         query = self.search.get_text().casefold()

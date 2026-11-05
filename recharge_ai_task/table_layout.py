@@ -5,13 +5,14 @@ from .config import AppConfig
 
 
 class TableLayout:
-    def __init__(self, table, store, saved, message, *, default_sort=None, leading_column=None):
+    def __init__(self, table, store, saved, message, *, default_sort=None, leading_column=None, selected_columns=()):
         self.table, self.store = table, store
         self.table.set_halign(Gtk.Align.START)
         self.saved = saved if isinstance(saved, dict) else {}
         self.message = message
         self.default_sort = default_sort
         self.leading_column = leading_column
+        self.selected_columns = selected_columns
         self.geometry_pending = set()
         self.geometry_timer = None
         self.closed = False
@@ -124,8 +125,14 @@ class TableLayout:
             self.table.queue_draw()
         return False
 
-    @staticmethod
-    def _compare(model, first, second, index):
+    def _compare(self, model, first, second, index):
+        a_selected = any(model[first][i] for i in self.selected_columns)
+        b_selected = any(model[second][i] for i in self.selected_columns)
+        if a_selected != b_selected:
+            # GTK reverses the entire comparator for descending sorts. Undo
+            # that reversal for the pinned group only, retaining column order.
+            priority = -1 if a_selected else 1
+            return -priority if self.descending else priority
         a, b = model[first][index], model[second][index]
         if index == 5:  # PID is displayed as text but sorts as a number.
             a, b = int(a or 0), int(b or 0)

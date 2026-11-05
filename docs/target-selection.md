@@ -483,7 +483,9 @@ for the sizing and pointer-handling constraints.
 Last active defaults to newest first; the
 first timestamp-header click also chooses newest first. Old sort preferences are
 migrated once, while column widths and order are preserved. Subsequent deliberate
-sort choices are remembered.
+sort choices are remembered. Message and/or Goal recipients always stay above
+unselected chats, with a visible divider between the groups. Each group follows
+the chosen column and sort direction.
 
 ## Recovery between quota checks
 
