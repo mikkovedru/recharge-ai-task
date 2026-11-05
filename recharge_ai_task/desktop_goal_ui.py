@@ -16,7 +16,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, Gdk, Gtk
-import pyatspi
+from .scoped_accessibility import ApplicationBus
 from Xlib import display
 
 
@@ -92,12 +92,16 @@ def active_window(pid):
         return xid
 
 
+_application_bus = None
+
+
 def visible_frame(pid):
     active_window(pid)
-    apps = [app for app in pyatspi.Registry.getDesktop(0) if app.get_process_id() == pid]
-    if len(apps) != 1:
-        raise RuntimeError("Codex accessibility is unavailable; no Goal action sent")
-    frames = [frame for frame in apps[0] if frame.getState().contains(pyatspi.STATE_ACTIVE)]
+    global _application_bus
+    if _application_bus is None:
+        _application_bus = ApplicationBus()
+    app = _application_bus.application(pid)
+    frames = [frame for frame in app if frame.getState().contains(Atspi.StateType.ACTIVE)]
     if len(frames) != 1:
         raise RuntimeError("Could not identify the active Codex window; no Goal action sent")
     return frames[0]
@@ -130,17 +134,17 @@ def row_chat_id(pid, row):
     frame = visible_frame(pid)
     active_window(pid)
     component = row.queryComponent()
-    if not row.getState().contains(pyatspi.STATE_SHOWING):
-        if not component.scrollTo(pyatspi.SCROLL_ANYWHERE):
+    if not row.getState().contains(Atspi.StateType.SHOWING):
+        if not component.scrollTo(Atspi.ScrollType.ANYWHERE):
             raise RuntimeError("Could not scroll the selected chat into view; no Goal action sent")
-        wait_for(lambda: row.getState().contains(pyatspi.STATE_SHOWING))
-    bounds = component.getExtents(pyatspi.DESKTOP_COORDS)
+        wait_for(lambda: row.getState().contains(Atspi.StateType.SHOWING))
+    bounds = component.getExtents(Atspi.CoordType.SCREEN)
     if bounds.width <= 0 or bounds.height <= 0:
         raise RuntimeError("The selected Codex chat is not visible in its sidebar")
     subprocess.run(["xdotool", "mousemove", str(bounds.x+bounds.width-12), str(bounds.y+bounds.height//2)], check=True, timeout=5)
     def named(parent, role, name):
         matches = [node for node in nodes(parent) if node.getRoleName() == role and node.name == name
-                   and node.getState().contains(pyatspi.STATE_SHOWING)]
+                   and node.getState().contains(Atspi.StateType.SHOWING)]
         return matches[0] if len(matches) == 1 else None
     action = None
     try:
@@ -153,7 +157,7 @@ def row_chat_id(pid, row):
         if copy is None or "haspopup:menu" not in copy.getAttributes():
             raise RuntimeError("Codex does not expose its native Copy submenu")
         # Hover a verified submenu; never activate Copy or Copy as Markdown.
-        bounds = copy.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
+        bounds = copy.queryComponent().getExtents(Atspi.CoordType.SCREEN)
         active_window(pid)
         subprocess.run(["xdotool", "mousemove", str(bounds.x+bounds.width//2), str(bounds.y+bounds.height//2)], check=True, timeout=5)
         submenu = wait_for(lambda: named(frame, "menu", "Copy"))
@@ -175,7 +179,7 @@ def row_chat_id(pid, row):
             # Copy deeplink normally closes both menus. Escape in the main
             # window cancels a turn and can pause a just-resumed goal. Never
             # send keyboard cleanup; toggle the expanded native trigger only.
-            if (action is not None and action.getState().contains(pyatspi.STATE_EXPANDED)
+            if (action is not None and action.getState().contains(Atspi.StateType.EXPANDED)
                     and (named(frame, "menu", "Chat actions") or named(frame, "menu", "Copy"))):
                 action.queryAction().doAction(0)
         except RuntimeError:
@@ -199,8 +203,8 @@ def _expand_project(frame, target, pid):
     if not target.project_name:
         return False
     projects = [row for row in sidebar_rows(frame) if row.name == target.project_name
-                and row.getState().contains(pyatspi.STATE_EXPANDABLE)]
-    if len(projects) != 1 or projects[0].getState().contains(pyatspi.STATE_EXPANDED):
+                and row.getState().contains(Atspi.StateType.EXPANDABLE)]
+    if len(projects) != 1 or projects[0].getState().contains(Atspi.StateType.EXPANDED):
         return False
     active_window(pid)
     if not projects[0].queryAction().doAction(0):
@@ -272,8 +276,8 @@ def resume_goal(target, expected, pid):
             if current is None or any(current.get(k) != expected.get(k) for k in ("threadId", "createdAt", "objective", "status", "tokenBudget")):
                 raise RuntimeError("Goal changed before native activation; no Goal action sent")
         buttons = [node for node in nodes(frame) if node.getRoleName() == "push button"
-                   and node.name == "Resume goal" and node.getState().contains(pyatspi.STATE_SHOWING)
-                   and node.getState().contains(pyatspi.STATE_ENABLED)]
+                   and node.name == "Resume goal" and node.getState().contains(Atspi.StateType.SHOWING)
+                   and node.getState().contains(Atspi.StateType.ENABLED)]
         if len(buttons) != 1:
             raise RuntimeError("The selected chat has no unique native Resume goal button; no Goal action sent")
         if current_chat_id(pid) != target.id:
@@ -285,15 +289,18 @@ def resume_goal(target, expected, pid):
         while time.monotonic() < deadline:
             frame = visible_frame(pid)
             if any(node.getRoleName() == "push button" and node.name == "Pause goal"
-                   and node.getState().contains(pyatspi.STATE_SHOWING) for node in nodes(frame)):
+                   and node.getState().contains(Atspi.StateType.SHOWING) for node in nodes(frame)):
                 if current_chat_id(pid) != target.id:
                     raise RuntimeError("Chat changed after native Goal activation")
                 return
             time.sleep(.1)
         raise RuntimeError("Codex's Goal button did not become active")
     except Exception as exc:
+        if clicked:
+            detail = str(exc).replace("; no Goal action sent", "")
+            exc = RuntimeError(f"Resume goal was invoked, but verification failed: {detail}. The goal may already be running; no prompt was sent")
         exc.goal_clicked = clicked
-        raise
+        raise exc
     finally:
         try:
             snapshot.restore()

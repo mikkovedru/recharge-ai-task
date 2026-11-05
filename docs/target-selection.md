@@ -280,7 +280,7 @@ activation; if Codex has already started a turn, the prompt steers that turn.
 
 The native control currently targets the installed English Linux desktop UI and
 requires X11, accessibility, `xdotool`, and a clipboard manager (present on Mint
-Cinnamon). Source installations also need `python3-pyatspi`; release builds bundle
+Cinnamon). Source installations also need `gir1.2-atspi-2.0`; release builds bundle
 the Python accessibility adapter and native typelib. Identity lookup uses pointer
 and native menu actions only: it never sends Escape, which can cancel a Codex turn.
 Missing or incompatible controls fail visibly;
@@ -504,3 +504,14 @@ verified remains uncertain, keeps its allowance reserved and is not automaticall
 replayed. An attempted UI operation alone is not evidence that a Goal was sent.
 See [exact-chat navigation](../doc/investigations/2026-11-04_exact-chat-goal-navigation.md)
 for the asynchronous navigation constraints.
+
+
+## Cinnamon accessibility isolation
+
+Native Goal discovery queries only the selected Codex process through the
+accessibility bus. It avoids desktop-wide accessibility caches, which can crash
+Cinnamon in the installed AT-SPI 2.52 bridge. If a native Resume invocation cannot
+be verified afterward, the log says the Goal may already be running; that
+uncertain attempt is not automatically repeated. See the
+[Cinnamon crash investigation](../doc/investigations/2026-11-05_cinnamon-goal-accessibility.md)
+for the observed stack, workaround and remaining validation limits.

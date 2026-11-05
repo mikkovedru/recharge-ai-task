@@ -158,7 +158,7 @@ def test_copy_identity_never_sends_escape_to_active_goal(monkeypatch, menu_stays
         def getAttributes(self):
             return ['haspopup:menu'] if self.name == 'Copy' and self.role == 'menu item' else []
         def getState(self):
-            return SimpleNamespace(contains=lambda flag: self.showing() if flag == ui.pyatspi.STATE_SHOWING else self.expanded() if flag == ui.pyatspi.STATE_EXPANDED else True)
+            return SimpleNamespace(contains=lambda flag: self.showing() if flag == ui.Atspi.StateType.SHOWING else self.expanded() if flag == ui.Atspi.StateType.EXPANDED else True)
         def queryComponent(self):
             return SimpleNamespace(getExtents=lambda _: SimpleNamespace(x=10,y=10,width=100,height=20))
     def toggle(_):
@@ -228,7 +228,7 @@ def test_collapsed_project_is_expanded_before_exact_id_candidate_open(monkeypatc
         state['expanded']=True
         return True
     project=Node('A project',action=expand)
-    project.getState=lambda:SimpleNamespace(contains=lambda flag:state['expanded'] if flag==ui.pyatspi.STATE_EXPANDED else True)
+    project.getState=lambda:SimpleNamespace(contains=lambda flag:state['expanded'] if flag==ui.Atspi.StateType.EXPANDED else True)
     chosen=Node('Duplicate title · Usage limited',children=[Node('Duplicate title','static')])
     def select(_):
         state['clicked'].append('chosen');state['selected']='chosen';return True
@@ -255,3 +255,18 @@ def test_stale_frame_and_accessible_row_are_requeried(monkeypatch):
         return 'chosen'
     monkeypatch.setattr(ui,'row_chat_id',identity)
     assert ui.show_chat(TARGET,123) is second
+
+
+def test_identity_check_failure_after_click_does_not_claim_no_goal_sent(monkeypatch):
+    state, button, frame = fixture(monkeypatch)
+    calls = [0]
+    def identity(_):
+        calls[0] += 1
+        if calls[0] > 1:
+            raise RuntimeError("Codex's native control was not available; no Goal action sent")
+        return 'chosen'
+    monkeypatch.setattr(ui,'current_chat_id',identity)
+    with pytest.raises(RuntimeError,match='goal may already be running') as error:
+        ui.resume_goal(TARGET,GOAL,123)
+    assert error.value.goal_clicked and state['clicked']==1
+    assert 'no Goal action sent' not in str(error.value)

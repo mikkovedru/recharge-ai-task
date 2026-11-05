@@ -30,3 +30,8 @@ Synthetic regressions cover delayed selection, stale accessibility frames,
 collapsed projects, decorated and duplicate titles, and mismatched canonical IDs.
 The profile, process, clipboard and Goal identity guards remain necessary even
 when navigation becomes more tolerant of asynchronous UI updates.
+
+
+The [2026-11-05 Cinnamon investigation](2026-11-05_cinnamon-goal-accessibility.md)
+updates the accessibility discovery mechanism and post-click failure wording.
+The exact-chat navigation and identity constraints described here still apply.

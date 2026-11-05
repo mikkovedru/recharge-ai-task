@@ -36,7 +36,7 @@ recharge-ai-task-cli configure          # choose mode (cli/desktop) and defaults
 | **Check quota only** | `recharge-ai-task-cli quota` | Shows short/long window usage |
 | **No Python (Release zip)** | Run `recharge-ai-task.exe` (Win) or `recharge-ai-task` (Linux) | Two binaries: CLI and combined desktop app. Keep them together for CLI integration; Codex CLI must be installed and signed in |
 
-**Prerequisites:** Install [Codex CLI](https://github.com/openai/codex) and sign in with ChatGPT. Linux desktop mode also needs `sudo apt install xdotool` (X11). Native Goal signals use Codex's Resume goal control and require accessibility plus a clipboard manager (included in Mint Cinnamon). Source installs also need `python3-pyatspi`.
+**Prerequisites:** Install [Codex CLI](https://github.com/openai/codex) and sign in with ChatGPT. Linux desktop mode also needs `sudo apt install xdotool` (X11). Native Goal signals use Codex's Resume goal control and require accessibility plus a clipboard manager (included in Mint Cinnamon). Source installs also need `gir1.2-atspi-2.0`.
 
 → [Full guide](#english)
 
@@ -404,7 +404,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the remote and branch setup.
 The tray uses the blue 5h recharge logo on an opaque white background with a dark border and a yellow (idle) or green (running) status strip. When Cinnamon's native XApp status applet is active, it uses XApp; with legacy or collapsible trays it uses an opaque XEmbed drawing surface at the actual allocated size, avoiding GTK StatusIcon caches and clipping. Image paths bypass symbolic icon recoloring; status is also shown by the tooltip and bottom color strip. Double-click toggles the dashboard; right-click opens the menu. The icon reconnects if Cinnamon or its tray socket is replaced. Cinnamon still controls the panel's icon size and whether its XApp status applet is visible.
 
 ```bash
-sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-xapp-1.0 python3-pyatspi gir1.2-atspi-2.0 xdotool
+sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-xapp-1.0 gir1.2-atspi-2.0 xdotool
 /usr/bin/python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install -e ".[tray,dev]"
 PYTHON=.venv/bin/python bash scripts/build_linux.sh
