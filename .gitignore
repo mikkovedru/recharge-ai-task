@@ -32,3 +32,6 @@ Thumbs.db
 *.log
 *.spec
 !scripts/gui_linux.spec
+
+# Temporary AI agent task tracking
+.agent/
