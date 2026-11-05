@@ -98,7 +98,8 @@ two lines, with full captions on hover; cell contents continue to wrap normally.
 Drag the wide dividers between the chat list and editors, and between the
 left workspace and recipients, to resize them. The log has no separate divider:
 it starts directly below the send summary and uses all remaining space. The message and log occupy the left half below the chat list; Recipients & actions
-uses the full right side, with global limits above the recipient list. Recipient text is display-only; click an item or use
+uses the full right side. Global limits sit to the right of the default message editor.
+The Send now button sits below the Default message label, aligned with the editor’s bottom. Recipient text is display-only; click an item or use
 Up/Down to select it and highlight the same chat in the main list. A search that
 hides that chat clears when the recipient is selected. Re-selecting a recipient
 never sends signals. This panel shows titles and project/profile context rather
@@ -369,15 +370,19 @@ No test signal is sent to existing user chats.
 **Recipients & actions** lists the chosen chats/windows, their IDs, automatic and
 manual action previews, used/remaining allowances and effective messages. Choose
 an entry to edit its actions, message and limits. Hover over its preview for the
-full message; **Status rules** explains the current status checks. The preview
+full message; the action preview’s tooltip explains current status checks. The preview
 uses the latest refresh; the sender verifies live Goal state and allowances.
 Duplicate titles stay separate because preferences and counts use the chat ID
 and Codex profile, or the window identity.
 
 The **Global limits per recipient** controls beside the default message set
-separate limits for Messages and Goal activations. These are defaults for each
+separate limits for Messages and Goal activations. Each offers two buttons:
+**Unlimited** and its numeric limit. The pressed button is the active mode;
+click the number to select that mode and edit the value. These are defaults for each
 recipient, rather than a shared pool. Each recipient can inherit a default,
-choose its own limit, or explicitly choose Unlimited. Zero prevents that action.
+choose its own limit, or explicitly choose Unlimited. The per-recipient controls
+use the same buttons plus **Global default**, which follows future global changes.
+Zero prevents that action.
 **Use a custom message for this recipient** overrides the default, including
 multiline text. With the checkbox off, the box previews the default message in
 a passive theme-colored tint and remains read-only. Enabling the checkbox

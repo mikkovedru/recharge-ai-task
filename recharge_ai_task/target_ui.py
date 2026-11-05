@@ -268,7 +268,10 @@ class TargetPicker(Gtk.Window):
         prompt = Gtk.Box(spacing=8)
         prompt_label = Gtk.Label(label="Default message:", valign=Gtk.Align.START)
         prompt_label.set_margin_top(6)
-        prompt.pack_start(prompt_label, False, False, 0)
+        self.prompt_actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.prompt_actions.set_size_request(118, -1)
+        self.prompt_actions.pack_start(prompt_label, False, False, 0)
+        prompt.pack_start(self.prompt_actions, False, False, 0)
         self.signal = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
         self.signal.set_tooltip_text("Used for Send message recipients. Resume goal alone does not send this message.")
         self.signal.set_left_margin(8)
@@ -291,10 +294,10 @@ class TargetPicker(Gtk.Window):
         self.summary.set_max_width_chars(80)
         self.send_row = Gtk.Box(spacing=8)
         self.send_row.pack_start(self.summary, True, True, 0)
-        self.send_button = Gtk.Button(label="Send now", valign=Gtk.Align.CENTER)
+        self.send_button = WrappingButton(label="Send now", valign=Gtk.Align.END)
         self.send_button.set_tooltip_text("Apply the selected actions immediately, even when Desktop watch is off. If both are selected, Goal activation is verified before sending the message. Paused goals may resume.")
         self.send_button.connect("clicked", self.send)
-        self.send_row.pack_start(self.send_button, False, False, 0)
+        self.prompt_actions.pack_end(self.send_button, False, False, 0)
         self.buttons.append(self.send_button)
         box.pack_start(self.send_row, False, False, 0)
         self.status = StatusLog()
@@ -313,6 +316,8 @@ class TargetPicker(Gtk.Window):
         self.status.set_size_request(100, 36)
         self.message_area.pack_start(self.status, True, True, 0)
         self.recipient_panel = RecipientPanel(self)
+        prompt.pack_start(self.recipient_panel.default_controls, False, False, 0)
+        self.recipient_panel.default_controls.set_valign(Gtk.Align.START)
         self.recipient_panel.set_border_width(8)
         self.recipient_frame = Gtk.Frame()
         self.recipient_frame.get_accessible().set_name("Recipient actions and overrides")
@@ -322,6 +327,8 @@ class TargetPicker(Gtk.Window):
         box.pack_start(self.workspace_split, True, True, 0)
         self.default_editor.connect("resized", self._resize_default_message)
         self._install_shortcuts()
+        WrappingButton._label(self.send_button).set_max_width_chars(12)
+        self.default_editor.set_valign(Gtk.Align.FILL)
         self.connect("delete-event", lambda *_: self.busy)
         self.connect("destroy", self._destroy)
         self._timers = [GLib.timeout_add_seconds(2, self.poll_runtime),
@@ -348,7 +355,7 @@ class TargetPicker(Gtk.Window):
                             (self.copy_button,"edit-copy-symbolic"),(self.open_button,"go-jump-symbolic")):
             button.set_image(Gtk.Image.new_from_icon_name(icon,Gtk.IconSize.BUTTON))
             button.set_always_show_image(True)
-        for button in (self.copy_button, self.open_button):
+        for button in (self.copy_button, self.open_button, self.send_button):
             self._wrap_button_label(button)
         self.watch_button.set_tooltip_text("Start or stop automatic quota recovery for selected recipients (Space / Enter)")
         self.search.set_tooltip_text("Search chats by title, status, project or ID (Ctrl+F)")
@@ -509,6 +516,8 @@ class TargetPicker(Gtk.Window):
         self.summary.set_text(f"{recipients} · Send message: {prompts} · Resume goal: {goals}.\n"
             "Send now acts immediately, even with monitoring off, and may resume paused goals.")
         self.send_button.set_label(f"Send now to {recipients}" if count else "Send now")
+        self._wrap_button_label(self.send_button)
+        WrappingButton._label(self.send_button).set_max_width_chars(12)
         self.summary.set_line_wrap(True)
         message = ("Could not save automatically — retrying: " + self.autosave_error if self.autosave_error else
                    "Changes differ from saved settings. Edits save automatically." if self.dirty() else "")

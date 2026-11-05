@@ -36,6 +36,16 @@ def make():
     return w
 w=make();p=w.recipient_panel
 assert len(p.rows)==2
+for control in (p.prompt_limit,p.goal_limit):
+    assert not hasattr(control,'choice') and control.default.get_active()
+    control.unlimited.clicked()
+    assert control.value()==-1 and control.unlimited.get_active() and not control.default.get_active()
+    control.limited.clicked();control.number_popover.popdown()
+    control.number.set_value(0)
+    assert control.value()==0 and control.limited.get_active() and not control.unlimited.get_active()
+    control.default.clicked()
+    assert control.value() is None and control.default.get_active() and not control.limited.get_active()
+assert w.selected[a.key].prompt_limit is None and w.selected[a.key].goal_limit is None
 assert not p.message.get_editable() and not p.message.get_cursor_visible()
 passive=p.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
 # Display labels allow row selection rather than accidental text selection.
@@ -59,7 +69,8 @@ p.list.emit('row-activated',p.rows[a.key])
 assert w._row_target().key==a.key and sent==[]
 
 p.list.select_row(p.rows[a.key])
-p.default_prompt.choice.set_active_id('limited')
+p.default_prompt.limited.clicked()
+p.default_prompt.number_popover.popdown()
 p.default_prompt.number.set_value(3)
 assert AppConfig.load().prompt_limit==3
 p.custom.set_active(True)
@@ -68,7 +79,8 @@ active=p.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
 assert p.message.get_editable() and p.message.get_cursor_visible()
 assert passive.to_string()!=active.to_string()
 p.message_buffer.set_text('Specific\nmessage')
-p.prompt_limit.choice.set_active_id('limited')
+p.prompt_limit.limited.clicked()
+p.prompt_limit.number_popover.popdown()
 p.prompt_limit.number.set_value(1)
 assert w.selected[a.key].custom_prompt=='Specific\nmessage' and w.selected[a.key].prompt_limit==1
 assert 'Custom: Specific' in p.rows[a.key].preview.get_text()
@@ -92,7 +104,7 @@ assert target_delivery.send_signals([w.selected[a.key]],w._prompt_text(),manual=
 assert sent==[(a.key,'Specific\nmessage')]
 p.list.select_row(p.rows[a.key]);p.reset.clicked()
 assert not UsageLedger().snapshot()
-p.prompt_limit.choice.set_active_id('unlimited')
+p.prompt_limit.unlimited.clicked()
 assert w.selected[a.key].prompt_limit==-1
 # Clearing the default is valid when all message recipients have custom text.
 w.update_recipient(replace(w.selected[b.key],custom_prompt='Other message'))

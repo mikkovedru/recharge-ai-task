@@ -8,7 +8,7 @@ import pytest
 @pytest.mark.skipif(os.environ.get("RECHARGE_AI_TASK_GUI_TESTS")!="1", reason="Requires GTK")
 def test_editor_drag_wrapping_and_log_layout():
     result=subprocess.run([sys.executable,"-c",r'''
-import time
+import time,os,subprocess
 from types import SimpleNamespace
 from recharge_ai_task import target_ui,autostart
 from recharge_ai_task.config import AppConfig,config_dir
@@ -36,9 +36,19 @@ for button in (w.copy_button,w.open_button):
 assert w.list_toolbar.get_allocated_height() <= w.refresh_button.get_allocated_height()+2
 editor=w.default_editor
 def drag(delta):
-    editor._press(editor.handle,SimpleNamespace(button=1,x_root=0,y_root=0))
-    editor._motion(editor.handle,SimpleNamespace(x_root=0,y_root=delta))
-    editor._release(editor.handle,SimpleNamespace(button=1))
+    if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
+        x,y=editor.handle.translate_coordinates(w,9,9)
+        xid=str(w.get_window().get_xid())
+        subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y),'mousedown','1'],check=True)
+        pump(w)
+        subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y+delta)],check=True)
+        pump(w)
+        subprocess.run(['xdotool','mouseup','1'],check=True)
+        print('Actual pointer drag:',delta,flush=True)
+    else:
+        editor._press(editor.handle,SimpleNamespace(button=1,x_root=0,y_root=0))
+        editor._motion(editor.handle,SimpleNamespace(x_root=0,y_root=delta))
+        editor._release(editor.handle,SimpleNamespace(button=1))
     pump(w)
 try:
     print('Initial window',w.get_size(),w.get_position(),flush=True)
@@ -52,6 +62,26 @@ try:
     print('Editor vertical shrink:',after,smaller,'log',w.status.get_allocated_height(),flush=True)
     assert smaller<=after-40
     assert not hasattr(w,'message_split')
+    p=w.recipient_panel
+    assert not hasattr(p,'status_rules')
+    def pos(widget):return widget.translate_coordinates(w,0,0)
+    for width in (1400,1120):
+        w.resize(width,820);pump(w)
+        assert pos(p.default_controls)[0] >= pos(editor)[0]+editor.get_allocated_width()
+        assert pos(w.send_button)[0] == pos(w.prompt_actions)[0]
+        assert pos(w.send_button)[1]+w.send_button.get_allocated_height() == pos(editor)[1]+editor.get_allocated_height()
+        assert pos(p.reset_all)[0]+p.reset_all.get_allocated_width() <= pos(p.reset)[0]
+    p.default_prompt.limited.clicked();pump(w)
+    assert p.default_prompt.limited.get_active() and not p.default_prompt.unlimited.get_active()
+    p.default_prompt.number.set_value(4)
+    assert AppConfig.load().prompt_limit==4 and p.default_prompt.limited.get_label()=='4'
+    p.default_prompt.number_popover.popdown()
+    p.default_prompt.unlimited.clicked();pump(w)
+    assert p.default_prompt.unlimited.get_active() and not p.default_prompt.limited.get_active()
+    assert AppConfig.load().prompt_limit is None
+    # A recipient count label wraps inside its action column.
+    w.update_recipient(Target('thread','0','Synthetic chat 0',send_prompt=True,send_goal=False));pump(w)
+    assert target_ui.WrappingButton._label(w.send_button).get_layout().get_line_count()>1
     send_y=w.send_row.translate_coordinates(w.message_area,0,0)[1]
     log_y=w.status.translate_coordinates(w.message_area,0,0)[1]
     assert log_y==send_y+w.send_row.get_allocated_height()+w.message_area.get_spacing()
@@ -91,7 +121,7 @@ try:
     assert w.table.get_parent().get_allocated_height()>=59
     assert w.search.translate_coordinates(w.list_area,0,0)[1]>=0
     image=Gdk.pixbuf_get_from_window(w.get_window(),0,0,*w.get_size())
-    image.savev('/tmp/2026-11-04_recharge-dashboard-layout.png','png',[],[])
+    image.savev('/tmp/2026-11-05_recharge-dashboard-layout.png','png',[],[])
 finally:
     w.destroy()
 '''],capture_output=True,text=True,timeout=15)

@@ -12,30 +12,61 @@ class LimitControl(Gtk.Box):
         super().__init__(spacing=4)
         self.updating = False
         self.inherit = inherit
-        self.choice = Gtk.ComboBoxText()
-        self.choice.set_tooltip_text("Choose inheritance, unlimited sends or a fixed limit (Alt+Down)")
-        if inherit:
-            self.choice.append("default", "Use global default")
-        self.choice.append("unlimited", "Unlimited")
-        self.choice.append("limited", "Limit to")
         self.number = Gtk.SpinButton.new_with_range(0, 1000000, 1)
         self.number.set_value(1)
         self.number.set_tooltip_text("Maximum actions since the last count reset; 0 disables the action (Up / Down)")
         self.number.set_width_chars(4)
-        self.number.set_no_show_all(True)
-        self.pack_start(self.choice, False, False, 0)
-        self.pack_start(self.number, False, False, 0)
+        self.unlimited = Gtk.ToggleButton(label="Unlimited")
+        self.limited = Gtk.ToggleButton(label="1")
+        self.unlimited.set_tooltip_text("Use an unlimited allowance for this recipient (Enter / Space)")
+        self.limited.set_tooltip_text("Use a fixed allowance; click to edit its number (Enter / Space)")
+        self.modes = {}
+        if inherit:
+            self.default = Gtk.ToggleButton(label="Global default")
+            self.default.set_tooltip_text("Inherit the global limit, including future changes (Enter / Space)")
+            self.modes["default"] = self.default
+        self.modes.update(unlimited=self.unlimited, limited=self.limited)
+        linked = Gtk.Box()
+        linked.get_style_context().add_class("linked")
+        for kind, button in self.modes.items():
+            linked.pack_start(button, False, False, 0)
+            button.connect("clicked", lambda _button, key=kind: self._mode(key, changed))
+        self.pack_start(linked, False, False, 0)
+        self.number_popover = Gtk.Popover.new(self.limited)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=8)
+        content.pack_start(Gtk.Label(label="Maximum actions per recipient:"), False, False, 0)
+        content.pack_start(self.number, False, False, 0)
+        self.number_popover.add(content)
+        self.number.connect("value-changed", lambda *_: self._changed(changed))
         self.set_value(None)
-        def update(*_):
-            self.number.set_visible(self.choice.get_active_id() == "limited")
-            if not self.updating:
-                changed()
-        self.choice.connect("changed", update)
-        self.number.connect("value-changed", update)
+
+    def _mode(self, kind, changed):
+        if self.updating:
+            return
+        self._select(kind)
+        changed()
+        if kind == "limited":
+            self.number_popover.show_all()
+            self.number_popover.popup()
+            self.number.grab_focus()
+
+    def _select(self, kind):
+        self.updating = True
+        try:
+            for key, button in self.modes.items():
+                button.set_active(key == kind)
+        finally:
+            self.updating = False
+
+    def _changed(self, changed):
+        self.limited.set_label(str(self.number.get_value_as_int()))
+        if not self.updating:
+            changed()
 
     def value(self):
-        kind = self.choice.get_active_id()
-        return self.number.get_value_as_int() if kind == "limited" else -1 if self.inherit and kind == "unlimited" else None
+        if self.limited.get_active():
+            return self.number.get_value_as_int()
+        return -1 if self.inherit and self.unlimited.get_active() else None
 
     def set_value(self, value):
         self.updating = True
@@ -43,8 +74,9 @@ class LimitControl(Gtk.Box):
             kind = "default" if value is None and self.inherit else "unlimited" if value is None or value == -1 else "limited"
             if kind == "limited":
                 self.number.set_value(value)
-            self.choice.set_active_id(kind)
-            self.number.set_visible(kind == "limited")
+            self.limited.set_label(str(self.number.get_value_as_int()))
+            for key, button in self.modes.items():
+                button.set_active(key == kind)
         finally:
             self.updating = False
 
@@ -82,11 +114,9 @@ class RecipientPanel(Gtk.Box):
         self.reset_all.set_tooltip_text("Reset message and Goal allowances for every recipient (Enter / Space)")
         self.reset_all.set_valign(Gtk.Align.CENTER)
         self.reset_all.set_halign(Gtk.Align.END)
-        self.reset_all.set_hexpand(True)
+        self.reset_all.set_hexpand(False)
         self.reset_all.connect("clicked", self._reset_all)
-        self.default_controls.attach(self.reset_all, 2, 0, 1, 3)
         self.default_controls.set_tooltip_text("Manual and automatic sends share each recipient's allowance. Counts survive restarts. Zero stops an action; use Reset counts to renew allowances.")
-        self.pack_start(self.default_controls, False, False, 0)
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.list.connect("row-selected", self._row_selected)
         self.list.connect("row-activated", self._row_activated)
@@ -111,6 +141,7 @@ class RecipientPanel(Gtk.Box):
         self.reset.set_tooltip_text("Reset both used allowances for this recipient. This never sends anything.")
         self.reset.connect("clicked", self._reset)
         actions.pack_end(self.reset, False, False, 0)
+        actions.pack_end(self.reset_all, False, False, 0)
         self.editor.pack_start(actions, False, False, 0)
         overrides = Gtk.Grid(column_spacing=6, row_spacing=4)
         self.prompt_limit = LimitControl(self._editor_changed, inherit=True)
@@ -119,10 +150,6 @@ class RecipientPanel(Gtk.Box):
             overrides.attach(Gtk.Label(label=caption, xalign=0), 0, row, 1, 1)
             overrides.attach(control, 1, row, 1, 1)
         self.editor.pack_start(overrides, False, False, 0)
-        self.advice = wrapped()
-        self.status_rules = Gtk.Expander(label="Status rules (verified live at delivery)")
-        self.status_rules.add(self.advice)
-        self.editor.pack_start(self.status_rules, False, False, 0)
         self.custom = Gtk.CheckButton(label="Use a custom message for this recipient")
         self.custom.set_tooltip_text("Override the default message for only this recipient; edits save automatically (Space)")
         self.custom.connect("toggled", self._custom_toggled)
@@ -236,10 +263,13 @@ class RecipientPanel(Gtk.Box):
 
     def _load_editor(self, config):
         target = self.picker.selected.get(self.selected_key)
-        self.editor.set_sensitive(target is not None)
+        for child in self.editor.get_children():
+            if child is not self.reset.get_parent():
+                child.set_sensitive(target is not None)
+        for control in (self.prompt, self.goal, self.reset):
+            control.set_sensitive(target is not None)
         if target is None:
             self.editor_title.set_text("Select a recipient to edit its actions and overrides")
-            self.advice.set_text("")
             self.message_buffer.set_text("")
             self._set_custom_appearance(False)
             return
@@ -256,7 +286,6 @@ class RecipientPanel(Gtk.Box):
         current = self.message_buffer.get_text(*self.message_buffer.get_bounds(), True)
         if current != text:
             self.message_buffer.set_text(text)
-        self.advice.set_text("Automatic: " + status_advice(target) + "\nSend now: " + status_advice(target, manual=True))
 
     def _defaults_changed(self):
         if self.updating:

@@ -115,9 +115,10 @@ def check():
         assert siblings[siblings.index(toolbar)-1] is window.inventory_status
         assert siblings[siblings.index(toolbar)-2] is window.table.get_parent()
         assert "Save selection" not in [button.get_label() for button in window.buttons]
-        assert window.send_row.get_children() == [window.summary, window.send_button]
+        assert window.send_row.get_children() == [window.summary]
+        assert window.send_button.get_parent() is window.prompt_actions
         assert window.message_area.get_children() == [window.default_editor.get_parent(), window.send_row, window.status]
-        assert window.recipient_panel.default_controls.get_parent() is window.recipient_panel
+        assert window.recipient_panel.default_controls.get_parent() is window.default_editor.get_parent()
         assert window.main_split.get_child1() is window.list_area
         assert window.workspace_split.get_child1() is window.main_split
         assert window.workspace_split.get_child2() is window.recipient_frame

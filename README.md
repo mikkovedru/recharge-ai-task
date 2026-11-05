@@ -377,7 +377,7 @@ automatic/manual plan, effective message and used/remaining allowances. Set glob
 activation limits beside the default message, then override either limit or the
 message for individual recipients. Counts persist until explicitly reset and
 cover manual sends and automatic recovery. Unconfirmed sends keep their allowance.
-See [recipient policies and status rules](docs/target-selection.md#recipient-messages-and-continuation-limits)
+See [recipient policies and allowances](docs/target-selection.md#recipient-messages-and-continuation-limits)
 for action ordering, skipped actions and counter reset behavior.
 
 Settings now live in `~/.recharge-ai-task/config.json`. On the first default
