@@ -127,7 +127,7 @@ def check():
         assert window.workspace_split.get_child2() is window.right_workspace
         assert not hasattr(window, "message_split")
         assert "message_log" not in window.window_layout.panes
-        assert window.message_area.get_children()[-1] is window.status
+        assert window.log_area.get_children()[-1] is window.status
         assert not hasattr(window, "startup_toggle")
         assert window.logo_link.get_valign() == Gtk.Align.START
         assert window.monitoring_card.get_allocated_width() < 300

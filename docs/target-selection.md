@@ -472,6 +472,15 @@ The recipient counts sit directly below the default message and **Send now** in
 the same bordered composition group. The immediate-send/paused-Goal explanation
 is in Send now's hover help, including its Ctrl+Enter shortcut.
 
+**Program log** has **Save log…** and **Clear log** buttons. Save exports the
+currently displayed, timestamped text as UTF-8, preserving multiline messages.
+Its file chooser suggests `YYYY-MM-DD_log_Recharge-AI-task.txt` using today's
+local date and asks before replacing an existing file. Cancel leaves the log
+unchanged, and write failures appear in the log. Clear empties this window's
+view; it preserves stored delivery history and allowance counts. Already-read or
+in-flight old history does not immediately repopulate the cleared view. New
+events still appear, and reopening the dashboard loads recent stored history.
+
 Counts cover both **Send now** and automatic Desktop watch recovery. They last
 until explicitly reset, across quota resets, watch restarts and app restarts.
 Confirmed messages and native Goal activations consume their respective

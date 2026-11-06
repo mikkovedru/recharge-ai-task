@@ -92,7 +92,7 @@ try:
     send_y=w.send_row.translate_coordinates(w.message_area,0,0)[1]
     log_y=w.status.translate_coordinates(w.message_area,0,0)[1]
     assert w.compose_group.get_children()[-1] is w.send_row
-    assert w.message_area.get_children()[-1] is w.status
+    assert w.log_area.get_children()[-1] is w.status
     assert log_y>send_y+w.send_row.get_allocated_height()
     assert log_y+w.status.get_allocated_height()==w.message_area.get_allocated_height()
     saved=editor.editor_size()

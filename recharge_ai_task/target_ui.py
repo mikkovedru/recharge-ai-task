@@ -51,6 +51,7 @@ class TargetPicker(Gtk.Window):
         self.runtime_busy = False
         self.activity_busy = False
         self.activity_cursor = 0
+        self.log_cleared_at = 0
         self.activity_error = ""
         self.quota_busy = False
         self.discovery_busy = False
@@ -329,7 +330,26 @@ class TargetPicker(Gtk.Window):
         self.message_area.pack_start(self.compose_frame, False, False, 0)
         box.remove(self.status)
         self.status.set_size_request(100, 36)
-        self.message_area.pack_start(self.status, True, True, 0)
+        self.log_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.log_header = Gtk.Box(spacing=6)
+        self.log_title = Gtk.Label(label="Program log", xalign=0)
+        self.log_title.set_markup("<b>Program log</b>")
+        self.log_header.pack_start(self.log_title, True, True, 0)
+        self.save_log_button = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
+        self.save_log_button.set_label("Save log…")
+        self.save_log_button.set_always_show_image(True)
+        self.save_log_button.set_tooltip_text("Save the displayed program log to a text file (Enter / Space)")
+        self.save_log_button.connect("clicked", self.save_log)
+        self.clear_log_button = Gtk.Button.new_from_icon_name("edit-clear-all-symbolic", Gtk.IconSize.BUTTON)
+        self.clear_log_button.set_label("Clear log")
+        self.clear_log_button.set_always_show_image(True)
+        self.clear_log_button.set_tooltip_text("Clear this window's log; stored delivery history and counts are retained (Enter / Space)")
+        self.clear_log_button.connect("clicked", self.clear_log)
+        for widget in (self.save_log_button, self.clear_log_button):
+            self.log_header.pack_start(widget, False, False, 0)
+        self.log_area.pack_start(self.log_header, False, False, 0)
+        self.log_area.pack_start(self.status, True, True, 0)
+        self.message_area.pack_start(self.log_area, True, True, 0)
         self.recipient_panel = RecipientPanel(self)
         prompt.pack_start(self.recipient_panel.default_controls, False, False, 0)
         self.recipient_panel.default_controls.set_valign(Gtk.Align.START)
@@ -399,7 +419,7 @@ class TargetPicker(Gtk.Window):
         # Consume spare log space first; enlarge the lower panel when necessary.
         width = max(100, self.message_area.get_allocated_width())
         summary_height = self.send_row.get_preferred_height_for_width(width)[0]
-        required = editor.editor_size()[1] + summary_height + self.status.get_preferred_height()[0] + 24
+        required = editor.editor_size()[1] + summary_height + self.log_area.get_preferred_height()[0] + 24
         if self.message_area.get_allocated_height() < required:
             extent = self.main_split.get_allocated_height()
             minimum_list = self.list_area.get_preferred_height()[0]
@@ -647,9 +667,11 @@ class TargetPicker(Gtk.Window):
                 return
             self.activity_error = ""
             for event in events:
+                self.activity_cursor = max(self.activity_cursor, event["id"])
+                if event["created"] <= self.log_cleared_at:
+                    continue
                 text, level = display_event(event)
                 self.status.write(text, level, timestamp=event["created"])
-                self.activity_cursor = event["id"]
         self._background(lambda: ActivityLog().read(self.activity_cursor), show)
 
     def _render_runtime(self):
@@ -729,6 +751,32 @@ class TargetPicker(Gtk.Window):
             self._overview_label(label, text, level, bold=bold)
         self.send_actions_label.set_text(actions)
         self.send_actions_label.set_tooltip_text(actions)
+
+    def clear_log(self, *_):
+        self.log_cleared_at = time.time()
+        self.status.clear()
+
+    def save_log(self, *_):
+        chooser = Gtk.FileChooserDialog(title="Save program log", transient_for=self, modal=True,
+            action=Gtk.FileChooserAction.SAVE)
+        chooser.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Save log", Gtk.ResponseType.ACCEPT)
+        chooser.set_default_response(Gtk.ResponseType.ACCEPT)
+        chooser.set_do_overwrite_confirmation(True)
+        chooser.set_current_name(self.status.default_filename())
+        file_filter = Gtk.FileFilter()
+        file_filter.set_name("Text files")
+        file_filter.add_pattern("*.txt")
+        chooser.add_filter(file_filter)
+        try:
+            if chooser.run() == Gtk.ResponseType.ACCEPT:
+                filename = chooser.get_filename()
+                if not filename:
+                    raise OSError("Choose a file name.")
+                self.status.save_to(filename)
+        except OSError as exc:
+            self._message("Could not save program log: " + str(exc), "error")
+        finally:
+            chooser.destroy()
 
     def toggle_watch(self, *_, ensure_started=False):
         if ensure_started and self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested") or self.runtime.get("restarting")):

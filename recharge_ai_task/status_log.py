@@ -1,5 +1,6 @@
 """A bounded, selectable, scrollable GTK message log with per-message colors."""
 from datetime import datetime
+from pathlib import Path
 
 from gi.repository import GLib, Gtk
 from .status_display import COLORS, status_colors
@@ -51,6 +52,21 @@ class StatusLog(Gtk.ScrolledWindow):
         if follow and not self._scroll_pending:
             self._scroll_pending = True
             GLib.idle_add(self._scroll_to_end)
+
+    def text(self):
+        return self.buffer.get_text(*self.buffer.get_bounds(), True)
+
+    @staticmethod
+    def default_filename():
+        return datetime.now().astimezone().strftime("%Y-%m-%d_log_Recharge-AI-task.txt")
+
+    def save_to(self, path):
+        text = self.text()
+        Path(path).write_text(text + ("\n" if text else ""), encoding="utf-8")
+
+    def clear(self):
+        self.buffer.set_text("")
+        self.latest_text, self.latest_level = "", "normal"
 
     def _scroll_to_end(self):
         self._scroll_pending = False

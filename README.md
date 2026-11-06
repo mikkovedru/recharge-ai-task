@@ -512,7 +512,9 @@ group; **Send now to N recipients** is beside the message, below its label. **Pr
 **Project path** retains the chat's working path. Both precede **Kind**.
 Old selections migrate to Prompt, or Prompt + Goal when old goal recovery was enabled.
 The recipient counts share a group with the default message and Send now;
-immediate-send details are in the button's hover help.
+immediate-send details are in the button's hover help. **Program log** includes
+**Save log…** (with a dated text-file name) and **Clear log**. Clearing the view
+preserves stored delivery history and allowances.
 Saved changes automatically restart an active watch after a short debounce.
 The previous worker finishes first, and quota-reset delivery accounting is
 preserved. Empty selections or blank Prompt drafts suspend it until valid;

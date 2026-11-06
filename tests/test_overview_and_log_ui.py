@@ -91,3 +91,77 @@ try:
         assert any(t.get_visible() and t.get_type_hint()==Gdk.WindowTypeHint.TOOLTIP for t in Gtk.Window.list_toplevels())
 finally:w.destroy()
 ''')
+
+
+def test_log_title_save_cancel_errors_and_clear_without_history_replay():
+    run_gui(r'''
+from datetime import datetime,timezone
+from pathlib import Path
+from unittest.mock import patch
+from recharge_ai_task import status_log
+from recharge_ai_task.activity import ActivityLog
+from recharge_ai_task.delivery_policy import UsageLedger
+from gi.repository import GLib
+w=make()
+try:
+    assert w.log_title.get_text()=='Program log'
+    assert w.save_log_button.get_label()=='Save log…' and w.clear_log_button.get_label()=='Clear log'
+    w.status.clear()
+    history=ActivityLog();history.record(b,'manual','prompt','sent','Unicode ✓')
+    w.poll_activity();pump(w)
+    cursor=w.activity_cursor;assert cursor>0
+    ledger=UsageLedger();attempt=ledger.reserve(b.key,'prompt',None);ledger.finish(attempt,'sent')
+    counts=ledger.snapshot();records=history.read(0)
+    w.status.write('Details 🌻\nSecond line','warning')
+    text=w.status.text();assert 'Unicode ✓' in text and 'Details 🌻\nSecond line' in text
+    output=config_dir()/'export.txt';cancelled=config_dir()/'cancelled.txt'
+    failures=[]
+    def choose(path,response):
+        def respond():
+            try:
+                chooser=next(t for t in Gtk.Window.list_toplevels() if isinstance(t,Gtk.FileChooserDialog) and t.get_visible())
+                assert chooser.get_current_name()=='2026-11-06_log_Recharge-AI-task.txt'
+                assert chooser.get_do_overwrite_confirmation()
+                chooser.set_current_folder(str(path.parent));chooser.set_current_name(path.name)
+                GLib.timeout_add(250,lambda:(chooser.response(response),False)[1])
+            except Exception as exc:
+                failures.append(str(exc));chooser.response(Gtk.ResponseType.CANCEL)
+            return False
+        GLib.timeout_add(100,respond)
+        with patch.object(status_log,'datetime') as clock:
+            clock.now.return_value=datetime(2026,11,6,12,tzinfo=timezone.utc)
+            w.save_log_button.clicked()
+        pump(w)
+        assert not failures,failures
+    choose(output,Gtk.ResponseType.ACCEPT)
+    assert output.read_text() == text+'\n'
+    choose(cancelled,Gtk.ResponseType.CANCEL)
+    assert not cancelled.exists() and w.status.text()==text
+    original=w.status.save_to
+    w.status.save_to=lambda *_:(_ for _ in ()).throw(OSError('Disk full'))
+    choose(config_dir()/'failure.txt',Gtk.ResponseType.ACCEPT)
+    w.status.save_to=original
+    assert w.status.latest_level=='error' and 'Could not save program log: Disk full' in w.status.latest_text
+    assert 'Details 🌻\nSecond line' in w.status.text()
+    if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
+        click(w.clear_log_button,w)
+    else:w.clear_log_button.clicked()
+    pump(w)
+    assert w.status.text()=='' and w.status.latest_text=='' and w.status.latest_level=='normal',w.status.text()
+    assert w.activity_cursor==cursor and ledger.snapshot()==counts and history.read(0)==records
+    w.poll_activity();pump(w);assert w.status.text()==''
+    history.record(b,'manual','prompt','sent','New event')
+    w.poll_activity();pump(w)
+    assert 'New event' in w.status.text() and 'Unicode ✓' not in w.status.text()
+    # A delivery-history batch already in flight cannot refill a cleared view.
+    history.record(b,'manual','prompt','sent','Queued before clear')
+    batch=history.read(w.activity_cursor)
+    callbacks=[];original_background=w._background
+    w._background=lambda job,done:callbacks.append(done)
+    w.poll_activity();w.clear_log_button.clicked()
+    w._background=original_background
+    callbacks[0](batch,None);pump(w)
+    assert w.status.text()=='' and w.activity_cursor==batch[-1]['id']
+    assert history.read(0)[-1]['detail']=='Queued before clear'
+finally:w.destroy()
+''')
