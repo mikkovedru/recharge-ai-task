@@ -519,5 +519,6 @@ The status ⓘ buttons show a compact green/red continuation list for automatic
 and manual actions, including the default allowance for new statuses.
 **Check quota now** (**Ctrl+Shift+R**) wakes active monitoring so early resets
 and added usable credits are checked immediately. **Ctrl+F** searches, **Ctrl+R**
-refreshes chats, **Ctrl+Enter** sends and **F1** opens status rules.
+refreshes chats and **Ctrl+Enter** sends. Focus a status ⓘ button and press
+Enter/Space for its details.
 See [status help and keyboard controls](docs/target-selection.md#status-help-and-keyboard-controls).

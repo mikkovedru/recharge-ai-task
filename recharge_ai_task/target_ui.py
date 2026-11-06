@@ -106,9 +106,6 @@ class TargetPicker(Gtk.Window):
 
         self.monitoring_card = card("Monitoring", watch_row, expand=False)
         self.monitoring_card.set_size_request(260, -1)
-        self.recipient_label = Gtk.Label(xalign=0)
-        self.recipient_label.set_line_wrap(True)
-        self.recipient_label.set_max_width_chars(30)
         check = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.next_check_label = Gtk.Label(label="Checking…", xalign=0)
         self.next_check_detail = Gtk.Label(xalign=0)
@@ -180,6 +177,9 @@ class TargetPicker(Gtk.Window):
         self.filtered = self.store.filter_new()
         self.filtered.set_visible_func(self._visible)
         self.table = Gtk.TreeView(model=self.filtered)
+        self._selection_pending = False
+        self.table.get_selection().connect("changed", self._queue_selection_sync)
+        self.table.connect("cursor-changed", self._queue_selection_sync)
         density_css = Gtk.CssProvider()
         density_css.load_from_data(b"""
             .recipient-table { -GtkTreeView-horizontal-separator: 2; -GtkTreeView-vertical-separator: 2; }
@@ -224,7 +224,7 @@ class TargetPicker(Gtk.Window):
                 info = StatusInfoButton(goal=index == 11)
                 self.status_info[index] = info
                 header.pack_start(info,False,False,0)
-                header.set_tooltip_text("Hover over ⓘ for status recovery rules; keyboard help (F1).")
+                header.set_tooltip_text("Hover over ⓘ for status recovery rules; focus the icon and press Enter for details.")
                 header.show_all()
                 column.set_widget(header)
             column.set_resizable(True)
@@ -273,7 +273,9 @@ class TargetPicker(Gtk.Window):
         self.prompt_actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.prompt_actions.set_size_request(118, -1)
         self.prompt_actions.pack_start(prompt_label, False, False, 0)
-        prompt.pack_start(self.prompt_actions, False, False, 0)
+        self.default_group = Gtk.Box(spacing=8, valign=Gtk.Align.START)
+        self.default_group.pack_start(self.prompt_actions, False, False, 0)
+        prompt.pack_start(self.default_group, True, True, 0)
         self.signal = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
         self.signal.set_tooltip_text("Used for Send message recipients. Resume goal alone does not send this message.")
         self.signal.set_left_margin(8)
@@ -287,8 +289,10 @@ class TargetPicker(Gtk.Window):
         self.prompt_scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.prompt_scroller.set_size_request(100, 36)
         self.prompt_scroller.add(self.signal)
-        self.default_editor = self.window_layout.region("default_message", ResizableEditor(self.prompt_scroller))
-        prompt.pack_start(self.default_editor, True, True, 0)
+        self.default_editor = self.window_layout.region("default_message", ResizableEditor(self.prompt_scroller, height=56))
+        if self.default_editor.editor_size()[1] == 90:
+            self.default_editor.restore_size(self.default_editor.editor_size()[0], 56)
+        self.default_group.pack_start(self.default_editor, True, True, 0)
         box.pack_start(prompt, False, False, 0)
         self.signal_buffer.connect("changed", self._preferences_changed)
         self.summary = Gtk.Label(xalign=0)
@@ -397,11 +401,6 @@ class TargetPicker(Gtk.Window):
     def _keyboard(self,_window,event):
         if event.keyval == Gdk.KEY_f and event.state & Gdk.ModifierType.CONTROL_MASK:
             self.search.grab_focus()
-            return True
-        if event.keyval == Gdk.KEY_F1:
-            column=self.table.get_cursor()[1]
-            index=11 if column is not None and column.get_title()=="Goal status" else 10
-            self.status_info[index].open()
             return True
         return False
 
@@ -523,6 +522,7 @@ class TargetPicker(Gtk.Window):
                 self.store.set(row.iter, [0, 12], [target.send_prompt, target.send_goal])
                 break
         self._preferences_changed()
+        self._main_selection_changed()
 
     def _preferences_changed(self, *_):
         self.save()
@@ -676,8 +676,6 @@ class TargetPicker(Gtk.Window):
 
     def _render_overview(self):
         count = len(self.selected)
-        self.recipient_label.set_markup(f"<b>{count} selected</b> · " +
-            ("Choose actions in the chat list." if not count else "Choose an item below to edit overrides."))
         value, detail = watch_check_summary(self.runtime, time.time())
         self.next_check_label.set_markup("<b>" + GLib.markup_escape_text(value) + "</b>")
         self.next_check_detail.set_text(detail)
@@ -909,6 +907,28 @@ class TargetPicker(Gtk.Window):
             return False
         self.refresh(automatic=True)
         return True
+
+    def _queue_selection_sync(self, *_):
+        # Finish GTK's cursor/selection update before changing editor widgets.
+        # One idle callback also coalesces the signals emitted by one key press.
+        if self._selection_pending:
+            return
+        self._selection_pending = True
+        def sync():
+            self._selection_pending = False
+            if not self.closed:
+                self._main_selection_changed()
+            return False
+        GLib.idle_add(sync)
+
+    def _main_selection_changed(self, *_):
+        if not hasattr(self, "recipient_panel") or self.recipient_panel.updating or not self.recipient_panel.rows:
+            return
+        try:
+            target = self._row_target()
+        except ValueError:
+            return
+        self.recipient_panel.select_recipient(target.key if target.key in self.selected else None)
 
     def highlight_recipient(self, key):
         """Reveal the same stable recipient identity without changing its actions."""

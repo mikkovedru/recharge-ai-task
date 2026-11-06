@@ -18,7 +18,7 @@ def status_markup(value, *, goal=False, widget=None):
         allowed = continuation_allowed(value,goal=goal,manual=manual)
         text = "✓ Continue" if allowed else "✕ Skip / unavailable"
         lines.append(f'{label}: <span foreground="{colors[0 if allowed else 1]}">{text}</span>')
-    lines.append("Message-only delivery does not use these status gates. Open ⓘ for the full list (F1).")
+    lines.append("Message-only delivery does not use these status gates. Open ⓘ for the full list.")
     return "\n".join(lines)
 
 
@@ -33,7 +33,7 @@ class StatusInfoButton(Gtk.Button):
         self.set_always_show_image(True)
         kind = "Goal" if goal else "Task"
         self.get_accessible().set_name(kind + " continuation rules")
-        self.set_tooltip_text(f"Hover for {kind.lower()} status rules; keyboard help (F1)")
+        self.set_tooltip_text(f"Hover for {kind.lower()} status rules; open details (Enter / Space)")
         self.connect("clicked",lambda *_: self.open())
         self.popover = None
         self.keyboard_open = False

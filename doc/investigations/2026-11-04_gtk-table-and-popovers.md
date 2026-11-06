@@ -44,7 +44,9 @@ Ignore inferior-child crossings and check the current pointer against both
 anchor and popup rectangles before dismissing hover-only help. A short travel
 delay bridges the space between them. Clicking the info icon, expanding an
 explanation or scrolling retains the popup until Close/Escape. Hover opening
-remains nonmodal and preserves editor focus; F1 opening provides keyboard focus.
+remains nonmodal and preserves editor focus. Keyboard activation of the focused
+info button provides popup focus. The F1 shortcut was removed on 2026-11-06;
+Enter/Space on the button remains available.
 
 ## Inherited message preview
 

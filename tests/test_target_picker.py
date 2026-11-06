@@ -77,7 +77,7 @@ def check():
         assert "42%" in window.quota_label.get_text()
         assert "Weekly" in window.quota_label.get_text() and "resets" in window.quota_label.get_text()
         assert "started at login: Yes" in window.startup_label.get_text()
-        assert window.recipient_label.get_text().startswith("0 selected")
+        assert not hasattr(window,"recipient_label")
         assert window.next_check_label.get_text() == "—"
         assert "monitoring is off" in window.next_check_detail.get_text()
         visible_titles = lambda: [c.get_title() for c in window.table.get_columns() if c.get_visible()]
@@ -119,8 +119,8 @@ def check():
         assert "Save selection" not in [button.get_label() for button in window.buttons]
         assert window.send_row.get_children() == [window.summary]
         assert window.send_button.get_parent() is window.prompt_actions
-        assert window.message_area.get_children() == [window.default_editor.get_parent(), window.send_row, window.status]
-        assert window.recipient_panel.default_controls.get_parent() is window.default_editor.get_parent()
+        assert window.message_area.get_children() == [window.default_group.get_parent(), window.send_row, window.status]
+        assert window.recipient_panel.default_controls.get_parent() is window.default_group.get_parent()
         assert window.main_split.get_child1() is window.list_area
         assert window.workspace_split.get_child1() is window.left_workspace
         assert window.workspace_split.get_child2() is window.right_workspace
@@ -221,7 +221,7 @@ def check():
             info = header.get_children()[1]
             assert isinstance(info, Gtk.Button) and info.get_can_focus()
             assert info.get_image().get_icon_name()[0] == "dialog-information-symbolic"
-            assert "F1" in info.get_tooltip_text()
+            assert "F1" not in info.get_tooltip_text() and "Enter" in info.get_tooltip_text()
             info._build()
             assert len(info.badges) == 2*(len(states)+1)
             renderer = column.get_cells()[0]
@@ -267,7 +267,7 @@ def check():
         assert len(window.filtered) == 1
         window._toggle(None, "0")
         assert list(window.selected.values()) == [replace(beta, send_prompt=True, send_goal=False)]
-        assert window.recipient_label.get_text().startswith("1 selected")
+        assert not hasattr(window,"recipient_label")
         assert window.send_button.get_label() == "Send now to 1 recipient"
         assert window.send_button.get_sensitive()
         assert not window.dirty() and not hasattr(window, "save_state")

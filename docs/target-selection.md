@@ -104,8 +104,10 @@ its natural height; dragging their divider changes that balance. Smaller windows
 retain scrolling when the editor cannot fit. This layout update resets old divider
 positions once, while keeping saved window dimensions and message editor sizes.
 Global limits sit to the right of the default message editor.
-The Send now button sits below the Default message label, aligned with the editor’s bottom. Recipient text is display-only; click an item or use
-Up/Down to select it and highlight the same chat in the main list. A search that
+The shorter default editor remains resizable. The Send now button sits below the Default message label, aligned with the editor’s bottom. Recipient text is display-only; click an item or use
+Up/Down to select it and highlight the same chat in the main list. Selecting a
+chosen chat in the main list also highlights its recipient and loads its editor,
+without moving keyboard focus. An unchosen chat has no recipient counterpart. A search that
 hides that chat clears when the recipient is selected. Re-selecting a recipient
 never sends signals. This panel shows titles and project/profile context rather
 than chat IDs; use the main list’s technical columns or Copy link / ID for those.
@@ -372,27 +374,52 @@ No test signal is sent to existing user chats.
 
 ## Recipient messages and continuation limits
 
-**Recipients & actions** lists the chosen chats/windows, their IDs, automatic and
+**Recipients & actions** lists the chosen chats/windows, automatic and
 manual action previews, used/remaining allowances and effective messages. Choose
 an entry to edit its actions, message and limits. Hover over its preview for the
 full message; the action preview’s tooltip explains current status checks. The preview
 uses the latest refresh; the sender verifies live Goal state and allowances.
+
+Each recipient has a single project-first title line and an obvious filled
+selection highlight. The full title is available on hover. Rows with no eligible
+automatic action have muted titles and previews, but remain
+selectable and editable. Each unavailable action has a highlighted explanation;
+reached limits are highlighted beside their counts. A row with an eligible
+message and an inactive Goal keeps the message visibly available. Paused Goals
+show the difference between automatic recovery and **Send now**, while an
+already active Goal says that no activation is needed. Message-only recipients
+are not made passive by task or Goal status labels.
+
+Routine ready messages and badges are hidden. Information and warning icons
+indicate actions that need context or attention; they are not delivery receipts.
+Goal-only rows have no message-preview placeholder. Hover over an issue icon
+for the full explanation, or focus it and press
+Enter/Space to open the same details. Unreadable status or allowance data is
+shown as unverified, not ready. Unconfirmed sends remain counted and have a
+warning to check the chat before retrying or resetting counts. These previews
+show eligibility when quota is usable; they do not promise a scheduled delivery.
+
 Duplicate titles stay separate because preferences and counts use the chat ID
 and Codex profile, or the window identity.
 
 The **Global limits per recipient** controls beside the default message set
-separate limits for Messages and Goal activations. Each offers two buttons:
+separate limits for **Send messages** and **Reactivate goals**. Each offers two buttons:
 **Unlimited** and its numeric limit. The pressed button is the active mode;
 click the number to select that mode and edit the value. These are defaults for each
 recipient, rather than a shared pool. Each recipient can inherit a default,
 choose its own limit, or explicitly choose Unlimited. The per-recipient controls
-use the same buttons plus **Global default**, which follows future global changes.
+use **Off**, **Global default (value)**, **Unlimited** and a numeric button.
+**Off** replaces the separate action checkbox and retains its saved limit.
+The local Global default button shows the current Unlimited/numeric value in
+parentheses and follows future global changes. Turning both actions off removes
+the recipient; reselect it in the main list to use it again.
 Zero prevents that action.
 **Use a custom message for this recipient** overrides the default, including
 multiline text. With the checkbox off, the box previews the default message in
 a passive theme-colored tint and remains read-only. Enabling the checkbox
 restores the normal editor appearance. An empty custom message is an invalid draft; it never silently
 falls back to the default. Overrides survive refresh, deselection and restarting.
+
 
 Counts cover both **Send now** and automatic Desktop watch recovery. They last
 until explicitly reset, across quota resets, watch restarts and app restarts.
@@ -445,7 +472,7 @@ failure, and chat identity, send limits and native acknowledgement still apply.
 
 ## Status help and keyboard controls
 
-Hover over ⓘ beside Task status or Goal status, or press **F1**, for a
+Hover over ⓘ beside Task status or Goal status, or focus its button and press Enter/Space, for a
 compact eligibility list. Each row shows **Automatic Goal** and **Send now Goal**
 with green **✓ Continue** or red **✕ Skip** labels. Expand a status for its meaning.
 Errors and new nonempty statuses are eligible by default; only explicit exclusions
@@ -465,7 +492,6 @@ Recipient lists and their selected overrides have visible grouping borders.
 | Ctrl+Shift+R | Check quota now and wake the active monitor |
 | Ctrl+Enter | Send the selected actions now |
 | Ctrl+, | Open Settings |
-| F1 | Open status continuation rules |
 
 **Check quota now** updates the display and requests an immediate check from a
 running monitor. It does not start an inactive watch or bypass grace or recipient

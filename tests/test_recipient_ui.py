@@ -37,7 +37,8 @@ def make():
 w=make();p=w.recipient_panel
 assert len(p.rows)==2
 for control in (p.prompt_limit,p.goal_limit):
-    assert not hasattr(control,'choice') and control.default.get_active()
+    assert not hasattr(control,'choice')
+    assert (control.default if control is p.prompt_limit else control.off).get_active()
     control.unlimited.clicked()
     assert control.value()==-1 and control.unlimited.get_active() and not control.default.get_active()
     control.limited.clicked();control.number_popover.popdown()
@@ -45,12 +46,16 @@ for control in (p.prompt_limit,p.goal_limit):
     assert control.value()==0 and control.limited.get_active() and not control.unlimited.get_active()
     control.default.clicked()
     assert control.value() is None and control.default.get_active() and not control.limited.get_active()
+    if control is p.goal_limit: control.off.clicked()
 assert w.selected[a.key].prompt_limit is None and w.selected[a.key].goal_limit is None
+p.prompt_limit.inherited_value(-1)
+assert p.prompt_limit.default.get_label()=='Global default (Unlimited)'
+p.render()
 assert not p.message.get_editable() and not p.message.get_cursor_visible()
 passive=p.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
 # Display labels allow row selection rather than accidental text selection.
 for row in p.rows.values():
-    for label in row.get_child().get_children():
+    for label in row.get_child().get_children()[0].get_children():
         assert not label.get_selectable()
         assert 'private-chat-id' not in label.get_text()
     assert 'private-chat-id' not in row.get_tooltip_text()
@@ -58,11 +63,16 @@ for row in p.rows.values():
 w.table_layout.sort('id', True)
 p.list.select_row(p.rows[b.key])
 assert w._row_target().key == b.key
+# Main-list selection also loads and highlights the same recipient.
+for target in (a,b):
+    path=next(row.path for row in w.filtered if row[4]==target.id and row[6]==target.instance)
+    w.table.set_cursor(path,w.title_column);pump(w)
+    assert p.selected_key==target.key and p.list.get_selected_row() is p.rows[target.key]
 w.search.set_text('no matching chat');w.filtered.refilter()
 assert len(w.filtered)==0
 p.list.select_row(p.rows[a.key])
 assert w.search.get_text()=='' and w._row_target().key==a.key
-assert 'private-chat-id' not in p.editor_title.get_text()
+assert not hasattr(p,'editor_title')
 # Activating an already selected item re-highlights it without sending anything.
 w.table.get_selection().unselect_all()
 p.list.emit('row-activated',p.rows[a.key])
