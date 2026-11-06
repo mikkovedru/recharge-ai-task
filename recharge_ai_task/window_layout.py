@@ -31,11 +31,11 @@ class WindowLayout:
         window.connect("map", self._mapped)
         window.connect("configure-event", self._changed)
 
-    def pane(self, key, first, second, *, horizontal=False, position=200):
+    def pane(self, key, first, second, *, horizontal=False, position=200, resize_second=True):
         pane = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL if horizontal else Gtk.Orientation.VERTICAL)
         pane.set_wide_handle(True)
         pane.pack1(first, resize=True, shrink=not horizontal)
-        pane.pack2(second, resize=True, shrink=not horizontal)
+        pane.pack2(second, resize=resize_second, shrink=not horizontal)
         self.panes[key] = pane, position
         pane.connect("notify::position", self._changed)
         return pane
@@ -59,6 +59,11 @@ class WindowLayout:
             for key, (pane, default) in reversed(list(self.panes.items())):
                 value = positions.get(key, default) if isinstance(positions, dict) else default
                 extent=pane.get_allocated_width() if pane.get_orientation()==Gtk.Orientation.HORIZONTAL else pane.get_allocated_height()
+                if value == "fit-second" and pane.get_orientation() == Gtk.Orientation.VERTICAL:
+                    first, second = pane.get_child1(), pane.get_child2()
+                    handle = max(0, extent - first.get_allocated_height() - second.get_allocated_height())
+                    natural = second.get_preferred_height_for_width(max(1, pane.get_allocated_width()))[1]
+                    value = max(first.get_preferred_height()[0], extent - natural - handle)
                 if type(value) is float and 0<value<1:
                     value=int(extent*value)
                 pane.set_position(value if type(value) is int and 0 <= value <= 10000 else 200)

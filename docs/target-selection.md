@@ -98,7 +98,12 @@ two lines, with full captions on hover; cell contents continue to wrap normally.
 Drag the wide dividers between the chat list and editors, and between the
 left workspace and recipients, to resize them. The log has no separate divider:
 it starts directly below the send summary and uses all remaining space. The message and log occupy the left half below the chat list; Recipients & actions
-uses the full right side. Global limits sit to the right of the default message editor.
+starts directly beneath the logo and startup text and extends to the bottom of
+the window. The recipient list takes spare height while the override editor keeps
+its natural height; dragging their divider changes that balance. Smaller windows
+retain scrolling when the editor cannot fit. This layout update resets old divider
+positions once, while keeping saved window dimensions and message editor sizes.
+Global limits sit to the right of the default message editor.
 The Send now button sits below the Default message label, aligned with the editor’s bottom. Recipient text is display-only; click an item or use
 Up/Down to select it and highlight the same chat in the main list. A search that
 hides that chat clears when the recipient is selected. Re-selecting a recipient

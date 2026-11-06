@@ -122,17 +122,18 @@ def check():
         assert window.message_area.get_children() == [window.default_editor.get_parent(), window.send_row, window.status]
         assert window.recipient_panel.default_controls.get_parent() is window.default_editor.get_parent()
         assert window.main_split.get_child1() is window.list_area
-        assert window.workspace_split.get_child1() is window.main_split
-        assert window.workspace_split.get_child2() is window.recipient_frame
+        assert window.workspace_split.get_child1() is window.left_workspace
+        assert window.workspace_split.get_child2() is window.right_workspace
         assert not hasattr(window, "message_split")
         assert "message_log" not in window.window_layout.panes
         assert window.message_area.get_children()[-1] is window.status
-        assert window.startup_toggle.get_parent().get_parent() is window.brand_area
+        assert window.startup_toggle.get_parent().get_parent() is window.right_workspace
         assert window.logo_link.get_valign() == Gtk.Align.START
         assert window.monitoring_card.get_allocated_width() < 300
         assert window.prompt_scroller.get_allocated_width() < window.get_size().width * .6
         assert window.status.get_allocated_width() < window.get_size().width * .6
-        assert window.recipient_frame.get_allocated_height() == window.workspace_split.get_allocated_height()
+        assert window.recipient_frame.translate_coordinates(window,0,0)[1] > window.logo_link.translate_coordinates(window,0,0)[1]
+        assert window.recipient_frame.translate_coordinates(window.right_workspace,0,0)[1]+window.recipient_frame.get_allocated_height()==window.right_workspace.get_allocated_height()
         # Narrow layouts retain the editor, send controls and log without overlap.
         window.resize(1120, 820)
         until = time.monotonic() + .2

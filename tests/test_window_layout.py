@@ -95,3 +95,61 @@ assert editor.get_allocated_width()<=430
 layout.close();w.destroy()
 '''], capture_output=True, text=True, timeout=10)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(os.environ.get('RECHARGE_AI_TASK_GUI_TESTS')!='1', reason='Requires GTK')
+def test_recipient_list_takes_spare_height_and_preserves_editor():
+    result=subprocess.run([sys.executable,'-c',r'''
+import os,subprocess,time
+from recharge_ai_task import target_ui,autostart
+from recharge_ai_task.config import AppConfig,config_dir
+from recharge_ai_task.targets import Inventory,Target
+from recharge_ai_task.quota import Quota,RateWindow
+from gi.repository import Gtk
+
+autostart.autostart_target=lambda:config_dir()/'test.desktop'
+target_ui.discover_codex=lambda _:'fixture'
+target_ui.fetch_quota=lambda _:Quota('test',RateWindow(40,300,9999999999),None,False)
+target_ui.tray_control.request=lambda *a,**kw:{'desktop_watch':False}
+target=Target('thread','fixture','Fixture',send_prompt=True,send_goal=False)
+target_ui.discover_targets=lambda:Inventory([target])
+AppConfig(desktop_targets=[target.to_dict()]).save()
+def pump(w):
+    end=time.monotonic()+.2
+    while time.monotonic()<end or w.discovery_busy or w.runtime_busy or w.quota_busy or w.activity_busy:
+        while Gtk.events_pending():Gtk.main_iteration_do(False)
+        time.sleep(.002)
+def make():
+    w=target_ui.TargetPicker(quit_on_close=False)
+    w.set_accept_focus(False);w.set_focus_on_map(False);w.show_all();pump(w)
+    return w
+w=make();p=w.recipient_panel
+def pos(widget,parent=w):return widget.translate_coordinates(parent,0,0)
+try:
+    startup=w.startup_toggle.get_parent()
+    assert pos(p)[1]<pos(w.search)[1]
+    assert pos(w.recipient_frame)[1]==pos(startup)[1]+startup.get_allocated_height()+w.right_workspace.get_spacing()
+    assert pos(w.recipient_frame)[1]+w.recipient_frame.get_allocated_height()==w.get_size().height-14
+    original=p.list_scroller.get_allocated_height();editor=p.editor_scroller.get_allocated_height()
+    w.resize(1440,1100);pump(w)
+    assert p.list_scroller.get_allocated_height()>original+100
+    assert abs(p.editor_scroller.get_allocated_height()-editor)<=3
+    for width,height in ((1400,980),(1120,820)):
+        w.resize(width,height);pump(w)
+        assert w.get_size().width<=width and w.get_size().height<=height
+        assert pos(p.message_resize,p.editor_scroller)[1]+p.message_resize.get_allocated_height()<=p.editor_scroller.get_allocated_height()
+        assert p.list_scroller.get_allocated_height()>=60
+    if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
+        before=p.split.get_position();x,y=pos(p.split);x+=20;y+=before+3
+        xid=str(w.get_window().get_xid())
+        subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y),'mousedown','1'],check=True);pump(w)
+        subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y-30)],check=True);pump(w)
+        subprocess.run(['xdotool','mouseup','1'],check=True);pump(w)
+        assert p.split.get_position()<before-20
+    saved=p.split.get_position();w.window_layout.close();w.destroy();w=make()
+    assert abs(w.recipient_panel.split.get_position()-saved)<=1
+finally:
+    w.destroy()
+'''],capture_output=True,text=True,timeout=15)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert 'CRITICAL' not in result.stderr,result.stderr

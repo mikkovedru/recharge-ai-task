@@ -171,12 +171,13 @@ class RecipientPanel(Gtk.Box):
         self.editor_scroller = Gtk.ScrolledWindow()
         self.editor_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.editor_scroller.set_size_request(250, 120)
+        self.editor_scroller.set_propagate_natural_height(True)
         self.editor_frame=Gtk.Frame()
         self.editor_frame.get_accessible().set_name("Selected recipient overrides")
         self.editor.set_border_width(6)
         self.editor_frame.add(self.editor)
         self.editor_scroller.add(self.editor_frame)
-        self.split = picker.window_layout.pane("recipient_list_editor", self.list_scroller, self.editor_scroller, position=.50)
+        self.split = picker.window_layout.pane("recipient_list_editor", self.list_scroller, self.editor_scroller, position="fit-second", resize_second=False)
         self.pack_start(self.split, True, True, 0)
 
     def _usage(self):
