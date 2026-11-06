@@ -3,6 +3,7 @@
 from math import ceil
 
 COLORS = {"success": "#137333", "warning": "#8a6200", "error": "#b3261e"}
+BORDER_COLORS = {"success": "#198038", "warning": "#e0b400", "error": "#c62828"}
 DARK_COLORS = {"success": "#73d99b", "warning": "#ffd166", "error": "#ff8a80"}
 
 
@@ -21,6 +22,17 @@ def status_colors(widget):
             color = context.get_color(0)
             dark = .2126*color.red + .7152*color.green + .0722*color.blue > .7
     return DARK_COLORS if dark else COLORS
+
+
+def overview_status_level(text):
+    """Color only the explicitly highlighted overview messages."""
+    if text.startswith("Desktop monitoring is off."):
+        return "error"
+    if text.startswith(("No send scheduled", "Updating", "Checking")):
+        return "warning"
+    if text.startswith(("Next reset forecast", "Forecast")):
+        return "success"
+    return "normal"
 
 
 def watch_check_summary(runtime, now):

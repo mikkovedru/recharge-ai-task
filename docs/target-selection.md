@@ -122,12 +122,20 @@ restart monitoring. Hovering a row also shows its full values.
 Successful automatic saves do not add a status line. Write failures remain
 visible and retry while the window is open. Changes made by another picker are
 reported without overwriting them during refresh. The **Start/Stop Desktop watch** button
-controls the tray's actual worker. Its adjacent status has a green border when
-On, a red border when Off, and a yellow border while Stopping. It updates every
+controls the tray's actual worker. The Monitoring box has a green border when
+On, a red border when Off, Waiting or in error, and a yellow border during transitions.
+The border uses the bright green/yellow/red palette of the earlier Desktop watch status. The status appears beside **Monitoring** as **On**, **Off** or
+**Reloading** (with short labels for stopping, waiting and errors). The colored
+border surrounds the whole Monitoring box; hover for details. It updates every
 two seconds. A stopping worker must finish before another starts. If the tray is absent, Start launches it.
 Closing the picker leaves the tray and active watch running.
 
 The overview has a compact **Monitoring** group and a two-column **Quota checks & recovery** group above the list.
+The quota heading and reset forecast share the top row. Both overview boxes and
+the smaller logo share Monitoring's compact height. Overview text stays on one
+line with the full value available on hover. The quota box retains its neutral
+border: only **No send scheduled**, **Updating…** and **Checking…** are yellow,
+**Desktop monitoring is off.** is red, and **Forecast** / **Next reset forecast** are green.
 The left quota column reports the next check. The right shows the expected send
 time, a live countdown and pending message/Goal counts. A forecast includes the
 configured grace period and can move earlier when quota recovers early; a
@@ -138,7 +146,7 @@ monitoring with no pending recovery, the right column shows a reset forecast
 and selected counts rather than claiming a send is scheduled. Missing or stale
 worker updates and allowance errors are displayed explicitly. Grace comes from
 the running worker, so unapplied settings cannot alter its countdown.
-Run-at-login controls sit below the logo at the top right.
+Run-at-login controls and launch-origin details are in Settings.
 **Recipients & actions** sits beside it with the actual recipient plans. Monitoring reports the tray worker, independently of each chat's task
 status. Recipients counts the selected signal destinations. Next check uses the
 worker's scheduled quota check or delivery retry, with a live countdown and the
@@ -214,14 +222,19 @@ Quota refreshes automatically every minute and can be refreshed manually; the
 countdown updates every second. A failed refresh keeps the last known values
 with their age and the error. Quota requests time out if Codex stops responding.
 
-**Run at login** reports the operating system's startup registration; **This tray
-started at login** reports whether this session came from the startup entry.
+In **Settings**, **Run the tray when I log in** controls the operating system's
+startup registration. **(This tray started at login: Yes/No)** beside the checkbox
+reports whether this session came from the startup entry.
 The entry launches the tray, without automatically starting Desktop watch.
 Startup entries include `--tray --autostart` so future launches can identify their
 origin; enabled older entries are migrated when the updated tray starts.
 
 **Settings…** opens a GTK editor for default mode, Codex CLI path and
-arguments, reset grace, polling interval, and startup registration. The tray's
+arguments, reset grace, polling interval, and startup registration. Additional
+information is a bulleted list; startup origin appears in round brackets beside
+the login checkbox. Grace buttons step by 10 seconds; polling buttons
+step by 5 seconds. Both fields also accept directly entered values.
+The tray's
 Settings menu opens this editor too. Prompt text and per-recipient signal choices remain visible
 in the main window. Saved settings and recipients automatically restart an active watch after a
 600 ms debounce. The previous worker finishes before its replacement starts;
@@ -446,6 +459,10 @@ messages is Off or its effective allowance is zero. Hover for details. When moni
 is saved and available for Send now or a future watch start. This icon confirms
 settings status, not delivery. Routine successful saves and watch restarts stay
 out of the error log; failures to save, apply or restart are still reported.
+
+The recipient counts sit directly below the default message and **Send now** in
+the same bordered composition group. The immediate-send/paused-Goal explanation
+is in Send now's hover help, including its Ctrl+Enter shortcut.
 
 Counts cover both **Send now** and automatic Desktop watch recovery. They last
 until explicitly reset, across quota resets, watch restarts and app restarts.

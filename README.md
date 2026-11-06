@@ -475,7 +475,8 @@ to the tray or restore it, preserving the current view. Right-click for the tray
 The GUI saves checkbox and multiline prompt edits automatically, and shows
 task and goal status refreshed every 15 seconds,
 live quota usage and reset countdowns,
-startup registration and launch origin, and the actual Desktop watch state.
+and the actual Desktop watch state. Startup registration and launch origin are
+available in Settings.
 Use **Start/Stop Desktop watch** and **Settings…** directly from this window.
 Each row has independent **Send message** and **Resume goal** checkboxes.
 Choices and message text save automatically for future quota recovery; editing
@@ -496,14 +497,19 @@ An independently selected Prompt still sends when the Goal action is skipped;
 a failed or unconfirmed Goal action prevents the subsequent prompt. Results for
 each recipient appear in the window. Starting watch after quota has recovered
 also recovers selected usage-limited goals, after the grace period.
-The checkbox before **Run at login** enables or disables startup directly;
-the watch button is above its **Desktop watch: On/Off** status, bordered green
-when On, red when Off, and yellow while Stopping. **Refresh** sits directly
+Settings contains the **Run the tray when I log in** checkbox and startup
+details. The short **On**, **Off** or **Reloading** status sits beside
+**Monitoring**. Its whole box has a bright green border when On, red when Off,
+Waiting or in error, and yellow during transitions. The compact quota box and
+logo match its height; the quota box keeps a neutral border with selected status
+text colors. **Refresh** sits directly
 below the list; **Copy link / ID** and **Open selected row** are on its right.
-The recipient summary and **Send now to N recipients** sit below the multiline message, with
-the send button on the far right. **Project** shows the name assigned in Codex;
+The recipient summary sits directly below the multiline message in the same
+group; **Send now to N recipients** is beside the message, below its label. **Project** shows the name assigned in Codex;
 **Project path** retains the chat's working path. Both precede **Kind**.
 Old selections migrate to Prompt, or Prompt + Goal when old goal recovery was enabled.
+The recipient counts share a group with the default message and Send now;
+immediate-send details are in the button's hover help.
 Saved changes automatically restart an active watch after a short debounce.
 The previous worker finishes first, and quota-reset delivery accounting is
 preserved. Empty selections or blank Prompt drafts suspend it until valid;

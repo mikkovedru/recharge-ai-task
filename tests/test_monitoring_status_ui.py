@@ -15,7 +15,7 @@ from recharge_ai_task import target_ui,autostart,settings_ui,tray_control
 from recharge_ai_task.config import AppConfig,config_dir
 from recharge_ai_task.targets import Target,Inventory
 from recharge_ai_task.quota import Quota,RateWindow
-from recharge_ai_task.status_display import status_colors
+from recharge_ai_task.status_display import BORDER_COLORS,status_colors
 
 autostart.autostart_target=lambda:config_dir()/'test.desktop'
 target_ui.discover_codex=lambda _:'fixture'
@@ -117,5 +117,75 @@ try:
     w.resize(1120,820);pump(w)
     assert w.get_size().width<=1120 and w.get_size().height<=820
     assert pos(p.once,p.custom_row)[0]+p.once.get_allocated_width()<=p.custom_row.get_allocated_width()
+finally:w.destroy()
+''')
+
+
+def test_monitoring_header_border_alignment_and_settings():
+    run_gui(r'''
+w=make()
+try:
+    assert not hasattr(w,'startup_label') and not hasattr(w,'startup_toggle')
+    assert w.watch_label.get_parent() is w.monitoring_heading.get_parent()
+    assert w.monitoring_card.get_allocated_height()<110
+    assert w.monitoring_card.get_allocated_height()<=w.watch_button.get_allocated_height()+w.monitoring_heading.get_allocated_height()+32
+    assert pos(w.watch_label,w)[0]>pos(w.monitoring_heading,w)[0]
+    for dark in (False,True):
+        Gtk.Settings.get_default().set_property('gtk-theme-name','Adwaita')
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w)
+        for flags,status,level in ((dict(desktop_watch=False),'Off','error'),
+                                   (dict(desktop_watch=True,watch_settings=tray_control.watch_settings(AppConfig.load())),'On','success'),
+                                   (dict(desktop_watch=True,restarting=True),'Reloading','warning'),
+                                   (dict(desktop_watch=True,watch_error='Failed to restart'),'Error','error')):
+            runtime.clear();runtime.update(flags,per_target_signals=True,recipient_policies=True,one_use_messages=True,launched_at_startup=True)
+            w.runtime=dict(runtime);w._render_runtime();pump(w)
+            assert w.watch_label.get_text()==status,(status,w.watch_label.get_text())
+            # Check actual rendered frame pixels, including its far lower edge.
+            w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface));surface.flush()
+            expected=rgba(BORDER_COLORS[level]);x,y=pos(w.monitoring_card,w)
+            for px,py in ((x,y+w.monitoring_card.get_allocated_height()//2),(x+w.monitoring_card.get_allocated_width()//2,y+w.monitoring_card.get_allocated_height()-1)):
+                offset=py*surface.get_stride()+px*4
+                blue,green,red,alpha=bytes(surface.get_data()[offset:offset+4])
+                actual=Gdk.RGBA(red/255,green/255,blue/255,alpha/255)
+                assert close_color(actual,expected),(status,dark,actual.to_string(),expected.to_string())
+        runtime.pop("watch_error",None)
+        runtime.update(desktop_watch=True,watch_settings=tray_control.watch_settings(AppConfig.load()),watch_progress=dict(phase='monitoring',updated_at=time.time(),next_check_at=time.time()+30,selected_recipients=2,selected_messages=1,selected_goals=1,expected_reset_at=time.time()+500))
+        w.runtime=dict(runtime);w._render_runtime();pump(w)
+        assert w.send_time_label.get_text().startswith('Next reset forecast:')
+        assert pos(w.quota_heading,w)[1]==pos(w.send_time_label,w)[1]
+        w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
+        surface.write_to_png('/tmp/2026-11-06_monitoring-'+('dark' if dark else 'light')+'.png')
+    dialog=settings_ui.SettingsDialog(w);pump(w)
+    try:
+        assert len(dialog.notes.get_children())==4
+        assert all(row.get_children()[0].get_text()=='•' for row in dialog.notes.get_children())
+        assert not dialog.autostart.get_active()
+        assert dialog.startup_info.get_text()=='(This tray started at login: Yes)'
+        assert dialog.startup_info.get_parent() is dialog.autostart.get_parent()
+        dialog.grace.set_value(37);dialog.poll.set_value(9)
+        if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
+            click(dialog.grace,dialog);click(dialog.poll,dialog)
+        else:
+            dialog.grace.spin(Gtk.SpinType.STEP_FORWARD,1);dialog.poll.spin(Gtk.SpinType.STEP_FORWARD,1)
+        assert dialog.grace.get_value_as_int()==47 and dialog.poll.get_value_as_int()==14
+        dialog.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*dialog.get_size());dialog.draw(cairo.Context(surface))
+        surface.write_to_png('/tmp/2026-11-06_monitoring-settings.png')
+        dialog.autostart.set_active(True)
+        original=AppConfig.save;AppConfig.save=lambda *_:(_ for _ in ()).throw(OSError('disk full'))
+        try:dialog.save_settings()
+        except OSError:pass
+        else:raise AssertionError('save unexpectedly passed')
+        AppConfig.save=original
+        assert not autostart.is_autostart_enabled() and not dialog.autostart.get_active()
+        dialog.autostart.set_active(True);dialog.save_settings()
+        assert autostart.is_autostart_enabled()
+    finally:dialog.destroy()
+    w.runtime=None
+    dialog=settings_ui.SettingsDialog(w)
+    assert 'Unknown' in dialog.startup_info.get_text()
+    dialog.destroy()
+    w.resize(1120,820);pump(w)
+    assert w.get_size().width<=1120 and w.get_size().height<=820
+    assert pos(w.quota_heading,w)[1]==pos(w.send_time_label,w)[1]
 finally:w.destroy()
 ''')

@@ -70,20 +70,20 @@ def check():
         assert not window.selected
         window.table_layout.sort("id")
         assert window.get_title() == "Recharge AI-task"
-        assert window.logo.get_pixbuf().get_width() == 128
+        assert window.logo.get_pixbuf().get_width() == 64
         assert {icon.get_width() for icon in window.get_icon_list()} == {16,24,32,48,64,128,256}
         assert not any(isinstance(child, Gtk.Label) and "Choose chats by ID" in child.get_text() for child in window.get_child().get_children())
         assert not hasattr(window, "save_state")
         assert "42%" in window.quota_label.get_text()
         assert "Weekly" in window.quota_label.get_text() and "resets" in window.quota_label.get_text()
-        assert "started at login: Yes" in window.startup_label.get_text()
+        assert not hasattr(window, "startup_label")
         assert not hasattr(window,"recipient_label")
         assert window.next_check_label.get_text() == "—"
         assert "monitoring is off" in window.next_check_detail.get_text()
         visible_titles = lambda: [c.get_title() for c in window.table.get_columns() if c.get_visible()]
         assert visible_titles() == ["Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status"]
         assert "Editing them sends nothing now" in window.selection_help.get_text()
-        assert "monitoring off" in window.summary.get_text()
+        assert "monitoring off" in window.send_button.get_tooltip_text()
         assert not window.send_button.get_sensitive()
         assert "paused goal" in window.table_layout.columns["send_goal"][0].get_widget().get_tooltip_text()
         assert not window.technical_toggle.get_active()
@@ -119,7 +119,7 @@ def check():
         assert "Save selection" not in [button.get_label() for button in window.buttons]
         assert window.send_row.get_children() == [window.summary]
         assert window.send_button.get_parent() is window.prompt_actions
-        assert window.message_area.get_children() == [window.default_group.get_parent(), window.send_row, window.status]
+        assert window.compose_group.get_children() == [window.default_group.get_parent(), window.send_row]
         assert window.recipient_panel.default_controls.get_parent() is window.default_group.get_parent()
         assert window.main_split.get_child1() is window.list_area
         assert window.workspace_split.get_child1() is window.left_workspace
@@ -127,7 +127,7 @@ def check():
         assert not hasattr(window, "message_split")
         assert "message_log" not in window.window_layout.panes
         assert window.message_area.get_children()[-1] is window.status
-        assert window.startup_toggle.get_parent().get_parent() is window.right_workspace
+        assert not hasattr(window, "startup_toggle")
         assert window.logo_link.get_valign() == Gtk.Align.START
         assert window.monitoring_card.get_allocated_width() < 300
         assert window.prompt_scroller.get_allocated_width() < window.get_size().width * .6
@@ -248,9 +248,7 @@ def check():
                 window.table.set_tooltip_cell = original_cell
                 assert value in tooltip.text and "statuses" in tooltip.text
             window.store[0][index] = original
-        assert "watch-off" in window.watch_label.get_style_context().list_classes()
-        color = window.watch_label.get_style_context().get_border_color(Gtk.StateFlags.NORMAL)
-        assert color.red > .7 and color.green < .2 and color.alpha == 1
+        assert "watch-off" in window.monitoring_card.get_style_context().list_classes()
         window.runtime = {"desktop_watch": True, "watch_settings": target_ui.tray_control.watch_settings(AppConfig.load()),
             "watch_progress": {"phase": "waiting_quota", "next_check_at": time.time()+30}}
         window.render_quota()
@@ -331,7 +329,7 @@ def check():
         idle()
         assert window.selected[beta.key].signal_actions() == (False, True)
         assert not window.dirty()
-        assert window.send_button.get_sensitive() and "monitoring off" in window.summary.get_text()
+        assert window.send_button.get_sensitive() and "monitoring off" in window.send_button.get_tooltip_text()
         window.send_button.clicked()
         assert window.status.latest_level == "success"
         idle()
@@ -362,26 +360,9 @@ def check():
         assert "Enter a message" in window.status.latest_text and window.status.latest_level == "warning"
         window.signal_buffer.set_text("Continue")
         idle()
-        # Dashboard controls precede their own status text.
-        assert window.watch_label.get_parent().get_children()[0] is window.watch_button
-        assert window.startup_label.get_parent().get_children()[0] is window.startup_toggle
-        assert not window.startup_toggle.get_active()
-        window.startup_toggle.set_active(True)
-        idle()
-        assert autostart.is_autostart_enabled() and AppConfig.load().autostart
-        assert "Run at login: Enabled" in window.startup_label.get_text()
-        assert not window.dirty()
-        window.startup_toggle.set_active(False)
-        idle()
-        assert not autostart.is_autostart_enabled() and not AppConfig.load().autostart
-        # Failed startup changes restore the checkbox to the actual OS state.
-        original_autostart = target_ui.set_autostart
-        target_ui.set_autostart = lambda _: (_ for _ in ()).throw(OSError("startup write failed"))
-        window.startup_toggle.set_active(True)
-        idle()
-        assert "startup write failed" in window.status.latest_text and window.status.latest_level == "error"
-        assert not window.startup_toggle.get_active() and not AppConfig.load().autostart
-        target_ui.set_autostart = original_autostart
+        # Monitoring status shares the heading; startup information lives in Settings.
+        assert window.watch_label.get_parent().get_children()[0] is window.monitoring_heading
+        assert not hasattr(window, "startup_toggle")
         # A failed automatic refresh must not show the last statuses as live.
         target_ui.discover_targets = lambda: (_ for _ in ()).throw(RuntimeError("disconnected"))
         window.refresh_statuses()
@@ -404,34 +385,30 @@ def check():
         assert {t.id for t in settings.targets()} == {"alpha", "beta"}
         assert "--autostart" in autostart.autostart_target().read_text()
         window._render_runtime()
-        assert "Run at login: Enabled" in window.startup_label.get_text()
+        assert autostart.is_autostart_enabled()
         idle()
         window.toggle_watch()
         idle()
-        assert "Desktop watch: On" in window.watch_label.get_text()
+        assert window.watch_label.get_text() == "On"
         assert window.watch_button.get_label() == "Stop Desktop watch"
-        assert "watch-on" in window.watch_label.get_style_context().list_classes()
-        color = window.watch_label.get_style_context().get_border_color(Gtk.StateFlags.NORMAL)
-        assert color.green > .45 and color.red < .15 and color.alpha == 1
+        assert "watch-on" in window.monitoring_card.get_style_context().list_classes()
         changed = AppConfig.load()
         changed.poll_seconds += 1
         changed.save()
         window.poll_runtime()
         idle()
-        assert "applying saved changes automatically" in window.watch_label.get_text()
+        assert window.watch_label.get_text() == "Reloading"
         runtime["stopping"] = True
         window.poll_runtime()
         idle()
         assert "Stopping" in window.watch_label.get_text()
         assert not window.watch_button.get_sensitive()
-        assert "watch-stopping" in window.watch_label.get_style_context().list_classes()
-        color = window.watch_label.get_style_context().get_border_color(Gtk.StateFlags.NORMAL)
-        assert color.red > .8 and color.green > .6 and color.blue < .1
+        assert "watch-stopping" in window.monitoring_card.get_style_context().list_classes()
         runtime["stopping"] = False
         window.toggle_watch()
         idle()
-        assert "Desktop watch: Off" in window.watch_label.get_text()
-        assert "watch-off" in window.watch_label.get_style_context().list_classes()
+        assert window.watch_label.get_text() == "Off"
+        assert "watch-off" in window.monitoring_card.get_style_context().list_classes()
         # Deselecting the last action removes that recipient on disk immediately.
         window._toggle(None, path_for("beta"), "send_goal")
         assert {t.id for t in AppConfig.load().targets()} == {"alpha"}

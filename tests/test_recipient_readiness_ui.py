@@ -93,10 +93,9 @@ try:
         subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y)],check=True);pump(w,1)
         assert any(t.get_visible() and t.get_type_hint()==Gdk.WindowTypeHint.TOOLTIP for t in Gtk.Window.list_toplevels())
         subprocess.run(['xdotool','mousemove','--window',xid,'10','10'],check=True);pump(w)
-    # Space above the panel is used only by the logo and startup text.
-    startup=w.startup_toggle.get_parent()
+    # Space above the panel is used only by the logo.
     assert pos(p)[1] < pos(w.search)[1]
-    assert pos(w.recipient_frame)[1]==pos(startup)[1]+startup.get_allocated_height()+w.right_workspace.get_spacing()
+    assert pos(w.recipient_frame)[1]==pos(w.right_workspace)[1]
     assert pos(w.recipient_frame)[1]+w.recipient_frame.get_allocated_height()==w.get_size().height-14
     list_height=p.list_scroller.get_allocated_height()
     editor_height=p.editor_scroller.get_allocated_height()

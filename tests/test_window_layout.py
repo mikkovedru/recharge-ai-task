@@ -126,9 +126,8 @@ def make():
 w=make();p=w.recipient_panel
 def pos(widget,parent=w):return widget.translate_coordinates(parent,0,0)
 try:
-    startup=w.startup_toggle.get_parent()
     assert pos(p)[1]<pos(w.search)[1]
-    assert pos(w.recipient_frame)[1]==pos(startup)[1]+startup.get_allocated_height()+w.right_workspace.get_spacing()
+    assert pos(w.recipient_frame)[1]==pos(w.right_workspace)[1]
     assert pos(w.recipient_frame)[1]+w.recipient_frame.get_allocated_height()==w.get_size().height-14
     original=p.list_scroller.get_allocated_height();editor=p.editor_scroller.get_allocated_height()
     w.resize(1440,1100);pump(w)

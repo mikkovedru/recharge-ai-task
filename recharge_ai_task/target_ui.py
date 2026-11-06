@@ -11,7 +11,7 @@ import time
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk, GLib, Gtk, Pango
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 
 from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
@@ -19,14 +19,13 @@ from .wrapping_button import WrappingButton
 from .window_layout import WindowLayout
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
-from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit, effective_limit
+from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
 from .config import AppConfig, config_path
-from .autostart import is_autostart_enabled, set_autostart
 from .quota import discover_codex, fetch_quota
 from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target, discover_targets
-from .status_display import COLORS, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
+from .status_display import BORDER_COLORS, COLORS, overview_status_level, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
 from .status_log import StatusLog
 from .status_help import StatusInfoButton, status_markup
 from .activity import target_label
@@ -46,7 +45,6 @@ class TargetPicker(Gtk.Window):
         self.targets = dict(self.selected)
         self.busy = False
         self.closed = False
-        self._updating_startup = False
         self.runtime = None
         self.runtime_busy = False
         self.activity_busy = False
@@ -70,21 +68,12 @@ class TargetPicker(Gtk.Window):
         box.set_border_width(14)
         self.add(box)
         dashboard = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        self.watch_label = Gtk.Label(label="Desktop watch: checking…", xalign=0)
-        self.watch_label.set_line_wrap(True)
-        self.watch_label.set_max_width_chars(25)
-        watch_css = Gtk.CssProvider()
-        watch_css.load_from_data(b"""
-            .watch-status { border-width: 2px; border-style: solid; border-radius: 4px; padding: 6px 8px; }
-            .watch-on { border-color: #198038; }
-            .watch-off { border-color: #c62828; }
-            .watch-stopping { border-color: #e0b400; }
-        """)
-        context = self.watch_label.get_style_context()
-        context.add_provider(watch_css, Gtk.STYLE_PROVIDER_PRIORITY_USER)
-        context.add_class("watch-status")
-        context.add_class("watch-off")
-        self.startup_label = Gtk.Label(label="Startup: checking…", xalign=0)
+        self.watch_label = Gtk.Label(label="Checking…", xalign=1)
+        self.watch_label.get_accessible().set_name("Monitoring status")
+        self.monitoring_heading = Gtk.Label(label="Monitoring", xalign=0)
+        monitoring_header = Gtk.Box(spacing=12)
+        monitoring_header.pack_start(self.monitoring_heading, True, True, 0)
+        monitoring_header.pack_end(self.watch_label, False, False, 0)
         self.quota_label = Gtk.Label(label="Quota: loading…", xalign=0, selectable=True)
         self.quota_label.set_line_wrap(True)
         controls = Gtk.Box(spacing=8)
@@ -95,50 +84,55 @@ class TargetPicker(Gtk.Window):
         watch_row.set_valign(Gtk.Align.START)
         self.watch_label.set_halign(Gtk.Align.START)
         watch_row.pack_start(self.watch_button, False, False, 0)
-        watch_row.pack_start(self.watch_label, False, False, 0)
         overview = Gtk.Box(spacing=10)
 
         def card(title, content, *, expand=True):
             frame = Gtk.Frame()
             body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=10)
-            body.pack_start(Gtk.Label(label=title, xalign=0), False, False, 0)
+            if title is not None:
+                body.pack_start(Gtk.Label(label=title, xalign=0) if isinstance(title, str) else title, False, False, 0)
             body.pack_start(content, True, True, 0)
             frame.add(body)
             overview.pack_start(frame, expand, expand, 0)
             return frame
 
-        self.monitoring_card = card("Monitoring", watch_row, expand=False)
+        self.monitoring_card = card(monitoring_header, watch_row, expand=False)
+        self.monitoring_css = Gtk.CssProvider()
+        self.monitoring_palette = None
+        self.monitoring_card.get_style_context().add_provider_for_screen(self.get_screen(), self.monitoring_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.monitoring_card.get_style_context().add_class("monitoring-card")
+        self.monitoring_card.connect("style-updated", self._recolor_monitoring)
+        self.connect("destroy", lambda *_: Gtk.StyleContext.remove_provider_for_screen(self.get_screen(), self.monitoring_css))
+        self._recolor_monitoring()
         self.monitoring_card.set_size_request(260, -1)
-        check = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.monitoring_card.set_valign(Gtk.Align.START)
         self.next_check_label = Gtk.Label(label="Checking…", xalign=0)
         self.next_check_detail = Gtk.Label(xalign=0)
         self.next_check_detail.set_line_wrap(True)
         self.next_check_detail.set_max_width_chars(32)
-        check.pack_start(self.next_check_label, False, False, 0)
-        check.pack_start(self.next_check_detail, False, False, 0)
         self.send_time_label = Gtk.Label(xalign=0)
         self.send_countdown_label = Gtk.Label(xalign=0)
         self.send_actions_label = Gtk.Label(xalign=0)
-        sending = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         for label in (self.send_time_label, self.send_countdown_label, self.send_actions_label):
             label.set_line_wrap(True)
             label.set_max_width_chars(30)
-            sending.pack_start(label, False, False, 0)
-        checks = Gtk.Box(spacing=12)
-        checks.pack_start(check, True, True, 0)
-        checks.pack_start(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), False, False, 0)
-        checks.pack_start(sending, True, True, 0)
-        self.quota_card = card("Quota checks & recovery", checks)
+        self.quota_heading = Gtk.Label(label="Quota checks & recovery", xalign=0)
+        checks = Gtk.Grid(column_spacing=12, row_spacing=1)
+        for row, (left, right) in enumerate(((self.quota_heading, self.send_time_label),
+                                           (self.next_check_label, self.send_countdown_label),
+                                           (self.next_check_detail, self.send_actions_label))):
+            for column, label in ((0, left), (2, right)):
+                label.set_line_wrap(False)
+                label.set_single_line_mode(True)
+                label.set_ellipsize(Pango.EllipsizeMode.END)
+                label.get_style_context().add_class("overview-compact")
+                label.set_valign(Gtk.Align.START)
+                label.set_hexpand(True)
+                checks.attach(label, column, row, 1, 1)
+        checks.attach(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), 1, 0, 1, 3)
+        self.quota_card = card(None, checks)
+        self.quota_card.set_valign(Gtk.Align.START)
         dashboard.pack_start(overview, False, False, 0)
-        startup_row = Gtk.Box(spacing=8)
-        self.startup_toggle = Gtk.CheckButton()
-        self.startup_toggle.set_tooltip_text("Run Recharge AI-task in the tray when you log in")
-        self.startup_toggle.connect("toggled", self.toggle_startup)
-        startup_row.pack_start(self.startup_toggle, False, False, 0)
-        startup_row.pack_start(self.startup_label, True, True, 0)
-        self.startup_label.set_line_wrap(True)
-        self.startup_label.set_max_width_chars(26)
-        self.startup_toggle.set_valign(Gtk.Align.START)
         dashboard.pack_start(self.quota_label, False, False, 0)
         self.quota_button = Gtk.Button(label="Check quota now")
         self.quota_button.connect("clicked", self.refresh_quota)
@@ -150,7 +144,8 @@ class TargetPicker(Gtk.Window):
         dashboard_row = Gtk.Box(spacing=12)
         dashboard.remove(overview)
         dashboard_row.pack_start(overview, True, True, 0)
-        self.logo = Gtk.Image.new_from_file(str(asset_path("logo-lockup.png")))
+        self.logo = Gtk.Image.new_from_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(
+            str(asset_path("logo-lockup.png")), 64, 64, True))
         self.logo.get_accessible().set_name("Recharge AI-task logo")
         self.logo_link = ProjectLogo(self.logo)
         self.logo_link.set_halign(Gtk.Align.END)
@@ -158,6 +153,9 @@ class TargetPicker(Gtk.Window):
         self.brand_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.brand_area.set_valign(Gtk.Align.START)
         self.brand_area.pack_start(self.logo_link, False, False, 0)
+        self.overview_height = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.VERTICAL)
+        for widget in (self.monitoring_card, self.quota_card, self.logo_link):
+            self.overview_height.add_widget(widget)
 
         dashboard_row.pack_end(self.brand_area, False, False, 0)
         box.pack_start(dashboard_row, False, False, 0)
@@ -304,7 +302,7 @@ class TargetPicker(Gtk.Window):
         self.send_row = Gtk.Box(spacing=8)
         self.send_row.pack_start(self.summary, True, True, 0)
         self.send_button = WrappingButton(label="Send now", valign=Gtk.Align.END)
-        self.send_button.set_tooltip_text("Apply the selected actions immediately, even when Desktop watch is off. If both are selected, Goal activation is verified before sending the message. Paused goals may resume.")
+        self.send_button.set_tooltip_text("Send now acts immediately, even with monitoring off, and may resume paused goals. If both actions are selected, Goal activation is verified before sending the message.")
         self.send_button.connect("clicked", self.send)
         self.prompt_actions.pack_end(self.send_button, False, False, 0)
         self.buttons.append(self.send_button)
@@ -318,9 +316,14 @@ class TargetPicker(Gtk.Window):
                 box.remove(widget)
             self.list_area.pack_start(widget, expand, expand, 0)
         self.message_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        for widget, expand in ((prompt, False), (self.send_row, False)):
+        self.compose_group = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin=4)
+        for widget in (prompt, self.send_row):
             box.remove(widget)
-            self.message_area.pack_start(widget, expand, expand, 0)
+            self.compose_group.pack_start(widget, False, False, 0)
+        self.compose_frame = Gtk.Frame()
+        self.compose_frame.get_accessible().set_name("Default message and Send now")
+        self.compose_frame.add(self.compose_group)
+        self.message_area.pack_start(self.compose_frame, False, False, 0)
         box.remove(self.status)
         self.status.set_size_request(100, 36)
         self.message_area.pack_start(self.status, True, True, 0)
@@ -337,8 +340,6 @@ class TargetPicker(Gtk.Window):
         self.left_workspace.pack_start(self.selection_help, False, False, 0)
         self.left_workspace.pack_start(self.main_split, True, True, 0)
         self.right_workspace = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        startup_row.set_halign(Gtk.Align.END)
-        self.right_workspace.pack_start(startup_row, False, False, 0)
         self.right_workspace.pack_start(self.recipient_frame, True, True, 0)
         self.workspace_split = self.window_layout.pane("chat_recipients", self.left_workspace, self.right_workspace, horizontal=True, position=.50)
         box.pack_start(self.workspace_split, True, True, 0)
@@ -363,7 +364,7 @@ class TargetPicker(Gtk.Window):
         for button,key,modifiers,tip in (
             (self.refresh_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK,"Refresh chats and their statuses (Ctrl+R)"),
             (self.quota_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK,"Check quota now and wake the active monitor; the grace period still applies (Ctrl+Shift+R)"),
-            (self.send_button,Gdk.KEY_Return,Gdk.ModifierType.CONTROL_MASK,"Apply the selected actions now, respecting each recipient's limits (Ctrl+Enter)"),
+            (self.send_button,Gdk.KEY_Return,Gdk.ModifierType.CONTROL_MASK,"Send now acts immediately, even with monitoring off, and may resume paused goals. If both actions are selected, Goal activation is verified first. Recipient limits still apply (Ctrl+Enter)"),
             (self.settings_button,Gdk.KEY_comma,Gdk.ModifierType.CONTROL_MASK,"Open program settings (Ctrl+,)")):
             button.add_accelerator("clicked",group,key,modifiers,Gtk.AccelFlags.VISIBLE)
             button.set_tooltip_text(tip)
@@ -395,7 +396,7 @@ class TargetPicker(Gtk.Window):
         # Consume spare log space first; enlarge the lower panel when necessary.
         width = max(100, self.message_area.get_allocated_width())
         summary_height = self.send_row.get_preferred_height_for_width(width)[0]
-        required = editor.editor_size()[1] + summary_height + self.status.get_preferred_height()[0] + 12
+        required = editor.editor_size()[1] + summary_height + self.status.get_preferred_height()[0] + 24
         if self.message_area.get_allocated_height() < required:
             extent = self.main_split.get_allocated_height()
             minimum_list = self.list_area.get_preferred_height()[0]
@@ -562,8 +563,7 @@ class TargetPicker(Gtk.Window):
         goals = sum(t.signal_actions()[1] for t in self.selected.values())
         count = len(self.selected)
         recipients = f"{count} " + ("recipient" if count == 1 else "recipients")
-        self.summary.set_text(f"{recipients} · Send message: {prompts} · Resume goal: {goals}.\n"
-            "Send now acts immediately, even with monitoring off, and may resume paused goals.")
+        self.summary.set_text(f"{recipients} · Send message: {prompts} · Resume goal: {goals}.")
         self.send_button.set_label(f"Send now to {recipients}" if count else "Send now")
         self._wrap_button_label(self.send_button)
         WrappingButton._label(self.send_button).set_max_width_chars(12)
@@ -652,27 +652,28 @@ class TargetPicker(Gtk.Window):
         stopping = runtime.get("stopping", False)
         restarting = runtime.get("restarting", False)
         requested = runtime.get("watch_requested", alive)
-        state = "Stopping…" if stopping else "Restarting…" if restarting else "On" if alive else "Off"
-        if self.runtime is None:
-            state += " — tray is not running or is unavailable"
-        elif runtime.get("watch_error"):
-            state += " — watch error (details below)"
-        elif runtime.get("watch_pause_reason"):
-            state += " — waiting for valid saved settings"
-        elif runtime.get("cli_running"):
-            state += " — CLI service is running"
-        elif alive:
-            try:
-                if runtime.get("watch_settings") != tray_control.watch_settings(AppConfig.load()):
-                    state += " — applying saved changes automatically"
-            except Exception:
-                state += " — saved settings could not be read"
-        self.watch_label.set_text("Desktop watch: " + state)
+        pending_settings = False
+        try:
+            pending_settings = alive and runtime.get("watch_settings") != tray_control.watch_settings(AppConfig.load())
+        except Exception:
+            pass
+        state = ("Error" if runtime.get("watch_error") else "Stopping" if stopping and not restarting else
+                 "Reloading" if restarting or pending_settings else "Waiting" if runtime.get("watch_pause_reason") else
+                 "CLI" if runtime.get("cli_running") else "On" if alive else "Off")
+        details = ("The tray is not running or is unavailable." if self.runtime is None else
+                   runtime.get("watch_error") or runtime.get("watch_pause_reason") or
+                   ("Applying saved monitoring settings." if restarting or pending_settings else
+                    "Stopping Desktop watch." if stopping else
+                    "Quota recovery is managed by the CLI service." if runtime.get("cli_running") else
+                    "Desktop watch is on." if alive else "Desktop watch is off."))
+        self._overview_label(self.watch_label, state, "error" if state in {"Off", "Error", "Waiting"} else "success" if state == "On" else "warning")
+        self.watch_label.set_tooltip_text(details)
+        self.monitoring_card.set_tooltip_text(details)
         self._render_overview()
-        context = self.watch_label.get_style_context()
+        context = self.monitoring_card.get_style_context()
         for name in ("watch-off", "watch-on", "watch-stopping"):
             context.remove_class(name)
-        context.add_class("watch-stopping" if stopping or restarting else "watch-on" if alive else "watch-off")
+        context.add_class("watch-off" if state in {"Off", "Error", "Waiting"} else "watch-on" if state == "On" else "watch-stopping")
         self.watch_button.set_label("Stop Desktop watch" if alive or requested else "Start Desktop watch")
         self.watch_button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic" if alive or requested else "media-playback-start-symbolic",Gtk.IconSize.BUTTON))
         self.watch_button.set_always_show_image(True)
@@ -682,49 +683,44 @@ class TargetPicker(Gtk.Window):
         if notice and notice != self._runtime_notice and hasattr(self, "status"):
             self._message(notice, "error" if runtime.get("watch_error") else "warning" if runtime.get("watch_pause_reason") else "normal")
         self._runtime_notice = notice
-        try:
-            enabled = is_autostart_enabled()
-            startup = "Enabled" if enabled else "Disabled"
-            self._updating_startup = True
-            try:
-                self.startup_toggle.set_active(enabled)
-            finally:
-                self._updating_startup = False
-        except OSError:
-            startup = "Unavailable"
-        launched = "Yes" if runtime.get("launched_at_startup") else "No" if self.runtime else "Unknown (tray unavailable)"
-        self.startup_label.set_text(f"Run at login: {startup}\nThis tray started at login: {launched}")
+
+    def _recolor_monitoring(self, *_):
+        colors = status_colors(self.monitoring_card)
+        palette = tuple(colors.values())
+        if palette == self.monitoring_palette:
+            return
+        self.monitoring_palette = palette
+        self.monitoring_css.load_from_data(f"""
+            frame.monitoring-card > border {{ border: 2px solid; border-radius: 4px; }}
+            frame.monitoring-card.watch-on > border {{ border-color: {BORDER_COLORS['success']}; }}
+            frame.monitoring-card.watch-off > border {{ border-color: {BORDER_COLORS['error']}; }}
+            frame.monitoring-card.watch-stopping > border {{ border-color: {BORDER_COLORS['warning']}; }}
+            .overview-success {{ color: {colors['success']}; }}
+            .overview-warning {{ color: {colors['warning']}; }}
+            .overview-error {{ color: {colors['error']}; }}
+            .overview-compact {{ font-size: .9em; }}
+        """.encode())
+
+    @staticmethod
+    def _overview_label(label, text, level, *, bold=False):
+        context = label.get_style_context()
+        for old in ("success", "warning", "error"):
+            context.remove_class("overview-" + old)
+        if level != "normal":
+            context.add_class("overview-" + level)
+        label.set_markup(("<b>" if bold else "") + GLib.markup_escape_text(text) + ("</b>" if bold else ""))
+        label.set_tooltip_text(text)
 
     def _render_overview(self):
-        count = len(self.selected)
         value, detail = watch_check_summary(self.runtime, time.time())
-        self.next_check_label.set_markup("<b>" + GLib.markup_escape_text(value) + "</b>")
-        self.next_check_detail.set_text(detail)
         scheduled, countdown, actions = send_schedule_summary(self.runtime, time.time(), self.config.grace_seconds)
-        self.send_time_label.set_markup("<b>" + GLib.markup_escape_text(scheduled) + "</b>")
-        self.send_countdown_label.set_text(countdown)
+        values = ((self.next_check_label, value, True), (self.next_check_detail, detail, False),
+                  (self.send_time_label, scheduled, True), (self.send_countdown_label, countdown, False))
+        for label, text, bold in values:
+            level = overview_status_level(text)
+            self._overview_label(label, text, level, bold=bold)
         self.send_actions_label.set_text(actions)
-
-    def toggle_startup(self, *_):
-        if self._updating_startup or self.busy:
-            return
-        enabled = self.startup_toggle.get_active()
-        def save():
-            previous = is_autostart_enabled()
-            config = AppConfig.load()
-            config.autostart = enabled
-            set_autostart(enabled)
-            try:
-                config.save()
-            except Exception:
-                set_autostart(previous)
-                raise
-            return config
-        def show(config):
-            self.config = config
-            self._message("Run at login enabled." if enabled else "Run at login disabled.")
-            self._background(lambda: tray_control.request("reload"), lambda *_: self.poll_runtime())
-        self._work(save, show)
+        self.send_actions_label.set_tooltip_text(actions)
 
     def toggle_watch(self, *_):
         if self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested")):
@@ -844,7 +840,6 @@ class TargetPicker(Gtk.Window):
         for button in self.buttons:
             button.set_sensitive(not active)
         self.signal.set_sensitive(not active)
-        self.startup_toggle.set_sensitive(not active)
         self.table.set_sensitive(not active)
         self.settings_button.set_sensitive(not active)
         self.recipient_panel.set_sensitive(not active)
