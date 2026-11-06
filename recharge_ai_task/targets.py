@@ -363,6 +363,10 @@ def discover_targets(provider="codex"):
     from dataclasses import replace
     from .codex_ipc import DesktopIPC
     inventory = Inventory()
+    if provider == "muse":
+        from .muse import DESKTOP_LIMITATION
+        inventory.warnings.append(DESKTOP_LIMITATION)
+        return inventory
     try:
         inventory.targets.extend(discover_windows() if provider == "codex" else discover_windows(provider))
     except Exception as exc:

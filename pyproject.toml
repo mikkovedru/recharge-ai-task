@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "recharge-ai-task"
 version = "1.0"
-description = "Auto-continue Codex and Claude Code CLI and desktop sessions after quota resets — Windows & Ubuntu x86_64"
+description = "Auto-continue Codex, Claude and Meta Muse Code after quota resets — Windows & Ubuntu x86_64"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Recharge AI-task contributors" }]
-keywords = ["codex", "openai", "claude", "anthropic", "quota", "rate-limit", "automation"]
+keywords = ["codex", "openai", "claude", "anthropic", "muse", "meta", "quota", "rate-limit", "automation"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: Microsoft :: Windows",

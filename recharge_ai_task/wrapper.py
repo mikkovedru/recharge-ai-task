@@ -1,4 +1,4 @@
-"""PTY wrapper that auto-continues Codex and Claude Code after quota resets."""
+"""PTY wrapper that auto-continues Codex, Claude and Muse Code after quota resets."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ class WrapperConfig:
     provider: str = "codex"
     claude_path: str | None = None
     claude_args: list[str] | None = None
+    muse_path: str | None = None
+    muse_args: list[str] | None = None
 
 
 def _log(message: str) -> None:
@@ -117,11 +119,62 @@ def wait_for_claude_reset(pty, stop, wake_at, watcher, grace_seconds=0, user_inp
     return False
 
 
+def wait_for_muse_recovery(pty, stop, executable, config, user_input):
+    """Require fresh, usable session AND weekly allowance, then keep the grace."""
+    from .muse import fetch_muse_quota
+    next_check = 0
+    limit_observed_at = time.time()
+    recovered_at = None
+    last_error = None
+    while not stop.is_set() and pty.isalive():
+        if user_input.is_set():
+            _log("[recharge-ai-task-cli] Manual input cancelled Muse continuation.")
+            return None
+        now = time.monotonic()
+        if now >= next_check:
+            try:
+                quota = fetch_muse_quota(executable, not_before=limit_observed_at)
+                last_error = None
+            except Exception as exc:
+                recovered_at = None
+                if str(exc) != last_error:
+                    _log(f"[recharge-ai-task-cli] {exc}")
+                last_error = str(exc)
+            else:
+                now = time.monotonic()
+                if quota_blocked(quota):
+                    recovered_at = None
+                elif recovered_at is None:
+                    recovered_at = now
+                    _log("[recharge-ai-task-cli] Muse allowance is available; starting the recovery grace period.")
+            if user_input.is_set():
+                return None
+            now = time.monotonic()
+            if recovered_at is not None and now >= recovered_at + config.grace_seconds:
+                return True
+            next_check = now + max(1, config.poll_seconds)
+            if recovered_at is not None:
+                next_check = min(next_check, recovered_at + config.grace_seconds)
+        try:
+            data = pty.read(4096)
+        except EOFError:
+            return False
+        if data:
+            sys.stdout.write(data)
+            sys.stdout.flush()
+        stop.wait(.05)
+    return False
+
+
 def run_wrapper(config: WrapperConfig) -> int:
     if config.provider == "claude":
         from .claude import discover_claude, ClaudeLimitWatcher
         codex = discover_claude(config.claude_path)
         args = config.claude_args or []
+    elif config.provider == "muse":
+        from .muse import discover_muse
+        codex = discover_muse(config.muse_path)
+        args = config.muse_args or []
     elif config.provider == "codex":
         codex = discover_codex(config.codex_path)
         args = config.codex_args or []
@@ -147,7 +200,11 @@ def run_wrapper(config: WrapperConfig) -> int:
         _log(f"[recharge-ai-task-cli] {t('cli.not_found')}")
         return 1
 
-    watcher = ClaudeLimitWatcher() if config.provider == "claude" else LimitWatcher()
+    if config.provider == "muse":
+        from .muse import MuseLimitWatcher
+        watcher = MuseLimitWatcher()
+    else:
+        watcher = ClaudeLimitWatcher() if config.provider == "claude" else LimitWatcher()
     stop = StopEvent()
     user_input = threading.Event()
     goal_resume_pending = config.goal_mode
@@ -177,6 +234,18 @@ def run_wrapper(config: WrapperConfig) -> int:
 
         parsed_reset_at, raw = detected
         user_input.clear()
+        if config.provider == "muse":
+            _log("[recharge-ai-task-cli] Muse usage limit reached; checking subscription allowance.")
+            watcher.reset()
+            try:
+                ready = wait_for_muse_recovery(pty, stop, codex, config, user_input)
+                if ready and not user_input.is_set() and not stop.is_set() and pty.isalive():
+                    _submit(pty, config.continue_prompt, config.enter_presses, config.key_delay, carriage_return=True)
+                    _log(f"[recharge-ai-task-cli] {t('cli.auto_continue_sent')}")
+            finally:
+                with limit_lock:
+                    waiting_for_reset = False
+            return
         quota_reset_at = None
         quota = None
         quota_enabled = config.provider == "codex" and looks_like_codex_cli(codex)
@@ -240,7 +309,7 @@ def run_wrapper(config: WrapperConfig) -> int:
             user_input.set()
             pty.write(data)
 
-    stdin_pty = InputProxy() if config.provider == "claude" else pty
+    stdin_pty = InputProxy() if config.provider in ("claude", "muse") else pty
     stdin_thread = threading.Thread(target=forward_stdin, args=(stdin_pty, stop), daemon=True)
     reader_thread = threading.Thread(target=reader, daemon=True)
 

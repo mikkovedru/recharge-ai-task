@@ -21,9 +21,10 @@ from .theme_ui import apply_color_theme
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
 from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
-from .config import AppConfig, config_path
+from .config import AppConfig, config_path, PROVIDER_LABELS
 from .quota import discover_codex, fetch_quota, quota_from_snapshot, quota_windows
 from .claude import fetch_claude_quota
+from .muse import fetch_muse_quota
 from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target, discover_targets
@@ -41,7 +42,7 @@ class TargetPicker(Gtk.Window):
         set_window_icon(self)
         self.set_default_size(1440, 980)
         self.config = AppConfig.load()
-        self.set_title("Recharge AI-task — " + ("Anthropic Claude" if self.config.provider == "claude" else "OpenAI Codex"))
+        self.set_title("Recharge AI-task — " + PROVIDER_LABELS[self.config.provider])
         apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
         self.preferences = {t.key: t for t in self.config.all_targets()}
@@ -721,6 +722,11 @@ class TargetPicker(Gtk.Window):
         self.watch_button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic" if alive or requested else "media-playback-start-symbolic",Gtk.IconSize.BUTTON))
         self.watch_button.set_always_show_image(True)
         self.watch_button.set_sensitive(not self.busy and not self.runtime_busy and (not stopping or restarting) and not runtime.get("cli_running", False))
+        if self.config.provider == "muse" and not (alive or requested):
+            self.watch_button.set_label("CLI service running" if runtime.get("cli_running") else "Start Muse Code CLI")
+            self.watch_button.set_tooltip_text("Open Muse Code in a terminal with automatic continuation after subscription recovery")
+        else:
+            self.watch_button.set_tooltip_text("Start or stop quota monitoring for the saved desktop recipients")
         self.send_button.set_sensitive(not self.busy and bool(self.selected))
         notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or ""
         if notice and notice != self._runtime_notice and hasattr(self, "status"):
@@ -796,6 +802,8 @@ class TargetPicker(Gtk.Window):
             return
         if self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested")):
             command = "stop-watch"
+        elif self.config.provider == "muse":
+            command = "start-cli"
         else:
             if self.dirty() and not self.save():
                 return
@@ -809,7 +817,7 @@ class TargetPicker(Gtk.Window):
             try:
                 live = tray_control.request(timeout=1)
             except OSError:
-                if command != "start-watch":
+                if command not in ("start-watch", "start-cli"):
                     raise
                 args = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, "-m", "recharge_ai_task.tray"]
                 subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -826,6 +834,8 @@ class TargetPicker(Gtk.Window):
                 raise RuntimeError("Restart the tray to use per-recipient Prompt / Goal signals; the running tray is an older version.")
             if command == "start-watch" and self.config.provider == "claude" and not live.get("claude_support"):
                 raise RuntimeError("Restart the tray to enable Anthropic Claude monitoring.")
+            if command == "start-cli" and not live.get("muse_support"):
+                raise RuntimeError("Restart the tray to enable Meta Muse Code.")
             uses_policies = self.config.prompt_limit is not None or self.config.goal_limit is not None or any(
                 t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in self.selected.values())
             if command == "start-watch" and uses_policies and not live.get("recipient_policies"):
@@ -838,7 +848,8 @@ class TargetPicker(Gtk.Window):
         def show(value):
             self.runtime = value
             self._render_runtime()
-            self._message("Desktop watch is stopping." if value.get("stopping") else "Desktop watch started." if value.get("desktop_watch") else "Desktop watch is off.")
+            self._message("Muse Code CLI launched in a terminal." if command == "start-cli" else
+                          "Desktop watch is stopping." if value.get("stopping") else "Desktop watch started." if value.get("desktop_watch") else "Desktop watch is off.")
         self._work(control, show)
 
     def _configure_quota_poll(self, seconds):
@@ -920,7 +931,12 @@ class TargetPicker(Gtk.Window):
                 self.quota_updated = time.time()
             self.render_quota()
         provider = self.config.provider
-        self._background(lambda: fetch_claude_quota() if provider == "claude" else fetch_quota(discover_codex(AppConfig.load().codex_path)), show)
+        def read_quota():
+            config = AppConfig.load()
+            if provider == "muse":
+                return fetch_muse_quota(config.muse_path)
+            return fetch_claude_quota() if provider == "claude" else fetch_quota(discover_codex(config.codex_path))
+        self._background(read_quota, show)
         return True
 
     def render_quota(self):
@@ -956,7 +972,7 @@ class TargetPicker(Gtk.Window):
     def _apply_provider_config(self, config):
         changed_provider = config.provider != self.config.provider
         self.config = config
-        self.set_title("Recharge AI-task — " + ("Anthropic Claude" if config.provider == "claude" else "OpenAI Codex"))
+        self.set_title("Recharge AI-task — " + PROVIDER_LABELS[config.provider])
         if changed_provider:
             self.preferences = {t.key: t for t in config.all_targets()}
             self.selected = {t.key: t for t in config.targets()}
@@ -1146,7 +1162,7 @@ class TargetPicker(Gtk.Window):
             self.preferences.update(self.selected)
             config.desktop_targets = [t.to_dict() for t in self.preferences.values()]
             config.continue_prompt = self._prompt_text()
-            config.mode = "desktop"
+            config.mode = "cli" if config.provider == "muse" else "desktop"
             config.save()
         except Exception as exc:
             self.autosave_error = str(exc)

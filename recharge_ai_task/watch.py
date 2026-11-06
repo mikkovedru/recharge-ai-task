@@ -63,6 +63,10 @@ def _log_status(message: str) -> None:
 
 def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int:
     stop = stop or StopEvent()
+    if config.provider == "muse":
+        from .muse import DESKTOP_LIMITATION
+        _log_status(DESKTOP_LIMITATION)
+        return 1
     if config.provider not in ("codex", "claude"):
         raise ValueError("Unknown AI provider")
     codex = discover_codex(config.codex_path) if config.provider == "codex" else None

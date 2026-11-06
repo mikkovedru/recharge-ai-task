@@ -10,7 +10,7 @@ from .config import config_dir
 
 def state_path(config):
     identity = [config.codex_path, sorted({t.instance for t in config.targets()})]
-    if config.provider != "codex":
+    if config.provider == "claude":
         from .claude import claude_home
         identity = [config.provider, str(claude_home().resolve()), identity[1]]
     key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:20]

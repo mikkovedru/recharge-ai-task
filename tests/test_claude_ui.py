@@ -53,7 +53,7 @@ try:
         assert save.get_mapped() and save.get_allocated_height()>0
         d.provider.grab_focus();pump(w)
         subprocess.run(['xdotool','windowactivate','--sync',str(d.get_window().get_xid())],check=True)
-        subprocess.run(['xdotool','key','End'],check=True);pump(w)
+        subprocess.run(['xdotool','key','Home','Down'],check=True);pump(w)
         assert d.provider.get_active_id()=='claude'
         d.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*d.get_size());d.draw(cairo.Context(surface))
         surface.write_to_png('/tmp/2026-11-06_claude-settings.png')

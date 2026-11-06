@@ -127,10 +127,11 @@ class TrayApp:
             args.extend(["--grace", str(self.config.grace_seconds)])
         if self.config.continue_prompt != "Continue":
             args.extend(["--continue", self.config.continue_prompt])
-        path = self.config.claude_path if self.config.provider == "claude" else self.config.codex_path
-        cli_args = self.config.claude_args if self.config.provider == "claude" else self.config.codex_args
+        prefix = self.config.provider
+        path = getattr(self.config, prefix + "_path")
+        cli_args = getattr(self.config, prefix + "_args")
         if path:
-            args.extend(["--claude" if self.config.provider == "claude" else "--codex", path])
+            args.extend(["--" + prefix, path])
         if cli_args:
             args.extend(["--", *cli_args])
 
@@ -286,6 +287,9 @@ class TrayApp:
                 if config.provider == "claude":
                     from .claude import fetch_claude_quota
                     quota = fetch_claude_quota()
+                elif config.provider == "muse":
+                    from .muse import fetch_muse_quota
+                    quota = fetch_muse_quota(config.muse_path)
                 else:
                     quota = fetch_quota(discover_codex(config.codex_path))
                 text = format_quota(quota)
@@ -355,14 +359,14 @@ class TrayApp:
                 enabled=lambda _: not self._is_running() and AppConfig.load().provider == "codex",
             ),
             pystray.MenuItem(
-                lambda _: "Start Claude Code" if AppConfig.load().provider == "claude" else t("tray.start_normal"),
+                lambda _: {"claude": "Start Claude Code", "muse": "Start Muse Code"}.get(AppConfig.load().provider, t("tray.start_normal")),
                 self.start_normal,
                 enabled=lambda _: not self._is_running(),
             ),
             pystray.MenuItem(
                 t("tray.start_desktop"),
                 self.start_desktop,
-                enabled=lambda _: not self._is_running(),
+                enabled=lambda _: not self._is_running() and AppConfig.load().provider != "muse",
             ),
             pystray.MenuItem(
                 t("tray.stop"),
@@ -392,7 +396,9 @@ class TrayApp:
             self._icon.visible = True
 
     def control(self, command):
-        if command == "start-watch":
+        if command == "start-cli":
+            self.start_normal()
+        elif command == "start-watch":
             if self._proc is not None and self._proc.poll() is None:
                 raise RuntimeError("Stop the CLI service before starting Desktop watch")
             config = AppConfig.load()
@@ -427,7 +433,7 @@ class TrayApp:
             self._watch_error = f"Could not read saved watch settings: {exc}"
         thread = self._watch_thread
         alive = thread is not None and thread.is_alive()
-        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True,
+        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True, "muse_support": True,
                 "restarting": self._restart_pending, "watch_requested": self._watch_requested,
                 "watch_pause_reason": self._watch_pause_reason,
                 "stopping": alive and self._watch_stop.is_set(),

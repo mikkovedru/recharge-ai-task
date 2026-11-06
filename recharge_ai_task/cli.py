@@ -9,7 +9,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from .config import AppConfig, config_path
+from .config import AppConfig, config_path, PROVIDERS
 from .configure import run_configure
 from .i18n import t
 from .quota import discover_codex, fetch_quota, format_quota
@@ -23,8 +23,9 @@ def _build_run_parser(prog: str = "recharge-ai-task-cli") -> argparse.ArgumentPa
         description=t("cli.description"),
     )
     parser.add_argument("--codex", metavar="PATH", help="Path to codex executable")
-    parser.add_argument("--provider", choices=["codex", "claude"], help="AI provider (default from settings)")
+    parser.add_argument("--provider", choices=PROVIDERS, help="AI provider (default from settings)")
     parser.add_argument("--claude", metavar="PATH", help="Path to Claude Code executable")
+    parser.add_argument("--muse", metavar="PATH", help="Path to Meta Muse Code executable")
     goal = parser.add_mutually_exclusive_group()
     goal.add_argument("--goal", dest="goal_mode", action="store_true", help="CLI: first /goal resume; desktop: native recovery of quota-stopped goals")
     goal.add_argument("--no-goal", dest="goal_mode", action="store_false", help="Use the normal continue prompt")
@@ -62,6 +63,9 @@ def _cmd_quota(codex_path: str | None, provider="codex") -> int:
         if provider == "claude":
             from .claude import fetch_claude_quota
             quota = fetch_claude_quota()
+        elif provider == "muse":
+            from .muse import fetch_muse_quota
+            quota = fetch_muse_quota(codex_path)
         else:
             quota = fetch_quota(discover_codex(codex_path))
     except Exception as exc:
@@ -74,8 +78,9 @@ def _cmd_quota(codex_path: str | None, provider="codex") -> int:
 def _cmd_configure(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="recharge-ai-task-cli configure")
     parser.add_argument("--mode", choices=["cli", "desktop"])
-    parser.add_argument("--provider", choices=["codex", "claude"])
+    parser.add_argument("--provider", choices=PROVIDERS)
     parser.add_argument("--claude", dest="claude_path", metavar="PATH")
+    parser.add_argument("--muse", dest="muse_path", metavar="PATH")
     parser.add_argument("--goal", action="store_true")
     parser.add_argument("--no-goal", action="store_true")
     parser.add_argument("--grace", type=int)
@@ -87,6 +92,11 @@ def _cmd_configure(argv: list[str]) -> int:
         overrides["provider"] = ns.provider
     if ns.claude_path:
         overrides["claude_path"] = ns.claude_path
+    if ns.muse_path:
+        overrides["muse_path"] = ns.muse_path
+    if (ns.provider or _load_user_config().provider) == "muse" and ns.mode == "desktop":
+        from .muse import DESKTOP_LIMITATION
+        parser.error(DESKTOP_LIMITATION)
     if ns.mode:
         overrides["mode"] = ns.mode
     if ns.goal:
@@ -107,7 +117,7 @@ def _cmd_watch(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="recharge-ai-task-cli watch", description=t("help.desktop_mode"))
     parser.add_argument("--desktop", action="store_true", default=True)
     parser.add_argument("--codex", metavar="PATH")
-    parser.add_argument("--provider", choices=["codex", "claude"], default=user.provider)
+    parser.add_argument("--provider", choices=PROVIDERS, default=user.provider)
     goal = parser.add_mutually_exclusive_group()
     goal.add_argument("--goal", action="store_true", dest="goal", help="Verify native recovery of quota-stopped goals for Linux chat IDs")
     goal.add_argument("--no-goal", action="store_false", dest="goal", help="Send only the normal signal text; allows window targets")
@@ -116,6 +126,10 @@ def _cmd_watch(argv: list[str]) -> int:
     parser.add_argument("--continue", dest="continue_prompt", default=None)
     ns = parser.parse_args(argv)
 
+    if ns.provider == "muse":
+        from .muse import DESKTOP_LIMITATION
+        sys.stderr.write(DESKTOP_LIMITATION + "\n")
+        return 1
     user.provider = ns.provider
     recipients = user.targets()
     if ns.goal is not None:
@@ -141,7 +155,7 @@ def _cmd_targets(argv):
     parser.add_argument("--gui", action="store_true", help="Open the multi-target picker")
     parser.add_argument("--select", action="append", metavar="ID", help="Save this target (repeat for multiple targets)")
     parser.add_argument("--clear", action="store_true", help="Clear saved selection")
-    parser.add_argument("--provider", choices=["codex", "claude"], default=_load_user_config().provider)
+    parser.add_argument("--provider", choices=PROVIDERS, default=_load_user_config().provider)
     ns = parser.parse_args(argv)
     if ns.gui:
         config = _load_user_config()
@@ -201,6 +215,8 @@ def _cmd_run(argv: list[str]) -> int:
         provider=ns.provider or user.provider,
         claude_path=ns.claude or user.claude_path,
         claude_args=_normalize_codex_args(ns.codex_args) or user.claude_args,
+        muse_path=ns.muse or user.muse_path,
+        muse_args=_normalize_codex_args(ns.codex_args) or user.muse_args,
         codex_path=ns.codex or user.codex_path,
         codex_args=_normalize_codex_args(ns.codex_args) or user.codex_args,
         continue_prompt=ns.continue_prompt or user.continue_prompt,
@@ -228,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
   tray             Start directly in the system tray without a dashboard
   targets --gui    Open the same graphical dashboard
   targets --json   List targets for the selected AI provider as JSON
-  run              Run Codex or Claude Code CLI with auto-continue
+  run              Run Codex, Claude Code or Muse Code with auto-continue
   watch            Watch quota and signal saved desktop recipients
   quota            Show current quota and reset times
   configure        Configure command-line settings
@@ -253,7 +269,7 @@ Use recharge-ai-task --tray to start only the tray."""
     user = _load_user_config()
 
     if not argv:
-        if user.mode == "desktop":
+        if user.mode == "desktop" and user.provider != "muse":
             return _cmd_watch([])
         return _cmd_run([])
 
@@ -263,9 +279,11 @@ Use recharge-ai-task --tray to start only the tray."""
     if head == "quota":
         parser = argparse.ArgumentParser(prog="recharge-ai-task-cli quota")
         parser.add_argument("--codex", metavar="PATH")
-        parser.add_argument("--provider", choices=["codex", "claude"], default=user.provider)
+        parser.add_argument("--muse", metavar="PATH")
+        parser.add_argument("--provider", choices=PROVIDERS, default=user.provider)
         ns = parser.parse_args(tail)
-        return _cmd_quota(ns.codex or user.codex_path, ns.provider)
+        path = ns.muse or user.muse_path if ns.provider == "muse" else ns.codex or user.codex_path
+        return _cmd_quota(path, ns.provider)
 
     if head == "configure":
         return _cmd_configure(tail)

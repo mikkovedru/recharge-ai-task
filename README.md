@@ -8,7 +8,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Ubuntu%20x86__64-lightgrey.svg)](#release-builds-x86_64-only)
 
-> Auto-continue Codex and Anthropic Claude after quota resets — CLI PTY wrapper and desktop watch, MIT.
+> Auto-continue Codex, Anthropic Claude and Meta Muse Code after quota resets — CLI PTY wrapper and supported desktop watch, MIT.
 
 The primary command, `recharge-ai-task`, opens the desktop app. Use
 `recharge-ai-task-cli` for terminal operation. The current project version is **1.0**.
@@ -34,6 +34,7 @@ recharge-ai-task-cli configure          # choose mode (cli/desktop) and defaults
 | **ChatGPT Codex desktop app** | `recharge-ai-task-cli watch` | Open Codex and save recipients in the GUI first |
 | **Claude Code CLI** | `recharge-ai-task-cli run --provider claude` | Uses the Claude terminal limit/reset message and configured continuation text |
 | **Claude desktop app** | `recharge-ai-task-cli watch --provider claude` | Select Claude windows in Settings and save recipients first; see [Claude setup](#anthropic-claude) |
+| **Meta Muse Code** | `recharge-ai-task-cli run --provider muse` | Checks both subscription allowances with `muse usage --json`; see [Muse setup](#meta-muse-code) |
 | **Start directly in tray** | `recharge-ai-task --tray` or `recharge-ai-task-cli tray` | Starts without opening the dashboard or starting monitoring |
 | **Check quota only** | `recharge-ai-task-cli quota` | Shows short/long window usage |
 | **No Python (Release zip)** | Run `recharge-ai-task.exe` (Win) or `recharge-ai-task` (Linux) | Two binaries: CLI and combined desktop app. Keep them together for CLI integration; Codex CLI must be installed and signed in |
@@ -48,16 +49,16 @@ recharge-ai-task-cli configure          # choose mode (cli/desktop) and defaults
 
 ## Overview
 
-Auto-continue **Codex**, **Claude Code** and their desktop windows after usage limits reset.
+Auto-continue **Codex**, **Claude Code** and **Meta Muse Code** after usage limits reset. Codex and Claude also support selected desktop recipients.
 
 When quota is exhausted, Recharge AI-task waits for recovery and the grace period, then continues selected tasks. Codex recipients have independent Prompt and Goal signals; Codex CLI Goal mode enters `/goal resume` on its first recovery. Claude recipients use the configured continuation message. See [Claude setup](#anthropic-claude) for authentication and native continuation behavior.
 
 ### Features
 
 - **Two modes**
-  - `cli` — PTY wrapper around `codex` or `claude` in the terminal
+  - `cli` — PTY wrapper around `codex`, `claude` or `muse` in the terminal
   - `desktop` — watches the selected provider's quota and signals its saved recipients
-- **Reset detection** — Codex terminal parsing plus `codex app-server`; Claude terminal reset messages or subscription usage for desktop
+- **Reset detection** — Codex terminal parsing plus `codex app-server`; Claude terminal reset messages or subscription usage for desktop; Muse Code's limit banner and official subscription-allowance command
 - **Cross-platform** — Windows and Ubuntu (x86_64); `pip install` for developers
 - **Optional tray app** — system tray on Windows & Linux (start/stop, quota, autostart)
 - **MIT licensed** — open source, release-ready
@@ -266,8 +267,9 @@ You can leave the tray running in the background — it is lightweight. Codex it
 | `--continue TEXT` | Auto-send text | `Continue` |
 | `--goal` | First send `/goal resume` | off |
 | `--codex PATH` | Codex executable | auto-detect |
-| `--provider codex/claude` | Select the AI provider | saved setting, initially `codex` |
+| `--provider codex/claude/muse` | Select the AI provider | saved setting, initially `codex` |
 | `--claude PATH` | Claude Code executable | auto-detect |
+| `--muse PATH` | Muse Code executable | auto-detect |
 
 The CLI, tray and dashboard use English. Language selectors and language
 environment variables are no longer supported. Existing language preferences
@@ -280,7 +282,7 @@ Custom prompts (including non-English text) and recipient choices are preserved.
 Yes — use `desktop` mode or tray **Start Desktop Watch**. It uses the same quota API as CLI, not Electron hooks.
 
 **Does it work with Cursor / VS Code?**  
-It wraps **Codex CLI** or **Claude Code CLI** in a terminal. IDE extensions are out of scope; run `recharge-ai-task-cli` in a terminal instead.
+It wraps **Codex CLI**, **Claude Code CLI** or **Muse Code** in a terminal. IDE extensions are out of scope; run `recharge-ai-task-cli` in a terminal instead.
 
 **What happens at quota reset?**  
 Detect availability through live checks, including manual early resets and usable additional credits, then wait the configured grace period (60 seconds by default) and send the selected actions. A forecast timestamp does not delay an observed early recovery.
@@ -318,7 +320,7 @@ pip install -e ".[all,dev]"
 pytest tests/ -v
 ```
 
-Tests cover Codex and Claude limit parsing, PTY continuation, desktop recovery,
+Tests cover Codex, Claude and Muse limit parsing, PTY continuation, desktop recovery,
 provider isolation, quota failures, recipient accounting and GTK controls.
 
 See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · [OPEN_SOURCE.md](OPEN_SOURCE.md)
@@ -326,7 +328,7 @@ See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · [OPE
 ### Requirements
 
 - Python 3.10+
-- The selected provider's CLI installed and signed in: [Codex CLI](https://github.com/openai/codex) with ChatGPT or [Claude Code](https://code.claude.com/docs/en/setup) with Claude
+- The selected provider's CLI installed and signed in: [Codex CLI](https://github.com/openai/codex) with ChatGPT, [Claude Code](https://code.claude.com/docs/en/setup) with Claude, or [Muse Code](https://dev.meta.ai/docs/muse-code) with a Meta subscription
 - Windows CLI mode: `pywinpty` (included in `[windows]` extra)
 - Linux desktop mode: `xdotool` on X11
 
@@ -337,6 +339,7 @@ See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · [OPE
 - Codex desktop quota requires local Codex CLI auth (`codex app-server` must work)
 - Claude desktop quota requires a local Claude Code subscription login and its private usage endpoint
 - Terminal limit message formats may change; Codex has a quota API fallback, while Claude CLI uses the printed reset
+- Muse continuation supports wrapped terminal sessions; consumer Muse app/browser chats have no continuation bridge in this integration
 
 ### Logs
 
@@ -356,7 +359,7 @@ Log files: `~/.recharge-ai-task/tray.log`, `~/.recharge-ai-task/wrapper.log`
 | **Repository** | [Recharge AI-task source](https://github.com/mikkovedru/recharge-ai-task) |
 | **GUI / package name** | `recharge-ai-task` (also the pip install name) |
 | **CLI command** | `recharge-ai-task-cli` |
-| **Description** | Auto-continue Codex and Claude CLI and desktop sessions after quota resets — Windows & Ubuntu x86_64, MIT |
+| **Description** | Auto-continue Codex, Claude and Meta Muse Code after quota resets — Windows & Ubuntu x86_64, MIT |
 | **License** | MIT |
 | **Topics** | `codex`, `openai`, `chatgpt`, `automation`, `quota`, `rate-limit`, `cli`, `python`, `windows`, `linux`, `tray-app` |
 
@@ -635,3 +638,75 @@ windows, conservatively waiting for every exhausted window. Enabling extra usage
 alone does not prove that funds are usable, so it does not bypass those checks.
 The configured quota polling interval applies to Claude too; increase it if
 reads are throttled. No model requests are made to check quota.
+
+## Meta Muse Code
+
+Install [Muse Code](https://dev.meta.ai/docs/muse-code) **1.4.13 or later**, then
+sign in with `muse login` using a Muse Code subscription. Meta added the
+no-model-turn allowance command in
+[1.4.13](https://dev.meta.ai/docs/muse-code/changelog). Confirm it works first:
+
+```bash
+muse usage --json
+recharge-ai-task-cli quota --provider muse
+recharge-ai-task-cli run --provider muse
+recharge-ai-task-cli run --provider muse -- resume --last
+recharge-ai-task-cli run --provider muse --muse /path/to/muse --grace 60
+# Save Muse as the default for the terminal, dashboard and tray:
+recharge-ai-task-cli configure --provider muse --mode cli
+```
+
+Discovery uses `--muse`, `MUSE_CLI_PATH`, PATH and the standard native-install
+location. Arguments after `--` go to Muse; its executable path and saved arguments
+are independent of Codex and Claude. Switching providers preserves their saved
+recipients and policies. Muse uses the configured continuation message (default
+`Continue`); a previously enabled Codex Goal setting does not inject `/goal resume`.
+Muse's own goals remain available through its native `/goal` commands.
+
+When Muse prints its native **Usage limit reached** banner, Recharge polls
+`muse usage --json` at the configured **Quota polling (seconds)** interval.
+It requires fresh availability in **both the session and weekly allowances**,
+then waits the configured grace and rechecks before submitting the message.
+An early refill is observed through those live checks. A failed check or renewed
+exhaustion restarts the grace. Typing in the terminal cancels Recharge's pending
+continuation for that limit. Leave the terminal open; a headless `muse exec` run
+that exits cannot receive a message through its terminated PTY.
+
+The schema-v1 allowance uses `usedPercent` and millisecond `resetsAtMs`, with
+`asOfMs` identifying the observation. Recharge rejects missing, malformed,
+unsupported or older-than-two-minute observations, and timestamps more than
+30 seconds in the future. A missing window never becomes a fabricated zero.
+Terminal recovery also requires an observation made after the detected limit;
+an earlier cached "available" allowance cannot trigger continuation.
+`allowance: null` with `reason: api_key` means API-key billing, not available
+subscription quota. A login failure or missing allowance keeps recovery waiting;
+run `muse login` and `muse usage --json` to diagnose it. Recharge does not read
+Meta credentials, make a model probe, or call a private Meta HTTP endpoint.
+Allowance subprocesses disable launcher auto-updates so polling cannot start an
+update on every check; the wrapped interactive Muse command retains its normal
+launcher behavior.
+
+### Muse in the dashboard and tray
+
+Choose **Settings → AI provider → Meta Muse Code**. The dashboard shows the
+subscription session and weekly allowance and offers **Start Muse Code CLI**.
+The tray has **Start Muse Code** too. These open a terminal using the same wrapper
+and saved Muse arguments. Settings keeps its mode at CLI for this provider.
+The dashboard's quota display refreshes on the configured interval; recovery in
+the running terminal performs its own checks when it encounters a limit.
+
+Consumer **Muse app/browser chats are not continuation recipients** in this
+integration. They are a separate product from Muse Code and must not inherit its
+subscription quota or Codex/Claude routing. `targets --provider muse` explains
+this limit instead of guessing a window or browser identity; `watch --provider
+muse` directs you to the wrapped terminal. Native Codex Goal recovery and desktop
+recipient policies do not apply to Muse terminal sessions.
+
+This boundary was checked against Muse Code 1.4.13 and the official
+[MSP transport documentation](https://meta-models.github.io/muse-code-sdk/next/guides/msp-wire/framing-and-caps/):
+normal interactive sessions host their runtime in-process; a new `muse serve`
+stdio process does not control an already-open terminal session. The installed
+socket host requires a separate client-credential handshake, and the local
+peer-message CLI reported `external_agent_ingress_closed`. Recharge neither
+impersonates that client nor sends peer messages as a substitute for user input.
+A supported app/browser continuation interface would be needed for that workflow.

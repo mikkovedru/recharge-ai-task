@@ -3,7 +3,7 @@
   "app.status.idle": "Idle",
   "app.status.running": "Running",
   "app.status.waiting": "Waiting for quota reset",
-  "cli.description": "Auto-continue Codex or Claude Code after usage limits reset",
+  "cli.description": "Auto-continue Codex, Claude Code or Meta Muse Code after usage limits reset",
   "cli.quota_title": "AI Quota",
   "cli.not_found": "Could not find codex executable. Install Codex CLI or pass --codex PATH.",
   "cli.running": "running",

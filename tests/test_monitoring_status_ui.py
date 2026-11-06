@@ -157,7 +157,7 @@ try:
         surface.write_to_png('/tmp/2026-11-06_monitoring-'+('dark' if dark else 'light')+'.png')
     dialog=settings_ui.SettingsDialog(w);pump(w)
     try:
-        assert len(dialog.notes.get_children())==5
+        assert len(dialog.notes.get_children())==6
         assert all(row.get_children()[0].get_text()=='•' for row in dialog.notes.get_children())
         assert not dialog.autostart.get_active()
         assert dialog.startup_info.get_text()=='(This tray started at login: Yes)'

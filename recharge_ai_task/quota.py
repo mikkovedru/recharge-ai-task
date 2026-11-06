@@ -257,7 +257,8 @@ def format_quota(quota: Quota) -> str:
         return f"{hours}h{mins}m"
 
     lines = [
-        f"Claude Quota ({quota.plan_type})" if quota.plan_type.startswith("Claude ") else t("quota.plan", plan=quota.plan_type),
+        (f"{quota.plan_type.split()[0]} Quota ({quota.plan_type})"
+         if quota.plan_type.startswith(("Claude ", "Muse ")) else t("quota.plan", plan=quota.plan_type)),
         "─" * 40,
         t(
             "quota.used",

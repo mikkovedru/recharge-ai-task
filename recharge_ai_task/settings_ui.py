@@ -5,7 +5,7 @@ import shlex
 from gi.repository import Gdk, Gtk
 
 from .autostart import is_autostart_enabled, set_autostart
-from .config import AppConfig
+from .config import AppConfig, PROVIDER_LABELS
 from .branding import set_window_icon
 from .window_layout import WindowLayout
 from .theme_ui import apply_color_theme
@@ -44,14 +44,18 @@ class SettingsDialog(Gtk.Dialog):
         self.path = Gtk.Entry(text=config.codex_path or "", placeholder_text="Auto-detect Codex CLI")
         self.args = Gtk.Entry(text=shlex.join(config.codex_args or []), placeholder_text="Optional CLI arguments")
         self.provider = Gtk.ComboBoxText()
-        self.provider.append("codex", "OpenAI Codex")
-        self.provider.append("claude", "Anthropic Claude")
+        for key, label in PROVIDER_LABELS.items():
+            self.provider.append(key, label)
         self.provider.set_active_id(config.provider)
         self.provider.set_tooltip_text("Choose whose quota and desktop recipients to monitor. Each provider keeps its recipients (Alt + Down)")
         self.claude_path = Gtk.Entry(text=config.claude_path or "", placeholder_text="Auto-detect Claude Code")
         self.claude_path.set_tooltip_text("Optional path to the Claude Code executable; desktop quota uses its subscription login")
         self.claude_args = Gtk.Entry(text=shlex.join(config.claude_args or []), placeholder_text="Optional Claude Code arguments")
         self.claude_args.set_tooltip_text("Arguments for new Claude Code terminal sessions, for example --continue")
+        self.muse_path = Gtk.Entry(text=config.muse_path or "", placeholder_text="Auto-detect Muse Code")
+        self.muse_path.set_tooltip_text("Optional path to Muse Code 1.4.13 or later; allowance checks run muse usage --json")
+        self.muse_args = Gtk.Entry(text=shlex.join(config.muse_args or []), placeholder_text="Optional Muse Code arguments")
+        self.muse_args.set_tooltip_text("Arguments for wrapped Muse terminal sessions, for example resume --last")
         self.grace = Gtk.SpinButton.new_with_range(0, 86400, 10)
         self.grace.set_value(config.grace_seconds)
         self.poll = Gtk.SpinButton.new_with_range(1, 3600, 5)
@@ -74,6 +78,7 @@ class SettingsDialog(Gtk.Dialog):
         rows = (("AI provider", self.provider), ("Default mode", self.mode),
             ("Codex CLI path", self.path), ("CLI arguments", self.args),
             ("Claude Code path", self.claude_path), ("Claude arguments", self.claude_args),
+            ("Muse Code path", self.muse_path), ("Muse arguments", self.muse_args),
             ("Reset grace (seconds)", self.grace), ("Quota polling (seconds)", self.poll), ("Color theme", self.theme))
         for index, (name, widget) in enumerate(rows):
             grid.attach(Gtk.Label(label=name, xalign=0), 0, index, 1, 1)
@@ -92,6 +97,7 @@ class SettingsDialog(Gtk.Dialog):
             "Those choices save automatically for future quota recovery; Send now acts immediately.",
             "Startup launches the tray; Desktop watch starts when the first recipient is added or you turn it on.",
             "Claude desktop uses selected windows with an empty, focused composer and a Claude Code login for the same account. Resume goal is Codex-only.",
+            "Muse Code uses a wrapped terminal and muse usage for allowance checks. App/browser recipients are unavailable; start Muse Code CLI from the dashboard or tray.",
             "Changes to an active watch apply automatically."):
             row = Gtk.Box(spacing=6)
             bullet = Gtk.Label(label="•", valign=Gtk.Align.START)
@@ -106,11 +112,16 @@ class SettingsDialog(Gtk.Dialog):
         self.error.set_line_wrap(True)
         grid.attach(self.error, 0, len(rows) + 2, 2, 1)
         def provider_changed(*_):
-            is_claude = self.provider.get_active_id() == "claude"
+            provider = self.provider.get_active_id()
             for widget in (self.path, self.args):
-                widget.set_sensitive(not is_claude)
+                widget.set_sensitive(provider == "codex")
             for widget in (self.claude_path, self.claude_args):
-                widget.set_sensitive(is_claude)
+                widget.set_sensitive(provider == "claude")
+            for widget in (self.muse_path, self.muse_args):
+                widget.set_sensitive(provider == "muse")
+            self.mode.set_sensitive(provider != "muse")
+            if provider == "muse":
+                self.mode.set_active_id("cli")
         self.provider.connect("changed", provider_changed)
         provider_changed()
         self.show_all()
@@ -133,6 +144,7 @@ class SettingsDialog(Gtk.Dialog):
     def save_settings(self):
         args = shlex.split(self.args.get_text())
         claude_args = shlex.split(self.claude_args.get_text())
+        muse_args = shlex.split(self.muse_args.get_text())
         config = AppConfig.load()
         config.mode = self.mode.get_active_id()
         config.codex_path = self.path.get_text().strip() or None
@@ -140,6 +152,8 @@ class SettingsDialog(Gtk.Dialog):
         config.provider = self.provider.get_active_id()
         config.claude_path = self.claude_path.get_text().strip() or None
         config.claude_args = claude_args or None
+        config.muse_path = self.muse_path.get_text().strip() or None
+        config.muse_args = muse_args or None
         config.grace_seconds = self.grace.get_value_as_int()
         config.poll_seconds = self.poll.get_value_as_int()
         config.autostart = self.autostart.get_active()

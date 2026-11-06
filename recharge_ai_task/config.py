@@ -13,6 +13,8 @@ from ._migration import LEGACY_CONTINUE_PROMPT, environment_value, import_settin
 from .desktop_input import DEFAULT_WINDOW_TITLES
 
 Mode = Literal["cli", "desktop"]
+PROVIDER_LABELS = {"codex": "OpenAI Codex", "claude": "Anthropic Claude", "muse": "Meta Muse Code"}
+PROVIDERS = tuple(PROVIDER_LABELS)
 
 
 def config_dir() -> Path:
@@ -49,6 +51,8 @@ class AppConfig:
     provider: str = "codex"
     claude_path: str | None = None
     claude_args: list[str] | None = None
+    muse_path: str | None = None
+    muse_args: list[str] | None = None
 
     @classmethod
     def load(cls) -> AppConfig:
@@ -76,9 +80,11 @@ class AppConfig:
             color_theme=data.get("color_theme") if data.get("color_theme") in ("dark", "light", "auto") else "auto",
             prompt_limit=data.get("prompt_limit"),
             goal_limit=data.get("goal_limit"),
-            provider=data.get("provider") if data.get("provider") in ("codex", "claude") else "codex",
+            provider=data.get("provider") if data.get("provider") in ("codex", "claude", "muse") else "codex",
             claude_path=data.get("claude_path"),
             claude_args=data.get("claude_args"),
+            muse_path=data.get("muse_path"),
+            muse_args=data.get("muse_args"),
         )
 
     def save(self) -> None:
@@ -110,4 +116,6 @@ class AppConfig:
         return result
 
     def targets(self):
+        if self.provider == "muse":
+            return []  # Muse continuation belongs to its wrapped terminal.
         return [t for t in self.all_targets() if t.provider == self.provider and any(t.signal_actions())]
