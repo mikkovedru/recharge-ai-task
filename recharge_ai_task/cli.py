@@ -184,6 +184,7 @@ def _cmd_run(argv: list[str]) -> int:
         goal_mode=user.goal_mode if ns.goal_mode is None else ns.goal_mode,
         grace_seconds=ns.grace if ns.grace is not None else user.grace_seconds,
         enter_presses=ns.enter_presses,
+        poll_seconds=user.poll_seconds,
     )
     try:
         return run_wrapper(config)

@@ -61,4 +61,29 @@ def test_terminal_wrapper_notices_early_quota_recovery(monkeypatch):
     monkeypatch.setattr(wrapper,'sleep_with_proxy',sleep)
     pty=type('Pty',(),{'isalive':lambda self:True})()
     assert wrapper.wait_for_quota_recovery(pty,StopEvent(),'codex',10060,10,initial=limited)
-    assert now[0]==125 and waits==[115,125]
+    assert now[0]==140 and waits==[130,140]
+
+
+@pytest.mark.parametrize('poll',[7,45])
+def test_terminal_recovery_uses_configured_polling_and_grace_deadline(monkeypatch,poll):
+    now=[100.0];waits=[]
+    ready=replace(snapshot(),primary=quota.RateWindow(1,300,10000))
+    monkeypatch.setattr(wrapper,'fetch_quota',lambda _:ready)
+    monkeypatch.setattr(wrapper.time,'time',lambda:now[0])
+    def sleep(pty,stop,due):
+        waits.append(due-now[0]);now[0]=due;return True
+    monkeypatch.setattr(wrapper,'sleep_with_proxy',sleep)
+    pty=type('Pty',(),{'isalive':lambda self:True})()
+    assert wrapper.wait_for_quota_recovery(pty,StopEvent(),'codex',10060,10,initial=snapshot(),poll_seconds=poll)
+    assert waits[0]==poll and all(0<value<=poll for value in waits)
+    assert now[0]==100+poll+10
+
+
+def test_cli_wrapper_receives_the_shared_polling_setting(monkeypatch):
+    from recharge_ai_task import cli
+    from recharge_ai_task.config import AppConfig
+    AppConfig(poll_seconds=7).save()
+    captured=[]
+    monkeypatch.setattr(cli,'run_wrapper',lambda config:captured.append(config) or 0)
+    assert cli.main(['run'])==0
+    assert captured[0].poll_seconds==7

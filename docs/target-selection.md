@@ -221,8 +221,14 @@ Live quota shows usage, local reset dates, and a countdown for each limit.
 The 5-hour and weekly lines are colored independently: normal theme text below
 85% used, yellow from 85%, and red at 100% or above. Color stops after `used`;
 the separator, reset date and countdown keep the theme's normal text color.
-Quota refreshes automatically every minute and can be refreshed manually; the
-countdown updates every second. A failed refresh keeps the last known values
+**Quota polling (seconds)** controls automatic quota reads in the dashboard,
+Desktop watch and CLI recovery. The refresh label uses that same configured
+interval. While Desktop watch is active, the dashboard reuses its quota snapshot
+and check time instead of issuing an independent quota request; the overview
+countdown comes from that worker's next check. Changing the setting reschedules
+the dashboard timer and restarts the active watch with the new interval. Manual
+checks can wake the worker sooner. Countdown text still updates every second. A failed refresh keeps the last known
+values
 with their age and the error. Quota requests time out if Codex stops responding.
 
 In **Settings**, **Run the tray when I log in** controls the operating system's
@@ -339,8 +345,10 @@ failure. Desktop settings and conversation drafts are not cleared.
 The watcher polls all quota windows, including the weekly allowance. A manual
 reset or newly usable credits can recover quota before the forecast reset time.
 The grace period starts at the first check that observes availability; the old
-forecast never delays an early recovery. During exhaustion, checks occur at most
-15 seconds apart (normally every 5 seconds at 100%). Both windows must recover
+forecast never delays an early recovery. Normal, exhausted and failed quota
+reads all use the configured polling interval. Grace-period checks can occur
+sooner to honor the grace deadline; there is no hidden percentage-based
+acceleration or separate 60-second retry interval. Both windows must recover
 unless the backend confirms usable additional credits. Explicit rate-limit and
 spend-control blocks still postpone delivery. Unspent reset credits alone do not
 make quota available, and the app never consumes a reset credit for you.

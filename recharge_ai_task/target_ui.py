@@ -22,7 +22,7 @@ from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
 from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
 from .config import AppConfig, config_path
-from .quota import discover_codex, fetch_quota
+from .quota import discover_codex, fetch_quota, quota_from_snapshot
 from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target, discover_targets
@@ -58,6 +58,8 @@ class TargetPicker(Gtk.Window):
         self.quota = None
         self.quota_error = ""
         self.quota_updated = None
+        self.quota_timer = None
+        self.quota_interval = max(1, self.config.poll_seconds)
         self.autosave_error = ""
         self.apply_error = ""
         self.apply_revision = 0
@@ -373,9 +375,9 @@ class TargetPicker(Gtk.Window):
         self.connect("delete-event", lambda *_: self.busy)
         self.connect("destroy", self._destroy)
         self._timers = [GLib.timeout_add_seconds(2, self.poll_runtime),
-                        GLib.timeout_add_seconds(60, self.refresh_quota),
                         GLib.timeout_add_seconds(1, self.render_quota),
                         GLib.timeout_add_seconds(15, self.refresh_statuses)]
+        self._configure_quota_poll(self.config.poll_seconds)
         self.refresh()
         self.poll_runtime()
         self.refresh_quota()
@@ -611,6 +613,9 @@ class TargetPicker(Gtk.Window):
         self.closed = True
         for timer in self._timers:
             GLib.source_remove(timer)
+        if self.quota_timer is not None:
+            GLib.source_remove(self.quota_timer)
+            self.quota_timer = None
         if self.quit_on_close:
             Gtk.main_quit()
 
@@ -641,6 +646,10 @@ class TargetPicker(Gtk.Window):
             self.runtime = value
             try:
                 saved = AppConfig.load()
+                self._configure_quota_poll(saved.poll_seconds)
+                self._adopt_watch_quota()
+                if self.quota is None and not self._uses_watch_quota():
+                    self.refresh_quota()
                 if value is not None and (not value.get("desktop_watch") and not value.get("restarting") or
                         value.get("watch_settings") == tray_control.watch_settings(saved)):
                     self.apply_error = ""
@@ -826,10 +835,55 @@ class TargetPicker(Gtk.Window):
             self._message("Desktop watch is stopping." if value.get("stopping") else "Desktop watch started." if value.get("desktop_watch") else "Desktop watch is off.")
         self._work(control, show)
 
+    def _configure_quota_poll(self, seconds):
+        interval = max(1, int(seconds))
+        if self.quota_timer is not None and self.quota_interval == interval:
+            return
+        if self.quota_timer is not None:
+            GLib.source_remove(self.quota_timer)
+        self.quota_interval = interval
+        self.quota_timer = GLib.timeout_add(interval * 1000, self._periodic_quota_refresh)
+
+    def _periodic_quota_refresh(self):
+        if self.closed:
+            return False
+        self.refresh_quota()
+        return True
+
+    def _uses_watch_quota(self):
+        return bool(self.runtime and self.runtime.get("desktop_watch") and self.runtime.get("shared_quota"))
+
+    def _adopt_watch_quota(self):
+        if not self._uses_watch_quota():
+            return
+        progress = self.runtime.get("watch_progress") or {}
+        snapshot = progress.get("quota_snapshot")
+        error = str(progress.get("quota_error") or "")
+        if snapshot is not None:
+            try:
+                self.quota = quota_from_snapshot(snapshot)
+                self.quota_updated = progress.get("checked_at") or time.time()
+            except (TypeError, ValueError, KeyError) as exc:
+                error = "Invalid monitoring quota snapshot: " + str(exc)
+        self.quota_error = error
+        if error and error != self._quota_notice:
+            self._message("Quota refresh failed: " + error, "error")
+        self._quota_notice = error
+        self.render_quota()
+
     def refresh_quota(self, *_):
         if self.closed:
             return False
-        if self.quota_busy:
+        if self.quota_busy or self.runtime is None and self.runtime_busy:
+            return True
+        if self._uses_watch_quota():
+            self._adopt_watch_quota()
+            if _:
+                def checked(value, error):
+                    if error:
+                        self._message("Could not wake quota monitoring: " + error, "warning")
+                    self.poll_runtime()
+                self._background(lambda: tray_control.request("check-quota"), checked)
             return True
         self.quota_busy = True
         self.quota_button.set_sensitive(False)
@@ -882,7 +936,7 @@ class TargetPicker(Gtk.Window):
         if self.quota.has_credits or self.quota.unlimited_credits:
             lines.append("Additional credits are available" + (" · backend still reports a limit" if self.quota.rate_limit_reached or self.quota.spend_control_reached else " · usable without waiting for the included window reset"))
         age = max(0, int(time.time() - self.quota_updated))
-        lines.append(f"Quota refreshed {age}s ago · automatic refresh every 60s" + (" · Latest refresh failed — see messages below" if self.quota_error else ""))
+        lines.append(f"Quota refreshed {age}s ago · automatic refresh every {self.quota_interval}s" + (" · Latest refresh failed — see messages below" if self.quota_error else ""))
         self.quota_label.set_markup("\n".join(lines))
         return True
 
@@ -891,6 +945,7 @@ class TargetPicker(Gtk.Window):
         config = SettingsDialog(self).edit()
         if config is not None:
             self.config = config
+            self._configure_quota_poll(config.poll_seconds)
             self._reload_saved_settings()
             self.refresh_quota()
             self._render_runtime()

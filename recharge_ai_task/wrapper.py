@@ -22,6 +22,7 @@ class WrapperConfig:
     grace_seconds: int = 60
     enter_presses: int = 1
     key_delay: float = 0.12
+    poll_seconds: int = 30
 
 
 def _log(message: str) -> None:
@@ -43,8 +44,9 @@ def _continue_prompt(config: WrapperConfig, first_goal_resume: bool) -> str:
     return config.continue_prompt
 
 
-def wait_for_quota_recovery(pty, stop, codex, fallback_at, grace_seconds, initial=None):
+def wait_for_quota_recovery(pty, stop, codex, fallback_at, grace_seconds, initial=None, poll_seconds=30):
     """Poll while proxying terminal output, including early resets/refills."""
+    interval = max(1, poll_seconds)
     recovered_at = None
     snapshot = initial
     last_error = None
@@ -58,14 +60,14 @@ def wait_for_quota_recovery(pty, stop, codex, fallback_at, grace_seconds, initia
             last_error = str(exc)
             if time.time() >= fallback_at:
                 return True
-            if not sleep_with_proxy(pty, stop, min(fallback_at, time.time() + 15)):
+            if not sleep_with_proxy(pty, stop, min(fallback_at, time.time() + interval)):
                 return False
             snapshot = None
             continue
         now = time.time()
         if quota_blocked(quota):
             recovered_at = None
-            due = now + 15
+            due = now + interval
         else:
             if recovered_at is None:
                 recovered_at = now
@@ -73,7 +75,7 @@ def wait_for_quota_recovery(pty, stop, codex, fallback_at, grace_seconds, initia
             due = recovered_at + grace_seconds
             if now >= due:
                 return True
-            due = min(due, now + 15)
+            due = min(due, now + interval)
         if not sleep_with_proxy(pty, stop, due):
             return False
         snapshot = None
@@ -165,7 +167,7 @@ def run_wrapper(config: WrapperConfig) -> int:
         watcher.reset()
 
         try:
-            ready = (wait_for_quota_recovery(pty, stop, codex, wake_at, config.grace_seconds, initial=quota)
+            ready = (wait_for_quota_recovery(pty, stop, codex, wake_at, config.grace_seconds, initial=quota, poll_seconds=config.poll_seconds)
                      if quota_enabled else sleep_with_proxy(pty, stop, wake_at))
             if not ready:
                 _log(f"[recharge-ai-task-cli] {t('cli.exited_before_continue')}")

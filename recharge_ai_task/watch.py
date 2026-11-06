@@ -13,7 +13,7 @@ from .activity import target_label
 from .target_delivery import DeliveryResult, deliver_targets, recover_target, send_signals
 from .goal_control import quota_stopped_targets
 from .i18n import t
-from .quota import discover_codex, fetch_quota, exhausted_windows, quota_blocked
+from .quota import discover_codex, fetch_quota, exhausted_windows, quota_blocked, quota_to_snapshot
 from .pty_backend import StopEvent
 
 _log = logging.getLogger("recharge-ai-task.watch")
@@ -54,16 +54,6 @@ class WatchConfig:
     checkpoint: object = None
 
 
-def _poll_interval(used_percent: float, default: int) -> int:
-    if used_percent >= 100:
-        return min(default, 5)
-    if used_percent >= 95:
-        return min(default, 10)
-    if used_percent >= 80:
-        return min(default, 20)
-    return default
-
-
 def _log_status(message: str) -> None:
     sys.stderr.write(message + "\n")
     sys.stderr.flush()
@@ -80,6 +70,9 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
     state = config.state if config.state is not None else WatchState()
     checked_at = None
     available = None
+    last_quota = None
+    quota_error = ""
+    interval = max(1, config.poll_seconds)
 
     def remaining_target(target):
         done = state.completed_actions.get(target.key, [])
@@ -128,7 +121,8 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                 "pending_cycle": state.pending, "pending_recipients": recipients,
                 "pending_messages": messages, "pending_goals": goals,
                 "selected_recipients": selected_recipients, "selected_messages": selected_messages,
-                "selected_goals": selected_goals, "count_error": error}
+                "selected_goals": selected_goals, "count_error": error, "poll_seconds": interval,
+                "quota_snapshot": quota_to_snapshot(last_quota) if last_quota is not None else None, "quota_error": quota_error}
 
     def wait(seconds, phase):
         state.progress = observation(phase, time.time() + seconds)
@@ -143,10 +137,13 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
             quota = fetch_quota(codex)
         except Exception as exc:
             available = None
+            quota_error = str(exc)
             _log_status(t("cli.quota_fallback_failed", error=exc))
-            wait(60, "quota_unavailable")
+            wait(interval, "quota_unavailable")
             continue
 
+        last_quota = quota
+        quota_error = ""
         checked_at = time.time()
 
         exhausted = exhausted_windows(quota)
@@ -209,7 +206,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                 state.recovered_at = None
                 state.wake_at = 0
             _log_status("Quota is unavailable; polling for recovery, including early resets and added credits.")
-            wait(max(1, min(15, _poll_interval(used, config.poll_seconds))), "waiting_quota")
+            wait(interval, "waiting_quota")
             continue
 
         state.repeated_block.clear()
@@ -237,12 +234,12 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
 
         if not state.pending:
             _log_status(t("watch.polling", percent=used))
-            wait(_poll_interval(used, config.poll_seconds), "monitoring")
+            wait(interval, "monitoring")
             continue
 
         remaining = state.wake_at - time.time()
         if remaining > 0:
-            wait(min(15, remaining), "grace_period")
+            wait(min(interval, remaining), "grace_period")
             continue
 
         state.progress = observation("delivering")
@@ -279,6 +276,6 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         state.pending = any(target.key not in state.delivered for target in targets)
         if not state.pending:
             state.expected_reset_at = min((w.resets_at for w in windows if w.resets_at > checked_at), default=None)
-        wait(30, "retry_pending" if state.pending else "monitoring")
+        wait(interval, "retry_pending" if state.pending else "monitoring")
 
     return 0

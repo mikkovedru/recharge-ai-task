@@ -42,6 +42,28 @@ class Quota:
         return windows[0] if windows else None
 
 
+def quota_to_snapshot(quota):
+    """Publish quota values without coupling delivery to a concrete result type."""
+    def window(value):
+        return {"used_percent": value.used_percent, "window_duration_mins": value.window_duration_mins,
+                "resets_at": value.resets_at}
+    result = {"plan_type": getattr(quota, "plan_type", "unknown"), "primary": window(quota.primary),
+              "secondary": window(quota.secondary) if quota.secondary else None}
+    for key in ("rate_limit_reached", "has_credits", "unlimited_credits", "spend_control_reached"):
+        result[key] = bool(getattr(quota, key, False))
+    return result
+
+
+def quota_from_snapshot(value):
+    """Restore the worker's last successful quota observation for the dashboard."""
+    def window(item):
+        return RateWindow(float(item["used_percent"]), int(item["window_duration_mins"]), int(item["resets_at"]))
+    return Quota(str(value["plan_type"]), window(value["primary"]),
+                 window(value["secondary"]) if value.get("secondary") else None,
+                 bool(value.get("rate_limit_reached")), bool(value.get("has_credits")),
+                 bool(value.get("unlimited_credits")), bool(value.get("spend_control_reached")))
+
+
 def exhausted_windows(quota):
     # Positive extra-credit information can make a full included allowance
     # usable. Explicit backend or spend-control blocks always take precedence.

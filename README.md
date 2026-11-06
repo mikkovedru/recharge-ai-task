@@ -129,7 +129,7 @@ Config file: `~/.recharge-ai-task/config.json`
 | `grace_seconds` | Extra wait after reset (default `60`) |
 | `continue_prompt` | Text to send (default `Continue`) |
 | `desktop_targets` | Saved chat/window recipient identities |
-| `poll_seconds` | Quota polling interval |
+| `poll_seconds` | Shared quota polling interval for the dashboard, Desktop watch and CLI recovery |
 | `autostart` | Startup preference; the GUI also checks the OS registration |
 
 #### 3. Run
@@ -511,6 +511,9 @@ The recipient summary sits directly below the multiline message in the same
 group; **Send now to N recipients** is beside the message, below its label. **Project** shows the name assigned in Codex;
 **Project path** retains the chat's working path. Both precede **Kind**.
 Old selections migrate to Prompt, or Prompt + Goal when old goal recovery was enabled.
+Settings' **Quota polling (seconds)** controls all regular quota reads and retry
+checks. An active dashboard reuses the watch's quota snapshot and schedule. There
+is no independent 60-second refresh or hidden adaptive polling interval.
 The recipient counts share a group with the default message and Send now;
 immediate-send details are in the button's hover help. **Program log** includes
 **Save log…** (with a dated text-file name) and **Clear log**. Clearing the view

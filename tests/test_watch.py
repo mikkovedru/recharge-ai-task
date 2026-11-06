@@ -13,7 +13,7 @@ BLOCKED = Quota("test", RateWindow(100, 300, 100), None, True)
 AVAILABLE = replace(BLOCKED, primary=RateWindow(0, 300, 200), rate_limit_reached=False)
 
 
-def run_snapshots(monkeypatch, snapshots, *, selected=(A,), grace=0, outcomes=(), goal=False, recovery_calls=None, state=None):
+def run_snapshots(monkeypatch, snapshots, *, selected=(A,), grace=0, outcomes=(), goal=False, recovery_calls=None, state=None, poll=30):
     sequence = iter(snapshots)
     quota = [snapshots[-1]]
     now = [100.0]
@@ -44,7 +44,7 @@ def run_snapshots(monkeypatch, snapshots, *, selected=(A,), grace=0, outcomes=()
     monkeypatch.setattr(watch, "recover_target", recover)
     monkeypatch.setattr(watch, "quota_stopped_targets", lambda _, **kwargs: (set(), []))
     monkeypatch.setattr(watch.time, "time", lambda: now[0])
-    config = watch.WatchConfig(desktop_targets=selected, grace_seconds=grace, goal_mode=goal, state=state)
+    config = watch.WatchConfig(desktop_targets=selected, grace_seconds=grace, goal_mode=goal, state=state, poll_seconds=poll)
     assert watch.run_desktop_watch(config, Stop()) == 0
     return sent, waits
 
@@ -77,8 +77,8 @@ def test_weekly_limit_must_also_reset(monkeypatch):
     both = replace(BLOCKED, secondary=RateWindow(100, 10080, 160))
     weekly = replace(AVAILABLE, secondary=both.secondary, rate_limit_reached=True)
     sent, waits = run_snapshots(monkeypatch, [both, weekly, AVAILABLE, AVAILABLE], grace=10)
-    assert waits[0] == waits[1] == 5
-    assert len(sent) == 1 and sent[0][2] == 120
+    assert waits[0] == waits[1] == 30
+    assert len(sent) == 1 and sent[0][2] == 170
 
 
 def test_failed_target_retries_after_quota_becomes_available(monkeypatch):
@@ -95,7 +95,7 @@ def test_uncertain_target_is_not_repeated_after_reset(monkeypatch):
 
 def test_quota_error_at_reset_does_not_send(monkeypatch):
     sent, _ = run_snapshots(monkeypatch, [BLOCKED, RuntimeError("offline"), AVAILABLE])
-    assert len(sent) == 1 and sent[0][2] >= 165
+    assert len(sent) == 1 and sent[0][2] == 160
 
 
 def test_new_reset_sends_once_again(monkeypatch):
@@ -107,7 +107,7 @@ def test_new_reset_sends_once_again(monkeypatch):
 
 def test_grace_period_is_retained_after_api_recovers(monkeypatch):
     sent, _ = run_snapshots(monkeypatch, [BLOCKED] + [AVAILABLE] * 8, grace=90)
-    assert len(sent) == 1 and sent[0][2] == 195
+    assert len(sent) == 1 and sent[0][2] == 220
 
 
 def test_available_quota_without_observed_block_does_not_send(monkeypatch):
@@ -117,7 +117,7 @@ def test_available_quota_without_observed_block_does_not_send(monkeypatch):
 
 def test_limit_flag_without_full_window_blocks_delivery(monkeypatch):
     sent, _ = run_snapshots(monkeypatch, [BLOCKED, replace(AVAILABLE, rate_limit_reached=True), AVAILABLE])
-    assert len(sent) == 1 and sent[0][2] == 120
+    assert len(sent) == 1 and sent[0][2] == 160
 
 
 def test_partial_stale_snapshot_does_not_rearm_completed_reset(monkeypatch):
@@ -190,14 +190,14 @@ def test_early_reset_uses_observed_recovery_not_old_forecast(monkeypatch, grace)
     blocked = replace(BLOCKED, primary=RateWindow(100,300,10000))
     available = replace(blocked,primary=RateWindow(1,300,10000),rate_limit_reached=False)
     sent, waits = run_snapshots(monkeypatch,[blocked,available,available,available],grace=grace)
-    assert len(sent)==1 and sent[0][2]==105+grace
-    assert waits[0]==5
+    assert len(sent)==1 and sent[0][2]==130+grace
+    assert waits[0]==30
 
 
 def test_added_credits_allow_recovery_with_full_included_window(monkeypatch):
     ready=replace(BLOCKED,primary=RateWindow(100,300,10000),rate_limit_reached=False,has_credits=True)
     sent,_=run_snapshots(monkeypatch,[replace(ready,has_credits=False,rate_limit_reached=True),ready,ready])
-    assert len(sent)==1 and sent[0][2]==105
+    assert len(sent)==1 and sent[0][2]==130
 
 
 def test_flag_only_limit_arms_message_recovery(monkeypatch):
@@ -219,8 +219,8 @@ def test_reexhaustion_during_grace_restarts_grace_from_latest_recovery(monkeypat
     ready=replace(blocked,primary=RateWindow(1,300,10000),rate_limit_reached=False)
     state=watch.WatchState()
     sent,_=run_snapshots(monkeypatch,[blocked,ready,blocked,ready,ready],grace=10,state=state)
-    assert len(sent)==1 and sent[0][2]==130
-    assert state.recovered_at==120
+    assert len(sent)==1 and sent[0][2]==180
+    assert state.recovered_at==170
 
 
 def test_pending_action_counts_exclude_delivered_recipients(monkeypatch):
@@ -235,18 +235,18 @@ def test_pending_action_counts_exclude_delivered_recipients(monkeypatch):
 
 
 def test_reset_between_polls_near_limit_sends_after_grace(monkeypatch):
-    # A ten-second poll can miss 100% before the reset entirely.
+    # A configured poll can miss 100% before the reset entirely.
     near = replace(AVAILABLE, primary=RateWindow(98, 300, 105))
     reset = replace(AVAILABLE, primary=RateWindow(0, 300, 500))
     sent, _ = run_snapshots(monkeypatch, [near, reset, reset], grace=10)
-    assert len(sent) == 1 and sent[0][2] == 120
+    assert len(sent) == 1 and sent[0][2] == 140
 
 
 def test_early_refill_near_limit_without_observed_full_snapshot(monkeypatch):
     near = replace(AVAILABLE, primary=RateWindow(99, 300, 10000))
     refill = replace(near, primary=RateWindow(5, 300, 10000))
     sent, _ = run_snapshots(monkeypatch, [near, refill, refill])
-    assert len(sent) == 1 and sent[0][2] == 110
+    assert len(sent) == 1 and sent[0][2] == 130
 
 
 def test_small_quota_correction_does_not_trigger_recovery(monkeypatch):
@@ -345,3 +345,26 @@ def test_one_use_custom_does_not_replay_when_worker_restarts(monkeypatch):
     run_snapshots(monkeypatch,[AVAILABLE],selected=(target,),state=state)
     assert sent==['Use once']
     assert AppConfig.load().targets()[0].custom_prompt is None
+
+
+@pytest.mark.parametrize('percent',[0,85,98,100])
+@pytest.mark.parametrize('poll',[7,45])
+def test_configured_polling_interval_is_not_adaptively_shortened(monkeypatch,percent,poll):
+    from recharge_ai_task.quota import quota_from_snapshot
+    quota=replace(AVAILABLE,primary=RateWindow(percent,300,10000),rate_limit_reached=percent>=100)
+    state=watch.WatchState()
+    _,waits=run_snapshots(monkeypatch,[quota,quota],state=state,poll=poll)
+    assert waits==[poll,poll]
+    assert state.progress['poll_seconds']==poll
+    assert state.progress['checked_at']==100+poll
+    assert state.progress['next_check_at']==100+2*poll
+    assert quota_from_snapshot(state.progress['quota_snapshot'])==quota
+
+
+@pytest.mark.parametrize('poll',[7,45])
+def test_quota_read_failure_retries_at_configured_interval(monkeypatch,poll):
+    state=watch.WatchState()
+    _,waits=run_snapshots(monkeypatch,[RuntimeError('offline'),RuntimeError('offline')],state=state,poll=poll)
+    assert waits==[poll,poll]
+    assert state.progress['next_check_at']==100+2*poll
+    assert state.progress['quota_snapshot'] is None and state.progress['quota_error']=='offline'

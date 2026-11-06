@@ -413,7 +413,7 @@ class TrayApp:
             self._watch_error = f"Could not read saved watch settings: {exc}"
         thread = self._watch_thread
         alive = thread is not None and thread.is_alive()
-        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 2,
+        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True,
                 "restarting": self._restart_pending, "watch_requested": self._watch_requested,
                 "watch_pause_reason": self._watch_pause_reason,
                 "stopping": alive and self._watch_stop.is_set(),
