@@ -476,7 +476,8 @@ The GUI saves checkbox and multiline prompt edits automatically, and shows
 task and goal status refreshed every 15 seconds,
 live quota usage and reset countdowns,
 and the actual Desktop watch state. Startup registration and launch origin are
-available in Settings.
+available in Settings. Settings also offers **Dark**, **Light** and **Auto (OS)**
+color themes, with live preview and a saved preference.
 Use **Start/Stop Desktop watch** and **Settings…** directly from this window.
 Each row has independent **Send message** and **Resume goal** checkboxes.
 Choices and message text save automatically for future quota recovery; editing

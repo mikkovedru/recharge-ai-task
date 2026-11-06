@@ -232,3 +232,44 @@ try:
     assert commands.count('start-watch')==2 and 'Enter a message' in w.status.latest_text
 finally:w.destroy()
 ''')
+
+
+def test_color_theme_preview_cancel_persistence_and_system_default():
+    run_gui(r'''
+from recharge_ai_task.theme_ui import apply_color_theme
+settings=Gtk.Settings.get_default()
+apply_color_theme('auto')
+os_values=(settings.get_property('gtk-theme-name'),settings.get_property('gtk-application-prefer-dark-theme'))
+w=make()
+try:
+    dialog=settings_ui.SettingsDialog(w);pump(w)
+    assert [row[0] for row in dialog.theme.get_model()]==['Dark','Light','Auto (OS)']
+    assert dialog.theme.get_active_id()=='auto'
+    dialog.theme.set_active_id('light');pump(w)
+    assert settings.get_property('gtk-theme-name')=='Adwaita'
+    assert not settings.get_property('gtk-application-prefer-dark-theme')
+    assert status_colors(w.monitoring_card)['success']=='#137333'
+    dialog.theme.set_active_id('dark');pump(w)
+    assert settings.get_property('gtk-application-prefer-dark-theme')
+    assert status_colors(w.monitoring_card)['success']=='#73d99b'
+    assert w.monitoring_palette[0]=='#73d99b' and w.recipient_panel.status_palette[0]=='#73d99b'
+    dialog.save_settings();dialog.destroy()
+    assert AppConfig.load().color_theme=='dark'
+    w.destroy();w=make()
+    assert settings.get_property('gtk-application-prefer-dark-theme')
+    dialog=settings_ui.SettingsDialog(w);pump(w)
+    assert dialog.theme.get_active_id()=='dark'
+    dialog.theme.set_active_id('light');pump(w)
+    assert not settings.get_property('gtk-application-prefer-dark-theme')
+    # Closing without saving rolls back the live preview.
+    dialog.destroy();pump(w)
+    assert AppConfig.load().color_theme=='dark' and settings.get_property('gtk-application-prefer-dark-theme')
+    dialog=settings_ui.SettingsDialog(w);pump(w)
+    dialog.theme.set_active_id('auto');pump(w)
+    assert (settings.get_property('gtk-theme-name'),settings.get_property('gtk-application-prefer-dark-theme'))==os_values
+    dialog.save_settings();dialog.destroy()
+    assert AppConfig.load().color_theme=='auto'
+    w.destroy();w=make()
+    assert (settings.get_property('gtk-theme-name'),settings.get_property('gtk-application-prefer-dark-theme'))==os_values
+finally:w.destroy()
+''')

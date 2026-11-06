@@ -237,7 +237,11 @@ arguments, reset grace, polling interval, and startup registration. Additional
 information is a bulleted list; startup origin appears in round brackets beside
 the login checkbox. Grace buttons step by 10 seconds; polling buttons
 step by 5 seconds. Both fields also accept directly entered values.
-The tray's
+**Color theme** offers **Dark**, **Light** and **Auto (OS)** with an immediate
+preview. Save keeps the choice across launches; Cancel restores the saved
+preference. Forced Light/Dark use GTK's bundled Adwaita variants so both work
+even with a dark-only system theme. Auto releases those application overrides
+and follows the operating system's GTK theme. The tray's
 Settings menu opens this editor too. Prompt text and per-recipient signal choices remain visible
 in the main window. Saved settings and recipients automatically restart an active watch after a
 600 ms debounce. The previous worker finishes before its replacement starts;

@@ -427,6 +427,8 @@ class TrayApp:
         _setup_logging()
         controller = None
         if sys.platform == "linux":
+            from .theme_ui import apply_color_theme
+            apply_color_theme(self.config.color_theme)
             from .tray_control import ControlServer
             controller = ControlServer(self.control)
             controller.start()

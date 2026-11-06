@@ -17,6 +17,7 @@ from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
 from .wrapping_button import WrappingButton
 from .window_layout import WindowLayout
+from .theme_ui import apply_color_theme
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
 from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
@@ -39,6 +40,7 @@ class TargetPicker(Gtk.Window):
         set_window_icon(self)
         self.set_default_size(1440, 980)
         self.config = AppConfig.load()
+        apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
         self.preferences = {t.key: t for t in self.config.all_targets()}
         self.selected = {t.key: t for t in self.config.targets()}

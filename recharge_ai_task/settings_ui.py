@@ -8,6 +8,7 @@ from .autostart import is_autostart_enabled, set_autostart
 from .config import AppConfig
 from .branding import set_window_icon
 from .window_layout import WindowLayout
+from .theme_ui import apply_color_theme
 
 
 class SettingsDialog(Gtk.Dialog):
@@ -28,6 +29,9 @@ class SettingsDialog(Gtk.Dialog):
         self.window_layout = WindowLayout(self, "settings")
         self.connect("destroy", self.window_layout.close)
         config = AppConfig.load()
+        self.original_color_theme = config.color_theme
+        apply_color_theme(config.color_theme)
+        self.connect("destroy", self._restore_saved_theme)
         grid = Gtk.Grid(column_spacing=12, row_spacing=12, margin=18)
         self.get_content_area().add(grid)
         self.mode = Gtk.ComboBoxText()
@@ -40,6 +44,12 @@ class SettingsDialog(Gtk.Dialog):
         self.grace.set_value(config.grace_seconds)
         self.poll = Gtk.SpinButton.new_with_range(1, 3600, 5)
         self.poll.set_value(config.poll_seconds)
+        self.theme = Gtk.ComboBoxText()
+        for key, label in (("dark", "Dark"), ("light", "Light"), ("auto", "Auto (OS)")):
+            self.theme.append(key, label)
+        self.theme.set_active_id(config.color_theme)
+        self.theme.set_tooltip_text("Preview dark or light colors, or follow the operating system. Save to keep the choice (Alt + Down)")
+        self.theme.connect("changed", lambda widget: apply_color_theme(widget.get_active_id()))
         self.autostart = Gtk.CheckButton(label="Run the tray when I log in")
         self.autostart.set_tooltip_text("Start the tray when you log in; applies when settings are saved (Space)")
         try:
@@ -51,7 +61,7 @@ class SettingsDialog(Gtk.Dialog):
         launched = "Unknown (tray unavailable)" if runtime is None else "Yes" if runtime.get("launched_at_startup") else "No"
         for index, (name, widget) in enumerate((("Default mode", self.mode),
             ("Codex CLI path", self.path), ("CLI arguments", self.args),
-            ("Reset grace (seconds)", self.grace), ("Quota polling (seconds)", self.poll))):
+            ("Reset grace (seconds)", self.grace), ("Quota polling (seconds)", self.poll), ("Color theme", self.theme))):
             grid.attach(Gtk.Label(label=name, xalign=0), 0, index, 1, 1)
             widget.set_hexpand(True)
             grid.attach(widget, 1, index, 1, 1)
@@ -61,7 +71,7 @@ class SettingsDialog(Gtk.Dialog):
         self.startup_info.set_line_wrap(True)
         self.startup_info.set_max_width_chars(35)
         startup_row.pack_start(self.startup_info, True, True, 0)
-        grid.attach(startup_row, 0, 5, 2, 1)
+        grid.attach(startup_row, 0, 6, 2, 1)
         self.notes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         for text in (
             "Message text, continuation limits and per-recipient overrides are in the main window.",
@@ -76,11 +86,18 @@ class SettingsDialog(Gtk.Dialog):
             row.pack_start(bullet, False, False, 0)
             row.pack_start(note, True, True, 0)
             self.notes.pack_start(row, False, False, 0)
-        grid.attach(self.notes, 0, 6, 2, 1)
+        grid.attach(self.notes, 0, 7, 2, 1)
         self.error = Gtk.Label(xalign=0)
         self.error.set_line_wrap(True)
-        grid.attach(self.error, 0, 7, 2, 1)
+        grid.attach(self.error, 0, 8, 2, 1)
         self.show_all()
+
+    def _restore_saved_theme(self, *_):
+        try:
+            mode = AppConfig.load().color_theme
+        except Exception:
+            mode = self.original_color_theme
+        apply_color_theme(mode)
 
     def _dialog_keys(self,_dialog,event):
         buttons=[self.get_widget_for_response(Gtk.ResponseType.CANCEL),self.get_widget_for_response(Gtk.ResponseType.OK)]
@@ -99,6 +116,7 @@ class SettingsDialog(Gtk.Dialog):
         config.grace_seconds = self.grace.get_value_as_int()
         config.poll_seconds = self.poll.get_value_as_int()
         config.autostart = self.autostart.get_active()
+        config.color_theme = self.theme.get_active_id()
         # Recreate an enabled entry to update its executable/launch marker.
         previous = is_autostart_enabled()
         set_autostart(config.autostart)

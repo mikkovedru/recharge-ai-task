@@ -43,6 +43,7 @@ class AppConfig:
     show_technical_columns: bool = False
     table_layout: dict | None = None
     ui_layout: dict | None = None
+    color_theme: str = "auto"
     prompt_limit: int | None = None
     goal_limit: int | None = None
 
@@ -69,6 +70,7 @@ class AppConfig:
             show_technical_columns=bool(data.get("show_technical_columns", False)),
             table_layout=data.get("table_layout") if isinstance(data.get("table_layout"), dict) else None,
             ui_layout=data.get("ui_layout") if isinstance(data.get("ui_layout"), dict) else None,
+            color_theme=data.get("color_theme") if data.get("color_theme") in ("dark", "light", "auto") else "auto",
             prompt_limit=data.get("prompt_limit"),
             goal_limit=data.get("goal_limit"),
         )
