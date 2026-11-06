@@ -225,7 +225,7 @@ class ActionBudget:
             self._finish(attempt, "sent")
             if action != "goal":
                 self.completed.add(action)
-            self.report(action, "accepted", "Native activation accepted; verifying" if action == "goal" else "Codex accepted the message")
+            self.report(action, "accepted", "Native activation accepted; verifying" if action == "goal" else f"{self.target.provider.title()} accepted the message")
         return result
 
     def _finish(self, attempt, state, detail=""):

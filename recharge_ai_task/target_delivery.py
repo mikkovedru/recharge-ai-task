@@ -30,6 +30,9 @@ class DeliveryResult:
 
 
 def open_target(target):
+    if target.kind == "session":
+        from .session_delivery import open_session
+        return open_session(target)
     if target.kind != "thread" or not target.deeplink:
         raise ValueError("This target has no chat link")
     if sys.platform == "win32":
@@ -214,6 +217,11 @@ def deliver_targets(targets, text, *, enter_presses=1, key_delay=.12):
         try:
             if target.kind == "thread":
                 _send_thread(target, text)
+            elif target.kind == "session":
+                from .session_delivery import continue_session
+                detail = continue_session(target, text)
+                results.append(DeliveryResult(target, True, detail))
+                continue
             elif target.kind == "window":
                 _send_window(target, text, enter_presses, key_delay)
             else:

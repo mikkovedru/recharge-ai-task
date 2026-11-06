@@ -30,23 +30,19 @@ def run_configure(*, non_interactive: dict | None = None) -> AppConfig:
         for key, value in non_interactive.items():
             if hasattr(config, key):
                 setattr(config, key, value)
-        if config.provider == "muse":
-            config.mode = "cli"
         config.save()
         print(t("configure.saved", path=config_path()))
         return config
 
     print(t("configure.welcome"))
 
-    provider = _prompt("AI provider (codex/claude/muse)", config.provider).lower()
+    provider = _prompt("Default terminal AI (codex/claude/muse)", config.provider).lower()
     if provider not in PROVIDERS:
         provider = config.provider
 
     mode = _prompt(t("configure.mode_prompt"), config.mode).lower()
     if mode not in {"cli", "desktop"}:
         mode = config.mode
-    if provider == "muse":
-        mode = "cli"
 
     goal_mode = _prompt_yes_no(t("configure.goal_prompt"), config.goal_mode) if provider == "codex" else config.goal_mode
     grace = _prompt(t("configure.grace_prompt"), str(config.grace_seconds))

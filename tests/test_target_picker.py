@@ -70,7 +70,7 @@ def check():
         window._toggle(None, beta_path)
         assert not window.selected
         window.table_layout.sort("id")
-        assert window.get_title() == "Recharge AI-task — OpenAI Codex"
+        assert window.get_title() == "Recharge AI-task"
         assert window.logo.get_pixbuf().get_width() == 64
         assert {icon.get_width() for icon in window.get_icon_list()} == {16,24,32,48,64,128,256}
         assert not any(isinstance(child, Gtk.Label) and "Choose chats by ID" in child.get_text() for child in window.get_child().get_children())
@@ -82,7 +82,7 @@ def check():
         assert window.next_check_label.get_text() == "—"
         assert "monitoring is off" in window.next_check_detail.get_text()
         visible_titles = lambda: [c.get_title() for c in window.table.get_columns() if c.get_visible()]
-        assert visible_titles() == ["Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status"]
+        assert visible_titles() == ["Project", "Send message", "Resume goal", "Provider", "Title", "Last active", "Task status", "Goal status"]
         assert "Editing them sends nothing now" in window.selection_help.get_text()
         assert "monitoring off" in window.send_button.get_tooltip_text()
         assert not window.send_button.get_sensitive()
@@ -92,7 +92,7 @@ def check():
         watch_settings = target_ui.tray_control.watch_settings(view_settings)
         window.technical_toggle.set_active(True)
         assert AppConfig.load().show_technical_columns
-        assert len(visible_titles()) == 15
+        assert len(visible_titles()) == 16
         reopened = target_ui.TargetPicker()
         assert reopened.technical_toggle.get_active()
         assert all(c.get_visible() for c in reopened.technical_columns)
@@ -154,40 +154,30 @@ def check():
         from recharge_ai_task.status_display import COLORS, TASK_STATES, GOAL_STATES, status_level
         # Each window gets its own threshold color, including recovery to normal.
         for primary, secondary in ((84.9,85), (85,100), (99.9,84.9), (100,99.9), (101,0), (0,0)):
-            window.quota = replace(current_quota,
+            window.quotas['codex'] = replace(current_quota,
                 primary=replace(current_quota.primary, used_percent=primary),
                 secondary=replace(current_quota.secondary, used_percent=secondary))
-            window.render_quota()
-            markup_lines = window.quota_label.get_label().split("\n")
-            for line, percent in zip(markup_lines[:2], (primary,secondary)):
-                if percent >= 100:
-                    assert line.startswith('<span foreground="' + COLORS["error"] + '">')
-                elif percent >= 85:
-                    assert line.startswith('<span foreground="' + COLORS["warning"] + '">')
-                else:
-                    assert "<span" not in line
-                assert f"{percent:g}% used" in line
-                if percent >= 85:
-                    assert "% used</span> · resets" in line
-            assert "<span" not in markup_lines[2]
-            # GTK parses the colors while selectable text stays free of markup.
-            assert "<span" not in window.quota_label.get_text()
-            layout = window.quota_label.get_layout()
-            attributes = layout.get_attributes()
-            foregrounds = [line for line in attributes.to_string().splitlines() if " foreground " in line]
+            window._sync_quota_display()
+            markup = window.quota_label.get_label()
+            plain = window.quota_label.get_text()
             expected = []
-            offset = 0
-            for line, percent in zip(window.quota_label.get_text().split("\n")[:2], (primary,secondary)):
-                length = len(line.encode("utf-8"))
+            for label, percent in (("5-hour", primary), ("Weekly", secondary)):
+                text = f"{label}: {percent:g}% used"
+                assert text in plain
                 if percent >= 85:
                     color = COLORS["error" if percent >= 100 else "warning"]
+                    assert '<span foreground="' + color + '">' + text + '</span> · resets' in markup
                     pango_color = "#" + "".join(color[i:i+2]*2 for i in (1,3,5))
-                    used_length = len(line.split(" · resets", 1)[0].encode("utf-8"))
-                    expected.append(f"{offset} {offset+used_length} foreground {pango_color}")
-                offset += length + 1
+                    offset = len(plain[:plain.index(text)].encode('utf-8'))
+                    expected.append(f"{offset} {offset+len(text.encode('utf-8'))} foreground {pango_color}")
+                else:
+                    assert not any('<span foreground="' + color + '">' + text in markup for color in COLORS.values())
+            assert "<span" not in plain
+            attributes = window.quota_label.get_layout().get_attributes()
+            foregrounds = [line for line in attributes.to_string().splitlines() if " foreground " in line]
             assert foregrounds == expected, (foregrounds, expected)
-        window.quota = current_quota
-        window.render_quota()
+        window.quotas['codex'] = current_quota
+        window._sync_quota_display()
         from datetime import datetime
         from unittest.mock import patch
         from recharge_ai_task import status_log
@@ -271,7 +261,7 @@ def check():
         assert window.send_button.get_label() == "Send now to 1 recipient"
         assert window.send_button.get_sensitive()
         assert not window.dirty() and not hasattr(window, "save_state")
-        assert [c.get_title() for c in window.table.get_columns()][:9] == ["Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project path", "Kind"]
+        assert [c.get_title() for c in window.table.get_columns()][:10] == ["Project", "Send message", "Resume goal", "Provider", "Title", "Last active", "Task status", "Goal status", "Project path", "Kind"]
         window.table.get_selection().select_path("0")
         target_ui.discover_targets = lambda: Inventory([alpha, replace(beta, task_status="Waiting for input", goal_status="Blocked")])
         window.refresh_statuses()

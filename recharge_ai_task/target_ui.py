@@ -27,7 +27,8 @@ from .claude import fetch_claude_quota
 from .muse import fetch_muse_quota
 from . import tray_control
 from .target_delivery import open_target, send_signals
-from .targets import Target, discover_targets
+from .targets import Target
+from .providers import discover_all_targets as discover_targets
 from .status_display import BORDER_COLORS, COLORS, overview_status_level, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
 from .status_log import StatusLog
 from .status_help import StatusInfoButton, status_markup
@@ -42,7 +43,10 @@ class TargetPicker(Gtk.Window):
         set_window_icon(self)
         self.set_default_size(1440, 980)
         self.config = AppConfig.load()
-        self.set_title("Recharge AI-task — " + PROVIDER_LABELS[self.config.provider])
+        self.set_title("Recharge AI-task")
+        self.active_providers = ()
+        self.quotas = {}
+        self.quota_errors = {}
         apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
         self.preferences = {t.key: t for t in self.config.all_targets()}
@@ -142,7 +146,14 @@ class TargetPicker(Gtk.Window):
         self.quota_card = card(None, checks)
         self.quota_card.set_valign(Gtk.Align.START)
         dashboard.pack_start(overview, False, False, 0)
-        dashboard.pack_start(self.quota_label, False, False, 0)
+        self.quota_scroller = Gtk.ScrolledWindow()
+        self.quota_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.quota_scroller.set_propagate_natural_height(True)
+        self.quota_scroller.set_max_content_height(90)
+        self.quota_scroller.set_min_content_height(20)
+        self.quota_scroller.set_tooltip_text("Quota for each detected provider. Scroll for additional windows and refresh details")
+        self.quota_scroller.add(self.quota_label)
+        dashboard.pack_start(self.quota_scroller, False, False, 0)
         self.quota_button = Gtk.Button(label="Check quota now")
         self.quota_button.connect("clicked", self.refresh_quota)
         self.settings_button = Gtk.Button(label="Settings…")
@@ -176,6 +187,19 @@ class TargetPicker(Gtk.Window):
         self.search = Gtk.SearchEntry(placeholder_text="Search title, status, ID, project, process, or link…")
         self.search.connect("search-changed", lambda _: self.filtered.refilter())
         search_row = Gtk.Box(spacing=10)
+        self.provider_filter = Gtk.ComboBoxText()
+        for key, label in (("all", "All chats"), ("codex", "Codex"), ("claude", "Claude"), ("muse", "Muse Code")):
+            self.provider_filter.append(key, label)
+        self.provider_filter.set_active_id(self.config.chat_provider_filter)
+        self.provider_filter.set_tooltip_text("Filter visible chats only. Hidden recipients remain selected and monitored (Alt+P)")
+        filter_box = Gtk.Box(spacing=6, margin=4)
+        filter_label = Gtk.Label.new_with_mnemonic("_Provider:")
+        filter_label.set_mnemonic_widget(self.provider_filter)
+        filter_box.pack_start(filter_label, False, False, 0)
+        filter_box.pack_start(self.provider_filter, False, False, 0)
+        filter_frame = Gtk.Frame()
+        filter_frame.add(filter_box)
+        search_row.pack_start(filter_frame, False, False, 0)
         search_row.pack_start(self.search, True, True, 0)
         self.technical_toggle = Gtk.CheckButton(label="Show technical columns")
         self.technical_toggle.set_tooltip_text("Show paths, recipient kind, availability, IDs, process and routing details. Search includes these fields in either view.")
@@ -183,9 +207,10 @@ class TargetPicker(Gtk.Window):
         self.technical_toggle.connect("toggled", self.toggle_technical_columns)
         search_row.pack_start(self.technical_toggle, False, False, 0)
         box.pack_start(search_row, False, False, 0)
-        self.store = Gtk.ListStore(bool, str, str, str, str, str, str, str, str, str, str, str, bool, str, str, float)
+        self.store = Gtk.ListStore(bool, str, str, str, str, str, str, str, str, str, str, str, bool, str, str, float, str, str)
         self.filtered = self.store.filter_new()
         self.filtered.set_visible_func(self._visible)
+        self.provider_filter.connect("changed", self._provider_filter_changed)
         self.table = Gtk.TreeView(model=self.filtered)
         self._selection_pending = False
         self.table.get_selection().connect("changed", self._queue_selection_sync)
@@ -215,7 +240,7 @@ class TargetPicker(Gtk.Window):
                 column.set_cell_data_func(checkbox, self._goal_cell)
             self.table.append_column(column)
             self.table_layout.register(action, column, index, 95)
-        columns = [("Title", 1, 230), ("Last active", 14, 155), ("Task status", 10, 125), ("Goal status", 11, 105),
+        columns = [("Provider", 16, 90), ("Title", 1, 230), ("Last active", 14, 155), ("Task status", 10, 125), ("Goal status", 11, 105),
                    ("Project", 13, 130), ("Project path", 8, 300), ("Kind", 2, 80), ("Availability", 3, 160), ("ID", 4, 295),
                    ("PID", 5, 95), ("Instance", 6, 260), ("Deep link", 7, 400),
                    ("Desktop client", 9, 300)]
@@ -223,10 +248,13 @@ class TargetPicker(Gtk.Window):
         self.status_info = {}
         column_keys = {1: "title", 2: "kind", 3: "availability", 4: "id", 5: "pid",
                        6: "instance", 7: "deeplink", 8: "cwd", 9: "owner_id",
-                       10: "task_status", 11: "goal_status", 13: "project_name", 14: "last_active_at"}
+                       10: "task_status", 11: "goal_status", 13: "project_name", 14: "last_active_at", 16: "provider"}
         for name, index, width in columns:
             renderer = Gtk.CellRendererText()
             column = Gtk.TreeViewColumn(name, renderer, text=index)
+            if index == 16:
+                column.set_cell_data_func(renderer, lambda _c, cell, model, iterator, _d:
+                    cell.set_property("text", {"codex": "Codex", "claude": "Claude", "muse": "Muse Code"}.get(model[iterator][16], model[iterator][16])))
             if index in (10, 11):
                 column.set_cell_data_func(renderer, self._status_cell, index)
                 header = Gtk.Box(spacing=5)
@@ -242,19 +270,20 @@ class TargetPicker(Gtk.Window):
             column.set_fixed_width(width)
             if index == 1:
                 self.title_column = column
-            if index not in (1, 10, 11, 13, 14):
+            if index not in (1, 10, 11, 13, 14, 16):
                 self.technical_columns.append(column)
                 column.set_visible(self.config.show_technical_columns)
             self.table.append_column(column)
             self.table_layout.register(column_keys[index], column, index, width, renderer,
                                        sort_index=15 if index == 14 else None)
             if index == 14:
-                column.get_widget().set_tooltip_text("Last chat update recorded by Codex, shown in local time. Refreshes every 15 seconds. Unknown means Codex did not provide a timestamp.")
+                column.get_widget().set_tooltip_text("Last chat update recorded by its provider, shown in local time. Refreshes every 15 seconds; unavailable timestamps stay Unknown.")
         for index,info in self.status_info.items():
             info.bind_column(self.table_layout.columns["goal_status" if index==11 else "task_status"][0])
         self.table_layout.restore()
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_min_content_height(120)
         scroller.add(self.table)
         box.pack_start(scroller, True, True, 0)
         self.inventory_status = Gtk.Label(label="Discovering targets…", xalign=0)
@@ -519,8 +548,20 @@ class TargetPicker(Gtk.Window):
         return False
 
     def _visible(self, model, iterator, _data):
+        provider = self.provider_filter.get_active_id()
+        if provider != "all" and model[iterator][16] != provider:
+            return False
         query = self.search.get_text().casefold()
-        return not query or query in " ".join(str(model[iterator][i]) for i in (*range(1, 12), 13, 14)).casefold()
+        return not query or query in " ".join(str(model[iterator][i]) for i in (*range(1, 12), 13, 14, 16)).casefold()
+
+    def _provider_filter_changed(self, *_):
+        self.filtered.refilter()
+        try:
+            config = AppConfig.load()
+            config.chat_provider_filter = self.provider_filter.get_active_id()
+            config.save()
+        except Exception as exc:
+            self._message("Could not save chat filter: " + str(exc), "warning")
 
     @staticmethod
     def _goal_cell(_column, renderer, model, iterator, _data):
@@ -532,7 +573,7 @@ class TargetPicker(Gtk.Window):
         if self.busy:
             return
         row = self.filtered[path]
-        target = self.targets[row[6] + "\0" + row[4]]
+        target = self.targets[row[17]]
         if action == "send_goal" and target.kind != "thread":
             self._message("Resume goal needs a chat ID. Window recipients support Send message only.", "warning")
             return
@@ -544,7 +585,7 @@ class TargetPicker(Gtk.Window):
     def update_recipient(self, target):
         first_recipient = not self.selected
         self.preferences[target.key] = target
-        self.targets[target.instance + "\0" + target.id] = target
+        self.targets[target.key] = target
         if any(target.signal_actions()):
             self.selected[target.key] = target
         else:
@@ -555,7 +596,7 @@ class TargetPicker(Gtk.Window):
             self._auto_start_pending = False
         # Locate by identity. A checkbox change can reorder the source model.
         for row in self.store:
-            if row[4] == target.id and row[6] == target.instance:
+            if row[17] == target.key:
                 self.store.set(row.iter, [0, 12], [target.send_prompt, target.send_goal])
                 break
         self._preferences_changed()
@@ -587,7 +628,7 @@ class TargetPicker(Gtk.Window):
                 self.preferences[key] = normalized
                 if key in self.selected:
                     self.selected[key] = normalized
-                identity = target.instance + "\0" + target.id
+                identity = target.key
                 if identity in self.targets:
                     self.targets[identity] = self.targets[identity].with_preferences(normalized)
         if consumed_settings is not None:
@@ -722,11 +763,7 @@ class TargetPicker(Gtk.Window):
         self.watch_button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic" if alive or requested else "media-playback-start-symbolic",Gtk.IconSize.BUTTON))
         self.watch_button.set_always_show_image(True)
         self.watch_button.set_sensitive(not self.busy and not self.runtime_busy and (not stopping or restarting) and not runtime.get("cli_running", False))
-        if self.config.provider == "muse" and not (alive or requested):
-            self.watch_button.set_label("CLI service running" if runtime.get("cli_running") else "Start Muse Code CLI")
-            self.watch_button.set_tooltip_text("Open Muse Code in a terminal with automatic continuation after subscription recovery")
-        else:
-            self.watch_button.set_tooltip_text("Start or stop quota monitoring for the saved desktop recipients")
+        self.watch_button.set_tooltip_text("Monitor each selected recipient using its own provider's quota; the list filter does not change recipients")
         self.send_button.set_sensitive(not self.busy and bool(self.selected))
         notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or ""
         if notice and notice != self._runtime_notice and hasattr(self, "status"):
@@ -802,8 +839,6 @@ class TargetPicker(Gtk.Window):
             return
         if self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested")):
             command = "stop-watch"
-        elif self.config.provider == "muse":
-            command = "start-cli"
         else:
             if self.dirty() and not self.save():
                 return
@@ -832,10 +867,8 @@ class TargetPicker(Gtk.Window):
                         time.sleep(.2)
             if command == "start-watch" and live.get("per_target_signals") is not True:
                 raise RuntimeError("Restart the tray to use per-recipient Prompt / Goal signals; the running tray is an older version.")
-            if command == "start-watch" and self.config.provider == "claude" and not live.get("claude_support"):
-                raise RuntimeError("Restart the tray to enable Anthropic Claude monitoring.")
-            if command == "start-cli" and not live.get("muse_support"):
-                raise RuntimeError("Restart the tray to enable Meta Muse Code.")
+            if command == "start-watch" and any(t.provider != "codex" for t in self.selected.values()) and not live.get("unified_providers"):
+                raise RuntimeError("Restart the tray to monitor recipients from multiple providers.")
             uses_policies = self.config.prompt_limit is not None or self.config.goal_limit is not None or any(
                 t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in self.selected.values())
             if command == "start-watch" and uses_policies and not live.get("recipient_policies"):
@@ -867,26 +900,38 @@ class TargetPicker(Gtk.Window):
         self.refresh_quota()
         return True
 
+    def _watch_observations(self):
+        if not self.runtime or not self.runtime.get("desktop_watch") or not self.runtime.get("shared_quota"):
+            return {}
+        progress = self.runtime.get("watch_progress") or {}
+        if isinstance(progress.get("providers"), dict):
+            return progress["providers"]
+        provider = (self.runtime.get("watch_settings") or {}).get("provider", "codex")
+        return {provider: progress}
+
     def _uses_watch_quota(self):
-        return bool(self.runtime and self.runtime.get("desktop_watch") and self.runtime.get("shared_quota")
-                    and (self.runtime.get("watch_settings") or {}).get("provider", "codex") == self.config.provider)
+        observations = self._watch_observations()
+        return bool(observations and set(self.active_providers or ("codex",)) <= set(observations))
 
     def _adopt_watch_quota(self):
-        if not self._uses_watch_quota():
-            return
-        progress = self.runtime.get("watch_progress") or {}
-        snapshot = progress.get("quota_snapshot")
-        error = str(progress.get("quota_error") or "")
-        if snapshot is not None:
-            try:
-                self.quota = quota_from_snapshot(snapshot)
-                self.quota_updated = progress.get("checked_at") or time.time()
-            except (TypeError, ValueError, KeyError) as exc:
-                error = "Invalid monitoring quota snapshot: " + str(exc)
-        self.quota_error = error
-        if error and error != self._quota_notice:
-            self._message("Quota refresh failed: " + error, "error")
-        self._quota_notice = error
+        for provider, progress in self._watch_observations().items():
+            error = str(progress.get("quota_error") or "")
+            snapshot = progress.get("quota_snapshot")
+            if snapshot is not None:
+                try:
+                    self.quotas[provider] = quota_from_snapshot(snapshot)
+                    self.quota_updated = progress.get("checked_at") or time.time()
+                except (TypeError, ValueError, KeyError) as exc:
+                    error = "Invalid monitoring quota snapshot: " + str(exc)
+            self.quota_errors[provider] = error
+        self._sync_quota_display()
+
+    def _sync_quota_display(self):
+        self.quota = self.quotas.get("codex") or next(iter(self.quotas.values()), None)
+        self.quota_error = "; ".join(f"{PROVIDER_LABELS.get(p, p)}: {e}" for p, e in self.quota_errors.items() if e)
+        if self.quota_error and self.quota_error != self._quota_notice:
+            self._message("Quota refresh failed: " + self.quota_error, "error")
+        self._quota_notice = self.quota_error
         self.render_quota()
 
     def refresh_quota(self, *_):
@@ -894,48 +939,47 @@ class TargetPicker(Gtk.Window):
             return False
         if self.quota_busy or self.runtime is None and self.runtime_busy:
             return True
-        if self._uses_watch_quota():
-            self._adopt_watch_quota()
-            if _:
-                def checked(value, error):
-                    if error:
-                        self._message("Could not wake quota monitoring: " + error, "warning")
-                    self.poll_runtime()
-                self._background(lambda: tray_control.request("check-quota"), checked)
+        self._adopt_watch_quota()
+        if _ and self.runtime and self.runtime.get("desktop_watch") and self.runtime.get("manual_quota_check"):
+            def checked(value, error):
+                if error:
+                    self._message("Could not wake quota monitoring: " + error, "warning")
+                self.poll_runtime()
+            self._background(lambda: tray_control.request("check-quota"), checked)
+        providers = tuple(p for p in self.active_providers if p not in self._watch_observations())
+        if not providers:
             return True
         self.quota_busy = True
         self.quota_button.set_sensitive(False)
         self.quota_button.set_label("Checking quota…")
-        if _ and self.runtime and self.runtime.get("desktop_watch"):
-            if self.runtime.get("manual_quota_check"):
-                def checked(value,error):
-                    if error:
-                        self._message("Could not wake quota monitoring: " + error,"warning")
-                    self.poll_runtime()
-                self._background(lambda: tray_control.request("check-quota"),checked)
-            else:
-                self._message("Restart the tray to enable immediate quota checks; the display will still refresh.","warning")
         def show(value, error):
             self.quota_busy = False
             self.quota_button.set_sensitive(True)
             self.quota_button.set_label("Check quota now")
-            if provider != self.config.provider:
-                self.refresh_quota()
-                return
-            self.quota_error = error or ""
-            if error and error != self._quota_notice:
+            if error:
                 self._message("Quota refresh failed: " + error, "error")
-            self._quota_notice = error or ""
-            if value:
-                self.quota = value
-                self.quota_updated = time.time()
-            self.render_quota()
-        provider = self.config.provider
+            for provider, (quota, problem) in (value or {}).items():
+                self.quota_errors[provider] = problem or ""
+                if quota is not None:
+                    self.quotas[provider] = quota
+                    self.quota_updated = time.time()
+            self._sync_quota_display()
         def read_quota():
+            from concurrent.futures import ThreadPoolExecutor
             config = AppConfig.load()
-            if provider == "muse":
-                return fetch_muse_quota(config.muse_path)
-            return fetch_claude_quota() if provider == "claude" else fetch_quota(discover_codex(config.codex_path))
+            def one(provider):
+                try:
+                    if provider == "muse":
+                        value = fetch_muse_quota(config.muse_path)
+                    elif provider == "claude":
+                        value = fetch_claude_quota()
+                    else:
+                        value = fetch_quota(discover_codex(config.codex_path))
+                    return provider, (value, None)
+                except Exception as exc:
+                    return provider, (None, str(exc))
+            with ThreadPoolExecutor(max_workers=len(providers)) as pool:
+                return dict(pool.map(one, providers))
         self._background(read_quota, show)
         return True
 
@@ -943,8 +987,8 @@ class TargetPicker(Gtk.Window):
         if self.closed:
             return False
         self._render_overview()
-        if self.quota is None:
-            self.quota_label.set_text("Quota unavailable — see messages below" if self.quota_error else "Quota: loading…")
+        if not self.active_providers:
+            self.quota_label.set_text("No installed AI providers found" if not self.discovery_busy else "Discovering installed AI providers…")
             return True
         colors = status_colors(self.quota_label)
         def window_text(window):
@@ -961,28 +1005,24 @@ class TargetPicker(Gtk.Window):
             suffix = GLib.markup_escape_text(f" · resets {reset} ({countdown})")
             level = "error" if window.used_percent >= 100 else "warning" if window.used_percent >= 85 else None
             return (f'<span foreground="{colors[level]}">{text}</span>' if level else text) + suffix
-        lines = [window_text(w) for w in quota_windows(self.quota)]
-        if self.quota.has_credits or self.quota.unlimited_credits:
-            lines.append("Additional credits are available" + (" · backend still reports a limit" if self.quota.rate_limit_reached or self.quota.spend_control_reached else " · usable without waiting for the included window reset"))
-        age = max(0, int(time.time() - self.quota_updated))
+        lines = []
+        for provider in self.active_providers or tuple(self.quotas):
+            quota = self.quotas.get(provider)
+            if quota is None:
+                lines.append(GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider) + ": quota unavailable"))
+                continue
+            lines.append("<b>" + GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider)) + "</b> · " +
+                         " · ".join(window_text(w) for w in quota_windows(quota)))
+            if quota.has_credits or quota.unlimited_credits:
+                lines.append("Additional credits are available" + (" · backend still reports a limit" if quota.rate_limit_reached or quota.spend_control_reached else " · usable without waiting for the included window reset"))
+        age = max(0, int(time.time() - (self.quota_updated or time.time())))
         lines.append(f"Quota refreshed {age}s ago · automatic refresh every {self.quota_interval}s" + (" · Latest refresh failed — see messages below" if self.quota_error else ""))
         self.quota_label.set_markup("\n".join(lines))
         return True
 
     def _apply_provider_config(self, config):
-        changed_provider = config.provider != self.config.provider
         self.config = config
-        self.set_title("Recharge AI-task — " + PROVIDER_LABELS[config.provider])
-        if changed_provider:
-            self.preferences = {t.key: t for t in config.all_targets()}
-            self.selected = {t.key: t for t in config.targets()}
-            self.targets = {}
-            self.store.clear()
-            self.quota = None
-            self.quota_error = ""
-            self.saved_signature = self._signature(self.selected.values(), config.continue_prompt)
-            self._summary()
-            self.refresh()
+        self.set_title("Recharge AI-task")
 
     def settings(self, *_):
         from .settings_ui import SettingsDialog
@@ -991,6 +1031,7 @@ class TargetPicker(Gtk.Window):
             self._apply_provider_config(config)
             self._configure_quota_poll(config.poll_seconds)
             self._reload_saved_settings()
+            self.refresh()
             self.refresh_quota()
             self._render_runtime()
 
@@ -1023,16 +1064,20 @@ class TargetPicker(Gtk.Window):
         threading.Thread(target=worker, daemon=True).start()
 
     def _apply_inventory(self, inventory):
+        providers = tuple(dict.fromkeys((*inventory.providers, *(t.provider for t in inventory.targets), *(t.provider for t in self.selected.values()))))
+        if providers != self.active_providers:
+            self.active_providers = providers
+            self.refresh_quota()
         live = {t.key: t.with_preferences(self.preferences.get(t.key)) for t in inventory.targets}
         for key, saved in list(self.selected.items()):
             self.selected[key] = live.get(key, replace(saved, task_status="Unavailable", goal_status="Unavailable")).with_preferences(saved)
         targets = {**live, **{k: t for k, t in self.selected.items() if k not in live}}
-        self.targets = {t.instance + "\0" + t.id: t for t in targets.values()}
+        self.targets = dict(targets)
         # Update existing rows in place so refresh preserves focus and scrolling.
         rows = {}
         for index in range(len(self.store) - 1, -1, -1):
             row = self.store[index]
-            key = Target(row[2], row[4], row[1], instance=row[6], provider=self.config.provider).key
+            key = row[17]
             if key not in targets:
                 self.store.remove(row.iter)
             else:
@@ -1044,7 +1089,7 @@ class TargetPicker(Gtk.Window):
                 target.id, str(target.pid or ""), target.instance, target.deeplink, target.cwd,
                 target.owner_id, target.task_status, target.goal_status, choice.send_goal if choice else False, target.project_name,
                 datetime.fromtimestamp(target.last_active_at).astimezone().strftime("%Y-%m-%d %H:%M:%S") if target.last_active_at else "Unknown",
-                target.last_active_at or 0.0]
+                target.last_active_at or 0.0, target.provider, target.key]
             iterator = rows.get(key)
             if iterator is None:
                 self.store.append(values)
@@ -1063,14 +1108,10 @@ class TargetPicker(Gtk.Window):
         if self.closed or self.discovery_busy or self.busy:
             return
         self.discovery_busy = True
-        provider = self.config.provider
         if not automatic:
             self.inventory_status.set_text("Refreshing targets and statuses…")
         def show(inventory, error):
             self.discovery_busy = False
-            if provider != self.config.provider:
-                self.refresh()
-                return
             if error:
                 # Retain the recipients, but never display stale state as current.
                 for row in self.store:
@@ -1080,7 +1121,7 @@ class TargetPicker(Gtk.Window):
                 self._message(f"Status refresh failed: {error}", "error")
             else:
                 self._apply_inventory(inventory)
-        self._background(discover_targets if provider == "codex" else lambda: discover_targets(provider), show)
+        self._background(discover_targets, show)
 
     def refresh_statuses(self):
         if self.closed:
@@ -1118,11 +1159,14 @@ class TargetPicker(Gtk.Window):
 
         def matching_path():
             for row in self.filtered:
-                if row[4] == target.id and row[6] == target.instance:
+                if row[17] == target.key:
                     return row.path
             return None
 
         path = matching_path()
+        if path is None and self.provider_filter.get_active_id() not in ("all", target.provider):
+            self.provider_filter.set_active_id(target.provider)
+            path = matching_path()
         if path is None and self.search.get_text():
             self.search.set_text("")
             self.filtered.refilter()
@@ -1136,12 +1180,12 @@ class TargetPicker(Gtk.Window):
         if iterator is None:
             raise ValueError("Choose a row first")
         row = model[iterator]
-        return self.targets[row[6] + "\0" + row[4]]
+        return self.targets[row[17]]
 
     def open_row(self, *_):
         try:
             target = self._row_target()
-            self._work(lambda: open_target(target), lambda _: self._message("Chat opened in Codex. Refresh to update the list."))
+            self._work(lambda: open_target(target), lambda _: self._message(f"Chat opened with {PROVIDER_LABELS.get(target.provider, target.provider)}. Refresh to update the list."))
         except Exception as exc:
             self._message(str(exc), "error")
 
@@ -1162,7 +1206,7 @@ class TargetPicker(Gtk.Window):
             self.preferences.update(self.selected)
             config.desktop_targets = [t.to_dict() for t in self.preferences.values()]
             config.continue_prompt = self._prompt_text()
-            config.mode = "cli" if config.provider == "muse" else "desktop"
+            config.mode = "desktop"
             config.save()
         except Exception as exc:
             self.autosave_error = str(exc)

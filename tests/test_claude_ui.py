@@ -6,44 +6,30 @@ from test_monitoring_status_ui import run_gui
 pytestmark = pytest.mark.skipif(os.environ.get('RECHARGE_AI_TASK_GUI_TESTS') != '1', reason='Requires GTK and X11')
 
 
-def test_settings_provider_switch_preserves_both_recipient_lists():
+def test_default_terminal_settings_keep_mixed_recipient_list():
     run_gui(r'''
 from gi.repository import GLib
-from recharge_ai_task.claude import parse_usage
 claude_target=Target('window','42','Claude fixture',provider='claude',pid=7,instance='fixture',send_prompt=True,send_goal=False)
 config=AppConfig.load();config.desktop_targets.append(claude_target.to_dict());config.save()
-target_ui.fetch_claude_quota=lambda:parse_usage({'five_hour':{'utilization':51,'resets_at':'2026-11-06T18:00:00Z'}})
-target_ui.discover_targets=lambda provider='codex':Inventory([claude_target] if provider=='claude' else [a,b])
-runtime['claude_support']=True
+target_ui.fetch_claude_quota=lambda:Quota('Claude test',RateWindow(51,300,9999999999),None,False)
+target_ui.discover_targets=lambda:Inventory([a,b,claude_target])
+runtime['unified_providers']=True
 w=make()
-def change(provider):
+try:
     def select():
         dialogs=[item for item in Gtk.Window.list_toplevels() if isinstance(item,settings_ui.SettingsDialog)]
         if not dialogs:return True
-        d=dialogs[0]
-        d.provider.set_active_id(provider)
-        assert d.claude_path.get_sensitive()==(provider=='claude')
-        assert d.path.get_sensitive()==(provider=='codex')
-        d.claude_args.set_text('--continue')
-        d.response(Gtk.ResponseType.OK)
+        d=dialogs[0];d.provider.set_active_id('claude')
+        assert d.claude_path.get_sensitive() and d.path.get_sensitive() and d.muse_path.get_sensitive()
+        d.claude_args.set_text('--continue');d.response(Gtk.ResponseType.OK)
         return False
-    GLib.timeout_add(50,select)
-    w.settings();pump(w)
-try:
-    change('claude')
-    assert AppConfig.load().provider=='claude'
-    assert w.get_title().endswith('Anthropic Claude')
-    assert set(w.selected)=={claude_target.key}
-    assert len(w.store)==1 and w.store[0][1]=='Claude fixture'
-    assert '51% used' in w.quota_label.get_text()
-    assert not w._uses_watch_quota()
-    w.save();pump(w)
-    assert {t.provider for t in AppConfig.load().all_targets()}=={'codex','claude'}
-    w._apply_inventory(Inventory([claude_target]));assert len(w.store)==1
-    change('codex')
-    assert AppConfig.load().provider=='codex' and len(w.store)==2
-    assert set(w.selected)=={a.key,b.key}
-    assert AppConfig.load().claude_args==['--continue']
+    GLib.timeout_add(50,select);w.settings();pump(w)
+    assert AppConfig.load().provider=='claude' and AppConfig.load().claude_args==['--continue']
+    assert w.get_title()=='Recharge AI-task'
+    assert set(w.selected)=={a.key,b.key,claude_target.key} and len(w.store)==3
+    assert '51% used' in w.quota_label.get_text() and '40% used' in w.quota_label.get_text()
+    w.provider_filter.set_active_id('claude');pump(w)
+    assert len(w.filtered)==1 and len(w.selected)==3
     d=settings_ui.SettingsDialog(w);pump(w)
     try:
         d.resize(620,420);pump(w)
@@ -51,17 +37,7 @@ try:
         assert d.scroller.get_vadjustment().get_upper()>d.scroller.get_vadjustment().get_page_size()
         save=d.get_widget_for_response(Gtk.ResponseType.OK)
         assert save.get_mapped() and save.get_allocated_height()>0
-        d.provider.grab_focus();pump(w)
-        subprocess.run(['xdotool','windowactivate','--sync',str(d.get_window().get_xid())],check=True)
-        subprocess.run(['xdotool','key','Home','Down'],check=True);pump(w)
-        assert d.provider.get_active_id()=='claude'
-        d.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*d.get_size());d.draw(cairo.Context(surface))
-        surface.write_to_png('/tmp/2026-11-06_claude-settings.png')
     finally:d.destroy()
-    config=AppConfig.load();config.provider='claude';config.save()
-    w.poll_runtime();pump(w)
-    assert w.config.provider=='claude' and set(w.selected)=={claude_target.key}
-    assert len(w.store)==1 and '51% used' in w.quota_label.get_text()
 finally:w.destroy()
 ''')
 

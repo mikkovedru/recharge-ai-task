@@ -94,9 +94,6 @@ def _cmd_configure(argv: list[str]) -> int:
         overrides["claude_path"] = ns.claude_path
     if ns.muse_path:
         overrides["muse_path"] = ns.muse_path
-    if (ns.provider or _load_user_config().provider) == "muse" and ns.mode == "desktop":
-        from .muse import DESKTOP_LIMITATION
-        parser.error(DESKTOP_LIMITATION)
     if ns.mode:
         overrides["mode"] = ns.mode
     if ns.goal:
@@ -117,7 +114,7 @@ def _cmd_watch(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="recharge-ai-task-cli watch", description=t("help.desktop_mode"))
     parser.add_argument("--desktop", action="store_true", default=True)
     parser.add_argument("--codex", metavar="PATH")
-    parser.add_argument("--provider", choices=PROVIDERS, default=user.provider)
+    parser.add_argument("--provider", choices=("all", *PROVIDERS), default="all")
     goal = parser.add_mutually_exclusive_group()
     goal.add_argument("--goal", action="store_true", dest="goal", help="Verify native recovery of quota-stopped goals for Linux chat IDs")
     goal.add_argument("--no-goal", action="store_false", dest="goal", help="Send only the normal signal text; allows window targets")
@@ -126,18 +123,14 @@ def _cmd_watch(argv: list[str]) -> int:
     parser.add_argument("--continue", dest="continue_prompt", default=None)
     ns = parser.parse_args(argv)
 
-    if ns.provider == "muse":
-        from .muse import DESKTOP_LIMITATION
-        sys.stderr.write(DESKTOP_LIMITATION + "\n")
-        return 1
-    user.provider = ns.provider
-    recipients = user.targets()
+    recipients = user.targets(None if ns.provider == "all" else ns.provider)
     if ns.goal is not None:
         recipients = [replace(target, send_goal=ns.goal and target.kind == "thread",
                               send_prompt=target.send_prompt if ns.goal else True) for target in recipients]
     config = WatchConfig(
         provider=ns.provider,
         codex_path=ns.codex or user.codex_path,
+        muse_path=user.muse_path,
         continue_prompt=ns.continue_prompt or user.continue_prompt,
         goal_mode=user.goal_mode if ns.goal is None else ns.goal,
         grace_seconds=ns.grace if ns.grace is not None else user.grace_seconds,
@@ -150,22 +143,22 @@ def _cmd_watch(argv: list[str]) -> int:
 
 def _cmd_targets(argv):
     from .targets import discover_targets
-    parser = argparse.ArgumentParser(prog="recharge-ai-task-cli targets", description="Discover Codex chats and windows, and select signal recipients")
+    parser = argparse.ArgumentParser(prog="recharge-ai-task-cli targets", description="Discover installed AI chats and windows, and select signal recipients")
     parser.add_argument("--json", action="store_true", help="Print all metadata as JSON")
     parser.add_argument("--gui", action="store_true", help="Open the multi-target picker")
     parser.add_argument("--select", action="append", metavar="ID", help="Save this target (repeat for multiple targets)")
     parser.add_argument("--clear", action="store_true", help="Clear saved selection")
-    parser.add_argument("--provider", choices=PROVIDERS, default=_load_user_config().provider)
+    parser.add_argument("--provider", choices=("all", *PROVIDERS), default="all")
     ns = parser.parse_args(argv)
     if ns.gui:
         config = _load_user_config()
-        config.provider = ns.provider
+        config.chat_provider_filter = ns.provider
         config.save()
         from .desktop_launch import launch
         return launch([])
-    inventory = discover_targets() if ns.provider == "codex" else discover_targets(ns.provider)
+    from .providers import discover_all_targets
+    inventory = discover_all_targets() if ns.provider == "all" else discover_targets(ns.provider)
     config = _load_user_config()
-    config.provider = ns.provider
     if ns.select is not None and ns.clear:
         parser.error("--select and --clear cannot be combined")
     if ns.select:
@@ -184,13 +177,13 @@ def _cmd_targets(argv):
                            send_goal=saved.send_goal if active else False)
         chosen = [choose(t) for t in selection]
         keys = {t.key for t in chosen}
-        inactive = [replace(t, send_prompt=False, send_goal=False) if t.provider == ns.provider else t
+        inactive = [replace(t, send_prompt=False, send_goal=False) if ns.provider == "all" or t.provider == ns.provider else t
                     for key, t in previous.items() if key not in keys]
         config.desktop_targets = [t.to_dict() for t in chosen + inactive]
         config.mode = "desktop"
         config.save()
     elif ns.clear:
-        config.desktop_targets = [(replace(t, send_prompt=False, send_goal=False) if t.provider == ns.provider else t).to_dict() for t in config.all_targets()]
+        config.desktop_targets = [(replace(t, send_prompt=False, send_goal=False) if ns.provider == "all" or t.provider == ns.provider else t).to_dict() for t in config.all_targets()]
         config.save()
     selected = {t.key: t for t in config.targets()}
     preferences = {t.key: t for t in config.all_targets()}
@@ -200,7 +193,7 @@ def _cmd_targets(argv):
                 send_goal=selected[t.key].send_goal if t.key in selected else False) for t in inventory.targets], "warnings": inventory.warnings}, indent=2, ensure_ascii=False))
     else:
         for t in inventory.targets:
-            print(f"{'[x]' if t.key in selected else '[ ]'} {t.kind:6} {t.title}\n    ID: {t.id}  PID: {t.pid or '—'}  Instance: {t.instance}\n    Task: {t.task_status}  Goal: {t.goal_status}\n    {t.deeplink or t.status}")
+            print(f"{'[x]' if t.key in selected else '[ ]'} {t.provider:6} {t.kind:7} {t.title}\n    ID: {t.id}  PID: {t.pid or '—'}  Instance: {t.instance}\n    Task: {t.task_status}  Goal: {t.goal_status}\n    {t.deeplink or t.status}")
         for warning in inventory.warnings:
             print(f"Warning: {warning}", file=sys.stderr)
     return 0
@@ -243,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
   gui              Open the graphical dashboard, targets and settings
   tray             Start directly in the system tray without a dashboard
   targets --gui    Open the same graphical dashboard
-  targets --json   List targets for the selected AI provider as JSON
+  targets --json   List chats from all installed providers as JSON
   run              Run Codex, Claude Code or Muse Code with auto-continue
   watch            Watch quota and signal saved desktop recipients
   quota            Show current quota and reset times
@@ -269,7 +262,7 @@ Use recharge-ai-task --tray to start only the tray."""
     user = _load_user_config()
 
     if not argv:
-        if user.mode == "desktop" and user.provider != "muse":
+        if user.mode == "desktop":
             return _cmd_watch([])
         return _cmd_run([])
 

@@ -33,8 +33,8 @@ recharge-ai-task-cli configure          # choose mode (cli/desktop) and defaults
 | **Linux graphical dashboard** | `recharge-ai-task` | Select recipients, view quota, change settings, start/stop Desktop watch |
 | **ChatGPT Codex desktop app** | `recharge-ai-task-cli watch` | Open Codex and save recipients in the GUI first |
 | **Claude Code CLI** | `recharge-ai-task-cli run --provider claude` | Uses the Claude terminal limit/reset message and configured continuation text |
-| **Claude desktop app** | `recharge-ai-task-cli watch --provider claude` | Select Claude windows in Settings and save recipients first; see [Claude setup](#anthropic-claude) |
-| **Meta Muse Code** | `recharge-ai-task-cli run --provider muse` | Checks both subscription allowances with `muse usage --json`; see [Muse setup](#meta-muse-code) |
+| **Claude desktop app** | `recharge-ai-task-cli watch --provider claude` | Select Claude windows or local Code chats in the main list; see [Claude setup](#anthropic-claude) |
+| **Meta Muse Code** | `recharge-ai-task-cli run --provider muse` or saved chats in the dashboard | Checks both subscription allowances with `muse usage --json`; see [Muse setup](#meta-muse-code) |
 | **Start directly in tray** | `recharge-ai-task --tray` or `recharge-ai-task-cli tray` | Starts without opening the dashboard or starting monitoring |
 | **Check quota only** | `recharge-ai-task-cli quota` | Shows short/long window usage |
 | **No Python (Release zip)** | Run `recharge-ai-task.exe` (Win) or `recharge-ai-task` (Linux) | Two binaries: CLI and combined desktop app. Keep them together for CLI integration; Codex CLI must be installed and signed in |
@@ -57,7 +57,7 @@ When quota is exhausted, Recharge AI-task waits for recovery and the grace perio
 
 - **Two modes**
   - `cli` — PTY wrapper around `codex`, `claude` or `muse` in the terminal
-  - `desktop` — watches the selected provider's quota and signals its saved recipients
+  - `desktop` — watches each saved recipient's provider quota and signals its selected chats
 - **Reset detection** — Codex terminal parsing plus `codex app-server`; Claude terminal reset messages or subscription usage for desktop; Muse Code's limit banner and official subscription-allowance command
 - **Cross-platform** — Windows and Ubuntu (x86_64); `pip install` for developers
 - **Optional tray app** — system tray on Windows & Linux (start/stop, quota, autostart)
@@ -339,7 +339,7 @@ See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · [OPE
 - Codex desktop quota requires local Codex CLI auth (`codex app-server` must work)
 - Claude desktop quota requires a local Claude Code subscription login and its private usage endpoint
 - Terminal limit message formats may change; Codex has a quota API fallback, while Claude CLI uses the printed reset
-- Muse continuation supports wrapped terminal sessions; consumer Muse app/browser chats have no continuation bridge in this integration
+- Muse continuation supports wrapped terminals and saved local Code sessions; consumer Muse app/browser chats have no continuation bridge in this integration
 
 ### Logs
 
@@ -548,13 +548,48 @@ See [status help and keyboard controls](docs/target-selection.md#status-help-and
 
 ## Anthropic Claude
 
-Select **Settings → AI provider → Anthropic Claude**, then save. The dashboard
-shows Claude windows and Claude subscription quota. Codex remains the default
-for existing installations. Each provider retains its recipients, overrides,
-allowances and recovery checkpoints when you switch; one provider is monitored
-at a time. Settings has separate executable paths and terminal arguments for
-Codex and Claude. The tray's normal terminal action starts the selected provider;
-its Codex Goal action is disabled for Claude.
+The main list automatically discovers locally installed Codex, Claude Code and Muse
+Code and shows their chats together. No provider selection in Settings is needed.
+Use the **Provider** filter beside Search to show **All chats**, **Codex**,
+**Claude** or **Muse Code**. This changes visibility only: hidden recipients keep
+their selected actions, messages, allowances and monitoring. The Provider column
+identifies each row. The last filter is remembered; fresh installations start at All.
+
+Select recipients from several providers at once. Desktop watch monitors their
+quotas independently, so one unavailable login does not block other providers.
+The dashboard displays each detected provider's quota and reuses its worker's
+observations while monitoring. **Settings → Default terminal AI** only chooses the
+provider for a new wrapped terminal; optional executable paths and arguments are
+separate for every CLI. All paths are auto-detected by default.
+
+### Saved local Code chats
+
+Claude Code histories under `~/.claude/projects/` (or `CLAUDE_CONFIG_DIR`) and
+Muse Code histories under `$XDG_DATA_HOME/muse/sessions/` (normally
+`~/.local/share/muse/sessions/`) appear automatically. This inventories local main
+sessions, not account-wide cloud conversations or internal subagents. Saved chat
+status means its local history exists; it does not assert that a turn is idle.
+
+**Open selected row** resumes a local chat in its provider's terminal. **Send
+message** and automatic recovery use native exact-session continuation:
+`claude --resume ID --print --verbose --output-format stream-json MESSAGE` or
+`muse exec --session-id ID --json MESSAGE`. The original project and profile are
+retained. Provider permissions stay in effect; saved general terminal arguments
+are not applied to targeted delivery because they could select another chat or
+change permissions. Native Goal activation remains Codex-only.
+
+A running provider session is not taken over. Recharge blocks a second continuation launch
+for an identified active chat, or conservatively for an unidentified interactive
+session in the same project. Use the existing wrapped terminal for that case.
+Prompt acceptance is verified from the native session record or successful Claude
+result; launching a process alone is insufficient. Unconfirmed launches are
+counted as uncertain and are not retried automatically. Native output is retained
+in private `session-runs/` logs under Recharge's configuration directory.
+Native permission requests or further input may still require attention in the
+provider; accepting a prompt does not assert that its task completed.
+
+See [provider discovery and recovery design](doc/architecture/2026-11-07_unified-provider-chats.md)
+for metadata versions and integration boundaries.
 
 ### Claude Code terminal
 
@@ -591,7 +626,7 @@ cannot be resumed through that terminated PTY.
 ### Claude desktop
 
 1. Run `claude auth login` using the **same subscription account** as Claude desktop.
-2. Open Claude desktop. In Recharge Settings, select Anthropic Claude and save.
+2. Open Claude desktop; its supported native windows appear automatically.
 3. Select **Send message** for the desired window recipients. Keep the intended
    chat open with its empty message composer focused. Adding the first recipient
    starts Desktop watch; use Start/Stop Desktop watch to control it thereafter.
@@ -609,7 +644,7 @@ recharge-ai-task-cli watch --provider claude
 
 Window discovery checks application identity, not page titles in browsers.
 Delivery rechecks the provider, window ID, process and foreground window.
-Recipients address the **current chat in a window**, not a saved Claude chat ID;
+Window recipients address the **current chat in a window**, rather than a saved Code session ID;
 changing that window's chat changes where its next signal goes. OS input cannot
 verify that Claude accepted a turn. Check the composer before retrying an
 unconfirmed send. Per-recipient messages, limits and one-use overrides use the
@@ -652,13 +687,13 @@ recharge-ai-task-cli quota --provider muse
 recharge-ai-task-cli run --provider muse
 recharge-ai-task-cli run --provider muse -- resume --last
 recharge-ai-task-cli run --provider muse --muse /path/to/muse --grace 60
-# Save Muse as the default for the terminal, dashboard and tray:
+# Optionally save Muse as the default for new wrapped terminals:
 recharge-ai-task-cli configure --provider muse --mode cli
 ```
 
 Discovery uses `--muse`, `MUSE_CLI_PATH`, PATH and the standard native-install
 location. Arguments after `--` go to Muse; its executable path and saved arguments
-are independent of Codex and Claude. Switching providers preserves their saved
+are independent of Codex and Claude. The list filter preserves all saved
 recipients and policies. Muse uses the configured continuation message (default
 `Continue`); a previously enabled Codex Goal setting does not inject `/goal resume`.
 Muse's own goals remain available through its native `/goal` commands.
@@ -688,19 +723,20 @@ launcher behavior.
 
 ### Muse in the dashboard and tray
 
-Choose **Settings → AI provider → Meta Muse Code**. The dashboard shows the
-subscription session and weekly allowance and offers **Start Muse Code CLI**.
-The tray has **Start Muse Code** too. These open a terminal using the same wrapper
-and saved Muse arguments. Settings keeps its mode at CLI for this provider.
-The dashboard's quota display refreshes on the configured interval; recovery in
-the running terminal performs its own checks when it encounters a limit.
+Saved local Muse Code sessions appear in the main list alongside Codex and Claude.
+Use the **Muse Code** filter to view only those rows. Select **Send message** to
+include them in recovery, or use **Open selected row** to resume one interactively.
+The dashboard shows its subscription session and weekly allowances automatically.
+The tray's **Start Muse Code** action is available when Muse is the default for new
+wrapped terminal sessions. Existing interactive sessions remain under their own
+terminal's control.
 
 Consumer **Muse app/browser chats are not continuation recipients** in this
 integration. They are a separate product from Muse Code and must not inherit its
-subscription quota or Codex/Claude routing. `targets --provider muse` explains
-this limit instead of guessing a window or browser identity; `watch --provider
-muse` directs you to the wrapped terminal. Native Codex Goal recovery and desktop
-recipient policies do not apply to Muse terminal sessions.
+subscription quota or Codex/Claude routing. `targets --provider muse` lists local
+Code sessions; `watch --provider muse` monitors selected Code recipients. Native
+Codex Goal recovery is unavailable for Muse, while per-recipient messages, limits
+and one-use overrides apply to saved Code sessions.
 
 This boundary was checked against Muse Code 1.4.13 and the official
 [MSP transport documentation](https://meta-models.github.io/muse-code-sdk/next/guides/msp-wire/framing-and-caps/):

@@ -70,7 +70,8 @@ def test_cli_reselection_preserves_existing_signal_choices(monkeypatch, capsys):
     from recharge_ai_task import cli, targets
     saved = Target('thread', 'chosen', 'Old title', send_prompt=False, send_goal=True)
     AppConfig(desktop_targets=[saved.to_dict()]).save()
-    monkeypatch.setattr(targets, 'discover_targets', lambda: targets.Inventory([replace(saved, title='New title')]))
+    from recharge_ai_task import providers
+    monkeypatch.setattr(providers, 'discover_all_targets', lambda: targets.Inventory([replace(saved, title='New title')]))
     assert cli.main(['targets', '--select', 'chosen', '--json']) == 0
     assert AppConfig.load().targets() == [replace(saved, title='New title')]
 
@@ -102,7 +103,8 @@ def test_cli_deselection_and_reselection_keep_message_and_limit_overrides(monkey
     a = Target('thread','a','Same',send_prompt=True,send_goal=False,custom_prompt='Special',prompt_limit=2)
     b = replace(a,id='b',custom_prompt=None,prompt_limit=None)
     AppConfig(desktop_targets=[a.to_dict(),b.to_dict()]).save()
-    monkeypatch.setattr(targets,'discover_targets',lambda:targets.Inventory([replace(a,custom_prompt=None,prompt_limit=None),b]))
+    from recharge_ai_task import providers
+    monkeypatch.setattr(providers,'discover_all_targets',lambda:targets.Inventory([replace(a,custom_prompt=None,prompt_limit=None),b]))
     assert cli.main(['targets','--select','b','--json'])==0
     assert [t.id for t in AppConfig.load().targets()]==['b']
     assert next(t for t in AppConfig.load().all_targets() if t.id=='a').custom_prompt=='Special'

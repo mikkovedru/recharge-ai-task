@@ -47,7 +47,6 @@ class SettingsDialog(Gtk.Dialog):
         for key, label in PROVIDER_LABELS.items():
             self.provider.append(key, label)
         self.provider.set_active_id(config.provider)
-        self.provider.set_tooltip_text("Choose whose quota and desktop recipients to monitor. Each provider keeps its recipients (Alt + Down)")
         self.claude_path = Gtk.Entry(text=config.claude_path or "", placeholder_text="Auto-detect Claude Code")
         self.claude_path.set_tooltip_text("Optional path to the Claude Code executable; desktop quota uses its subscription login")
         self.claude_args = Gtk.Entry(text=shlex.join(config.claude_args or []), placeholder_text="Optional Claude Code arguments")
@@ -75,7 +74,8 @@ class SettingsDialog(Gtk.Dialog):
         self.autostart.set_active(startup == "Enabled")
         runtime = getattr(parent, "runtime", None)
         launched = "Unknown (tray unavailable)" if runtime is None else "Yes" if runtime.get("launched_at_startup") else "No"
-        rows = (("AI provider", self.provider), ("Default mode", self.mode),
+        self.provider.set_tooltip_text("Default for starting a new terminal session only. Chat discovery, filtering and monitoring automatically use all installed providers (Alt+Down)")
+        rows = (("Default terminal AI", self.provider), ("Default mode", self.mode),
             ("Codex CLI path", self.path), ("CLI arguments", self.args),
             ("Claude Code path", self.claude_path), ("Claude arguments", self.claude_args),
             ("Muse Code path", self.muse_path), ("Muse arguments", self.muse_args),
@@ -97,7 +97,7 @@ class SettingsDialog(Gtk.Dialog):
             "Those choices save automatically for future quota recovery; Send now acts immediately.",
             "Startup launches the tray; Desktop watch starts when the first recipient is added or you turn it on.",
             "Claude desktop uses selected windows with an empty, focused composer and a Claude Code login for the same account. Resume goal is Codex-only.",
-            "Muse Code uses a wrapped terminal and muse usage for allowance checks. App/browser recipients are unavailable; start Muse Code CLI from the dashboard or tray.",
+            "Installed Codex, Claude Code and Muse Code chats appear together. The main list's Provider filter changes visibility only.",
             "Changes to an active watch apply automatically."):
             row = Gtk.Box(spacing=6)
             bullet = Gtk.Label(label="•", valign=Gtk.Align.START)
@@ -111,19 +111,6 @@ class SettingsDialog(Gtk.Dialog):
         self.error = Gtk.Label(xalign=0)
         self.error.set_line_wrap(True)
         grid.attach(self.error, 0, len(rows) + 2, 2, 1)
-        def provider_changed(*_):
-            provider = self.provider.get_active_id()
-            for widget in (self.path, self.args):
-                widget.set_sensitive(provider == "codex")
-            for widget in (self.claude_path, self.claude_args):
-                widget.set_sensitive(provider == "claude")
-            for widget in (self.muse_path, self.muse_args):
-                widget.set_sensitive(provider == "muse")
-            self.mode.set_sensitive(provider != "muse")
-            if provider == "muse":
-                self.mode.set_active_id("cli")
-        self.provider.connect("changed", provider_changed)
-        provider_changed()
         self.show_all()
 
     def _restore_saved_theme(self, *_):

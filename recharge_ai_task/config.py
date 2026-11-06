@@ -53,6 +53,7 @@ class AppConfig:
     claude_args: list[str] | None = None
     muse_path: str | None = None
     muse_args: list[str] | None = None
+    chat_provider_filter: str = "all"
 
     @classmethod
     def load(cls) -> AppConfig:
@@ -85,6 +86,7 @@ class AppConfig:
             claude_args=data.get("claude_args"),
             muse_path=data.get("muse_path"),
             muse_args=data.get("muse_args"),
+            chat_provider_filter=data.get("chat_provider_filter") if data.get("chat_provider_filter") in ("all", *PROVIDERS) else "all",
         )
 
     def save(self) -> None:
@@ -115,7 +117,5 @@ class AppConfig:
             result.append(replace(target, send_prompt=prompt, send_goal=goal))
         return result
 
-    def targets(self):
-        if self.provider == "muse":
-            return []  # Muse continuation belongs to its wrapped terminal.
-        return [t for t in self.all_targets() if t.provider == self.provider and any(t.signal_actions())]
+    def targets(self, provider=None):
+        return [t for t in self.all_targets() if (provider is None or t.provider == provider) and any(t.signal_actions())]

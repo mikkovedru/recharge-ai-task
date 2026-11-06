@@ -70,6 +70,7 @@ class Target:
 class Inventory:
     targets: list[Target] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    providers: tuple[str, ...] = ()
 
 
 def codex_home():
@@ -364,15 +365,17 @@ def discover_targets(provider="codex"):
     from .codex_ipc import DesktopIPC
     inventory = Inventory()
     if provider == "muse":
-        from .muse import DESKTOP_LIMITATION
-        inventory.warnings.append(DESKTOP_LIMITATION)
-        return inventory
+        from .session_catalog import discover_sessions
+        return discover_sessions(provider)
     try:
         inventory.targets.extend(discover_windows() if provider == "codex" else discover_windows(provider))
     except Exception as exc:
         inventory.warnings.append(f"Window discovery: {exc}")
     if provider == "claude":
-        inventory.warnings.append("Claude recipients use the current chat in each selected window. Keep its empty message composer focused. Native Codex Goal recovery and saved-chat routing are unavailable.")
+        from .session_catalog import discover_sessions
+        sessions = discover_sessions(provider)
+        inventory.targets.extend(sessions.targets)
+        inventory.warnings.extend(sessions.warnings)
         return inventory
     if provider != "codex":
         raise ValueError("Unknown AI provider")

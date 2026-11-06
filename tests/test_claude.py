@@ -185,18 +185,20 @@ def test_provider_and_recipient_roundtrip_preserves_codex_keys():
                        desktop_targets=[codex.to_dict(), anthropic.to_dict()])
     config.save()
     loaded = AppConfig.load()
-    assert [t.provider for t in loaded.targets()] == ['claude']
+    assert [t.provider for t in loaded.targets()] == ['codex', 'claude']
+    assert [t.provider for t in loaded.targets('claude')] == ['claude']
     assert loaded.claude_path == '/cli/claude' and loaded.claude_args == ['--continue']
     claude_checkpoint = watch_state.state_path(loaded)
     claude_settings = tray_control.watch_settings(loaded)
     loaded.provider = 'codex'
-    assert [t.key for t in loaded.targets()] == [old_key]
-    assert watch_state.state_path(loaded) != claude_checkpoint
-    assert tray_control.watch_settings(loaded) != claude_settings
+    assert [t.key for t in loaded.targets("codex")] == [old_key]
+    assert watch_state.state_path(loaded) == claude_checkpoint
+    assert tray_control.watch_settings(loaded) == claude_settings
     assert len(loaded.all_targets()) == 2
 
 
-def test_claude_discovery_never_reads_codex(monkeypatch):
+def test_claude_discovery_never_reads_codex(tmp_path, monkeypatch):
+    monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(tmp_path))
     target = Target('window', '42', 'Claude', provider='claude', pid=7)
     monkeypatch.setattr(targets, 'discover_windows', lambda provider: [target] if provider == 'claude' else [])
     monkeypatch.setattr(targets, 'discover_homes', lambda: pytest.fail('Read Codex homes for Claude'))
@@ -311,11 +313,11 @@ def test_cli_selection_and_clear_preserve_other_provider(monkeypatch):
     monkeypatch.setattr(targets, 'discover_targets', lambda provider='codex': targets.Inventory([anthropic] if provider == 'claude' else [codex]))
     assert cli.main(['targets', '--provider', 'claude', '--select', '42']) == 0
     config = AppConfig.load()
-    assert config.provider == 'claude' and len(config.targets()) == 1
+    assert config.provider == 'codex' and len(config.targets()) == 2
     assert next(t for t in config.all_targets() if t.id == 'codex-chat').send_prompt
     assert cli.main(['targets', '--provider', 'claude', '--clear']) == 0
     config = AppConfig.load()
-    assert not config.targets()
+    assert [t.id for t in config.targets()] == ['codex-chat']
     config.provider = 'codex'
     assert len(config.targets()) == 1 and config.targets()[0].id == 'codex-chat'
 

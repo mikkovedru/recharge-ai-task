@@ -1,13 +1,22 @@
-# Codex target discovery and delivery
+# AI chat discovery and delivery
 
 <p align="center">
   <img src="assets/logo-lockup.png" width="200" alt="Recharge AI-task logo">
 </p>
 
 The selector distinguishes **desktop windows** (X11 window ID + process ID)
-from **Codex chats** (stable thread ID + Codex profile). Titles are labels, not
+from **Codex chats** (stable thread ID + Codex profile) and **Claude/Muse Code
+sessions** (native session ID + provider profile). Titles are labels, not
 identities: two chats can have the same name, and several chats can use the same
 window. Selection is explicit, supports several recipients, and survives restart.
+
+The main list discovers installed providers automatically and starts at **All
+chats**. The **Provider** filter beside Search selects All, Codex, Claude or Muse
+Code without changing recipients or monitoring. The Provider column keeps equal
+titles and IDs distinguishable. Hidden selected recipients remain active in the
+recipient panel. Settings' default terminal provider only controls new wrapped
+terminals. See [saved local Code chats](../README.md#saved-local-code-chats) for
+native session paths, delivery behavior and current limits.
 
 ## Research
 
@@ -81,7 +90,7 @@ shows the recipient count and is disabled when none are selected. Manual sends
 may resume paused goals; automatic recovery continues to respect intentional pauses.
 Send message sends only the message. Resume goal resumes natively and starts
 continuation without a prompt. Both activates the goal first, then sends the
-message. Window rows support Send message only. **Open selected row** opens a chat
+message. Window and Claude/Muse Code session rows support Send message only. **Open selected row** opens a chat
 without sending.
 The compact table shows Send message, Resume goal, Title, Last active, Task status,
 Goal status and Project. **Last active** is Codex's last saved chat update, shown

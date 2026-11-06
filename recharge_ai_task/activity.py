@@ -50,7 +50,8 @@ def record(target, source, action, status, detail="", message=""):
 
 
 def target_label(target):
-    return f"{target.title} [Project: {target.project_name or 'not available'}]"
+    provider = {"claude": "Claude · ", "muse": "Muse Code · "}.get(target.provider, "")
+    return f"{provider}{target.title} [Project: {target.project_name or 'not available'}]"
 
 
 def display_event(event):

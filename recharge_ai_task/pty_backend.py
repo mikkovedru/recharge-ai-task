@@ -23,10 +23,14 @@ class StopEvent:
         """Interrupt a wait to recheck state without stopping the worker."""
         self._wakeup.set()
 
+    def wait_woken(self, timeout: float) -> bool:
+        woken = self._wakeup.wait(timeout)
+        self._wakeup.clear()
+        return woken
+
     def wait(self, timeout: float) -> bool:
         if not self._flag.is_set():
-            self._wakeup.wait(timeout)
-            self._wakeup.clear()
+            self.wait_woken(timeout)
         return self._flag.is_set()
 
 

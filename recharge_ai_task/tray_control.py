@@ -15,12 +15,14 @@ MAX_MESSAGE = 65536
 
 
 def watch_settings(config):
+    providers = {t.provider for t in config.targets()}
     return {"targets": [list(row) for row in sorted((t.key, *t.signal_actions()) for t in config.targets())],
             "recipient_policies": [[t.key, t.custom_prompt, t.prompt_limit, t.goal_limit, t.custom_prompt_once] for t in sorted(config.targets(), key=lambda t: t.key)],
             "signal": config.continue_prompt, "goal": config.goal_mode,
             "grace": config.grace_seconds, "poll": config.poll_seconds,
             "codex_path": config.codex_path, "prompt_limit": config.prompt_limit, "goal_limit": config.goal_limit,
-            "provider": config.provider}
+            "provider": next(iter(providers)) if len(providers) == 1 else "all",
+            "provider_paths": {p: getattr(config, p + "_path") for p in sorted(providers)}}
 
 
 def control_path():

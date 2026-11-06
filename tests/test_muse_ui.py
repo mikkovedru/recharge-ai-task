@@ -1,4 +1,4 @@
-"""Muse provider setup and terminal launch through the GTK dashboard."""
+"""Unified provider filtering, saved recipients and independent quota display."""
 import os
 import pytest
 from test_monitoring_status_ui import run_gui
@@ -6,78 +6,77 @@ from test_monitoring_status_ui import run_gui
 pytestmark=pytest.mark.skipif(os.environ.get('RECHARGE_AI_TASK_GUI_TESTS')!='1',reason='Requires GTK and X11')
 
 
-def test_muse_selection_quota_and_terminal_action_preserve_other_providers():
+def test_all_provider_filter_mouse_keyboard_search_resize_and_persistence():
     run_gui(r'''
-from gi.repository import GLib
-from recharge_ai_task.muse import parse_usage,DESKTOP_LIMITATION
-from recharge_ai_task import muse
-original_discovery=target_ui.discover_targets
-target_ui.discover_targets=lambda provider='codex':Inventory(warnings=[DESKTOP_LIMITATION]) if provider=='muse' else original_discovery()
-quota_calls=[]
-def quota(path):
-    quota_calls.append(path);now=time.time()
-    return parse_usage({'schemaVersion':1,'allowance':{'tier':'test','asOfMs':int(now*1000),
-        'window':{'usedPercent':42,'resetsAtMs':int((now+3600)*1000)},
-        'weekly':{'usedPercent':30,'resetsAtMs':int((now+86400)*1000)}}})
-target_ui.fetch_muse_quota=quota
-original_control=target_ui.tray_control.request
-runtime['muse_support']=True
-def control(command='status',**kwargs):
-    if command=='start-cli':
-        commands.append(command);runtime['cli_running']=True
-        return dict(runtime)
-    return original_control(command,**kwargs)
-target_ui.tray_control.request=control
+# Deliberately identical kind, profile, ID and title across providers.
+c=Target('session','same','Shared name',instance='fixture',provider='claude',send_prompt=True,send_goal=False)
+m=replace(c,provider='muse')
+config=AppConfig.load();config.desktop_targets.extend([c.to_dict(),m.to_dict()]);config.save()
+target_ui.discover_targets=lambda:Inventory([a,b,c,m],providers=('codex','claude','muse'))
+target_ui.fetch_claude_quota=lambda:(_ for _ in ()).throw(RuntimeError('fixture login required'))
+target_ui.fetch_muse_quota=lambda _:Quota('Muse test',RateWindow(42,300,9999999999),RateWindow(30,10080,9999999999),False)
+runtime['unified_providers']=True
 w=make()
 try:
-    def select():
-        dialogs=[item for item in Gtk.Window.list_toplevels() if isinstance(item,settings_ui.SettingsDialog)]
-        if not dialogs:return True
-        d=dialogs[0]
-        assert [row[1] for row in d.provider.get_model()]==['codex','claude','muse']
-        d.set_accept_focus(True);d.set_focus_on_map(True);pump(d)
-        d.provider.grab_focus()
-        subprocess.run(['xdotool','windowactivate','--sync',str(d.get_window().get_xid())],check=True)
-        subprocess.run(['xdotool','key','End'],check=True)
-        pump(d)
-        assert d.provider.get_active_id()=='muse', (d.provider.get_active_id(), d.get_focus(), d.is_active())
-        assert d.muse_path.get_sensitive() and d.muse_args.get_sensitive()
-        assert not d.path.get_sensitive() and not d.claude_path.get_sensitive()
-        assert not d.mode.get_sensitive() and d.mode.get_active_id()=='cli'
-        d.muse_path.set_text('/test/muse');d.muse_args.set_text('resume --last')
-        click(d.get_widget_for_response(Gtk.ResponseType.OK),d)
-        return False
-    GLib.timeout_add(50,select);w.settings();pump(w)
-    stored=AppConfig.load()
-    assert stored.provider=='muse' and stored.muse_path=='/test/muse' and stored.muse_args==['resume','--last']
-    assert w.get_title().endswith('Meta Muse Code')
-    assert not w.selected and len(w.store)==0
-    assert quota_calls and all(path=='/test/muse' for path in quota_calls)
-    assert '42% used' in w.quota_label.get_text() and '30% used' in w.quota_label.get_text()
-    assert 'app/browser' in w.status.text()
-    assert w.watch_button.get_label()=='Start Muse Code CLI' and w.watch_button.get_sensitive()
-    assert not w.send_button.get_sensitive()
-    w.watch_button.clicked();pump(w)
-    assert 'start-cli' in commands and 'start-watch' not in commands
-    assert w.watch_button.get_label()=='CLI service running' and not w.watch_button.get_sensitive()
-    assert 'Muse Code CLI launched' in w.status.text()
-    w.save();assert AppConfig.load().mode=='cli'
-    assert {t.key for t in AppConfig.load().all_targets()}=={a.key,b.key}
-    d=settings_ui.SettingsDialog(w);pump(w)
-    try:
-        d.resize(620,420);pump(w)
-        assert d.get_size().height<=420
-        assert d.scroller.get_vadjustment().get_upper()>d.scroller.get_vadjustment().get_page_size()
-        for dark in (False,True):
-            Gtk.Settings.get_default().set_property('gtk-theme-name','Adwaita')
-            Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w)
-            d.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*d.get_size());d.draw(cairo.Context(surface))
-            surface.write_to_png('/tmp/2026-11-07_muse-settings-'+('dark' if dark else 'light')+'.png')
-    finally:d.destroy()
-    runtime['cli_running']=False
-    stored=AppConfig.load();stored.provider='codex';stored.save();w.poll_runtime();pump(w)
-    assert set(w.selected)=={a.key,b.key} and len(w.store)==2
-    assert 'Start Desktop watch'==w.watch_button.get_label()
-    assert 'Muse Code' not in w.watch_button.get_tooltip_text()
+    assert w.provider_filter.get_active_id()=='all' and len(w.filtered)==4
+    assert set(w.targets)=={a.key,b.key,c.key,m.key} and len(w.selected)==4
+    assert 'fixture login required' in w.status.text()
+    assert '42% used' in w.quota_label.get_text() and '40% used' in w.quota_label.get_text()
+    settings_before=tray_control.watch_settings(AppConfig.load())
+    # Real mouse opens the list; keyboard chooses Claude.
+    w.set_accept_focus(True);w.set_focus_on_map(True);pump(w)
+    subprocess.run(['xdotool','windowactivate','--sync',str(w.get_window().get_xid())],check=True)
+    click(w.provider_filter,w)
+    subprocess.run(['xdotool','key','Home','Down','Down','Return'],check=True);pump(w)
+    assert w.provider_filter.get_active_id()=='claude' and len(w.filtered)==1,w.provider_filter.get_active_id()
+    assert set(w.selected)=={a.key,b.key,c.key,m.key}
+    assert tray_control.watch_settings(AppConfig.load())==settings_before
+    w._toggle(None,'0');pump(w)
+    assert not next(t for t in AppConfig.load().all_targets() if t.key==c.key).send_prompt
+    assert next(t for t in AppConfig.load().all_targets() if t.key==m.key).send_prompt
+    assert next(row for row in w.store if row[17]==m.key)[0]
+    w.highlight_recipient(m.key);pump(w)
+    assert w.provider_filter.get_active_id()=='muse' and w._row_target().key==m.key
+    w.search.set_text('does not exist');pump(w);assert len(w.filtered)==0
+    w.search.set_text('shared');pump(w);assert len(w.filtered)==1
+    w.search.set_text('');w.provider_filter.set_active_id('all');pump(w)
+    assert len(w.filtered)==4 and len(w.selected)==3
+    for dark in (False,True):
+        Gtk.Settings.get_default().set_property('gtk-theme-name','Adwaita')
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
+        w.resize(1120,820);pump(w)
+        assert w.get_size().width<=1120 and w.get_size().height<=820
+        assert w.table.get_parent().get_allocated_height()>=120
+        x,y=pos(w.provider_filter,w)
+        assert x>=0 and x+w.provider_filter.get_allocated_width()<=w.get_size().width
+        w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
+        surface.write_to_png('/tmp/2026-11-07_unified-chats-'+('dark' if dark else 'light')+'.png')
+    w.provider_filter.set_active_id('muse');pump(w)
+finally:w.destroy()
+w=make()
+try:
+    assert w.provider_filter.get_active_id()=='muse' and len(w.filtered)==1
+    assert set(w.selected)=={a.key,b.key,m.key}
+    assert AppConfig.load().provider=='codex'
+finally:w.destroy()
+''')
+
+
+def test_fresh_install_automatically_lists_every_detected_provider():
+    run_gui(r'''
+# No saved settings and no manual provider change.
+from recharge_ai_task.config import config_path
+config_path().unlink()
+c=Target('session','c','Claude Code project',provider='claude')
+m=Target('session','m','Muse Code project',provider='muse')
+target_ui.discover_targets=lambda:Inventory([a,c,m],providers=('codex','claude','muse'))
+target_ui.fetch_claude_quota=lambda:Quota('Claude',RateWindow(10,300,9999999999),None,False)
+target_ui.fetch_muse_quota=lambda _:Quota('Muse',RateWindow(20,300,9999999999),None,False)
+w=make()
+try:
+    assert w.provider_filter.get_active_id()=='all' and len(w.filtered)==3
+    assert not w.selected
+    assert set(w.active_providers)=={'codex','claude','muse'}
+    assert 'Anthropic Claude' in w.quota_label.get_text() and 'Meta Muse Code' in w.quota_label.get_text()
 finally:w.destroy()
 ''')

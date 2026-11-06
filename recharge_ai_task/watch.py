@@ -1,4 +1,4 @@
-"""Provider-scoped quota watcher for Codex and Claude desktop recipients."""
+"""Independent provider quota watches and selected-chat recovery."""
 
 from __future__ import annotations
 
@@ -37,6 +37,7 @@ class WatchState:
     near_limit_windows: dict = field(default_factory=dict)
     completed_actions: dict = field(default_factory=dict)
     in_flight: tuple | None = None
+    provider_states: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -53,6 +54,7 @@ class WatchConfig:
     state: WatchState | None = None
     checkpoint: object = None
     provider: str = "codex"
+    muse_path: str | None = None
 
 
 def _log_status(message: str) -> None:
@@ -63,13 +65,11 @@ def _log_status(message: str) -> None:
 
 def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int:
     stop = stop or StopEvent()
-    if config.provider == "muse":
-        from .muse import DESKTOP_LIMITATION
-        _log_status(DESKTOP_LIMITATION)
-        return 1
-    if config.provider not in ("codex", "claude"):
+    if config.provider == "all":
+        return _run_provider_watches(config, stop)
+    if config.provider not in ("codex", "claude", "muse"):
         raise ValueError("Unknown AI provider")
-    codex = discover_codex(config.codex_path) if config.provider == "codex" else None
+    codex = None
     targets = tuple(t for t in config.desktop_targets if t.provider == config.provider and any(t.signal_actions(config.goal_mode)))
     if not targets:
         _log_status("Choose signal targets first: recharge-ai-task-cli targets --gui")
@@ -144,7 +144,12 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
             if config.provider == "claude":
                 from .claude import fetch_claude_quota
                 quota = fetch_claude_quota()
+            elif config.provider == "muse":
+                from .muse import fetch_muse_quota
+                quota = fetch_muse_quota(config.muse_path)
             else:
+                if codex is None:
+                    codex = discover_codex(config.codex_path)
                 quota = fetch_quota(codex)
         except Exception as exc:
             available = None
@@ -262,7 +267,13 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
             state.in_flight = (target.key, target.title, target.project_name)
             checkpoint()
             try:
-                if target.send_goal is not None or target.send_prompt is not None:
+                from .session_catalog import quota_profile_matches
+                if not quota_profile_matches(target):
+                    from .activity import record
+                    detail = "This saved chat belongs to another provider profile; its quota was not checked. Restore that profile or choose a currently discovered chat."
+                    record(target, "automatic", "signals", "failed", detail)
+                    result = DeliveryResult(target, False, detail, retryable=False)
+                elif target.send_goal is not None or target.send_prompt is not None:
                     result = send_signals([remaining_target(target)], config.continue_prompt,
                         enter_presses=config.enter_presses, key_delay=config.key_delay)[0]
                 elif config.goal_mode and config.provider == "codex":
@@ -290,3 +301,80 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         wait(interval, "retry_pending" if state.pending else "monitoring")
 
     return 0
+
+
+def _run_provider_watches(config, stop):
+    """Keep quota cycles, failures and restart accounting independent per provider."""
+    import threading
+    from . import watch_state
+    providers = sorted({t.provider for t in config.desktop_targets})
+    if not providers:
+        _log_status("Choose signal targets first: recharge-ai-task-cli targets --gui")
+        return 1
+    # Preserve legacy single-provider checkpoint contents when upgrading.
+    state = config.state if config.state is not None else WatchState()
+    if len(providers) == 1 and not state.provider_states:
+        return run_desktop_watch(replace(config, provider=providers[0], state=state), stop)
+    lock = threading.RLock()
+    children, events, threads, errors = {}, {}, [], {}
+
+    def publish():
+        observations = {p: dict(child.progress) for p, child in children.items()}
+        rows = list(observations.values())
+        phases = [row.get("phase", "checking_quota") for row in rows]
+        priority = ("delivering", "grace_period", "retry_pending", "waiting_quota", "quota_unavailable", "checking_quota", "monitoring")
+        progress = {"providers": observations, "phase": next((p for p in priority if p in phases), "checking_quota"),
+                    "updated_at": time.time(), "grace_seconds": config.grace_seconds,
+                    "quota_available": all(row.get("quota_available") is True for row in rows),
+                    "pending_cycle": any(row.get("pending_cycle") for row in rows),
+                    "count_error": "; ".join(str(row["count_error"]) for row in rows if row.get("count_error"))}
+        for field in ("pending_recipients", "pending_messages", "pending_goals", "selected_recipients", "selected_messages", "selected_goals"):
+            progress[field] = sum(row.get(field, 0) for row in rows)
+        for field in ("next_check_at", "recovery_at", "expected_reset_at", "checked_at"):
+            progress[field] = min((row[field] for row in rows if isinstance(row.get(field), (int, float))), default=None)
+        state.progress = progress
+
+    def checkpoint(provider, child):
+        with lock:
+            state.provider_states = {**state.provider_states, provider: watch_state.to_dict(child)}
+            publish()
+            if config.checkpoint:
+                config.checkpoint(state)
+
+    for provider in providers:
+        saved = state.provider_states.get(provider)
+        children[provider] = watch_state.from_dict(saved) if saved else WatchState()
+        events[provider] = StopEvent()
+    def worker(provider):
+        try:
+            child_config = replace(config, provider=provider, state=children[provider],
+                desktop_targets=tuple(t for t in config.desktop_targets if t.provider == provider),
+                checkpoint=lambda child: checkpoint(provider, child))
+            code = run_desktop_watch(child_config, events[provider])
+            if code:
+                raise RuntimeError(f"Worker exited with code {code}")
+        except Exception as exc:
+            with lock:
+                errors[provider] = str(exc)
+                children[provider].progress = {"phase": "quota_unavailable", "quota_error": str(exc), "updated_at": time.time()}
+                publish()
+            _log.exception("%s watch failed", provider)
+    for provider in providers:
+        thread = threading.Thread(target=worker, args=(provider,), daemon=True)
+        threads.append(thread)
+        thread.start()
+    try:
+        while not stop.is_set() and any(thread.is_alive() for thread in threads):
+            if stop.wait_woken(.25):
+                for event in events.values():
+                    event.wake()
+            with lock:
+                publish()
+    finally:
+        for event in events.values():
+            event.set()
+        for thread in threads:
+            thread.join()
+        with lock:
+            publish()
+    return 1 if errors else 0

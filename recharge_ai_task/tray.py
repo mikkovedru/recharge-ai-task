@@ -169,7 +169,8 @@ class TrayApp:
         self._watch_pause_reason = ""
         self._watch_stop = StopEvent()
         cfg = WatchConfig(
-            provider=self.config.provider,
+            provider="all",
+            muse_path=self.config.muse_path,
             codex_path=self.config.codex_path,
             continue_prompt=self.config.continue_prompt,
             goal_mode=self.config.goal_mode,
@@ -256,8 +257,6 @@ class TrayApp:
                 elif invalid_messages(targets, config.continue_prompt, config):
                     self._watch_pause_reason = "Enter a prompt message; watch will resume automatically."
                 else:
-                    if config.provider == "codex":
-                        discover_codex(config.codex_path)
                     self._start_desktop_locked(restarting=True)
             except Exception as exc:
                 self._watch_error = f"Could not apply saved watch settings: {exc}"
@@ -282,19 +281,20 @@ class TrayApp:
 
     def show_quota(self, _icon=None, _item=None) -> None:
         def worker() -> None:
-            try:
-                config = AppConfig.load()
-                if config.provider == "claude":
-                    from .claude import fetch_claude_quota
-                    quota = fetch_claude_quota()
-                elif config.provider == "muse":
-                    from .muse import fetch_muse_quota
-                    quota = fetch_muse_quota(config.muse_path)
-                else:
-                    quota = fetch_quota(discover_codex(config.codex_path))
-                text = format_quota(quota)
-            except Exception as exc:
-                text = t("tray.quota_unavailable", error=exc)
+            from .providers import installed_providers
+            from .claude import fetch_claude_quota
+            from .muse import fetch_muse_quota
+            config = AppConfig.load()
+            lines = []
+            for provider in installed_providers(config):
+                try:
+                    quota = (fetch_claude_quota() if provider == "claude" else
+                             fetch_muse_quota(config.muse_path) if provider == "muse" else
+                             fetch_quota(discover_codex(config.codex_path)))
+                    lines.append(format_quota(quota))
+                except Exception as exc:
+                    lines.append(f"{provider.title()}: " + t("tray.quota_unavailable", error=exc))
+            text = "\n".join(lines) or "No installed AI providers found"
             if self._icon is not None:
                 self._icon.notify(text, t("cli.quota_title"))
 
@@ -366,7 +366,7 @@ class TrayApp:
             pystray.MenuItem(
                 t("tray.start_desktop"),
                 self.start_desktop,
-                enabled=lambda _: not self._is_running() and AppConfig.load().provider != "muse",
+                enabled=lambda _: not self._is_running(),
             ),
             pystray.MenuItem(
                 t("tray.stop"),
@@ -404,8 +404,6 @@ class TrayApp:
             config = AppConfig.load()
             if not config.targets():
                 raise RuntimeError("Save at least one target before starting Desktop watch")
-            if config.provider == "codex":
-                discover_codex(config.codex_path)
             self.start_desktop()
         elif command == "check-quota":
             if self._watch_thread is None or not self._watch_thread.is_alive():
@@ -433,7 +431,7 @@ class TrayApp:
             self._watch_error = f"Could not read saved watch settings: {exc}"
         thread = self._watch_thread
         alive = thread is not None and thread.is_alive()
-        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True, "muse_support": True,
+        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True, "muse_support": True, "unified_providers": True,
                 "restarting": self._restart_pending, "watch_requested": self._watch_requested,
                 "watch_pause_reason": self._watch_pause_reason,
                 "stopping": alive and self._watch_stop.is_set(),

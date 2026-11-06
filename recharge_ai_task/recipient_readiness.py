@@ -74,7 +74,12 @@ def recipient_readiness(target, config, usage, message, *, manual=False, ledger_
         values.update({action: ActionReadiness(action, state, reason, issue) for action in eligible})
         return result([values[action] for action in actions])
 
-    if target.kind == "thread":
+    if target.kind == "session":
+        if not target.endpoint or not target.cwd or not Path(target.endpoint).is_file() or not Path(target.cwd).is_dir():
+            return remaining("blocked", "Local chat transcript or project directory is unavailable; refresh", "routing")
+        if goal:
+            return remaining("blocked", "Native Goal activation is only available for Codex chats", "routing")
+    elif target.kind == "thread":
         if not target.endpoint:
             return remaining("blocked", "Desktop routing unavailable; open Codex and refresh", "routing")
         if goal and (not target.instance or Path(target.endpoint).resolve() != (Path(target.instance) / "ipc/ipc.sock").resolve()):

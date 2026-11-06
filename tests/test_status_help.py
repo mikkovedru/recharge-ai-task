@@ -45,7 +45,7 @@ autostart.autostart_target=lambda:config_dir()/'test.desktop'
 target_ui.discover_codex=lambda _:'codex'
 q=Quota('test',RateWindow(0,300,9999999999),None,False)
 target_ui.fetch_quota=lambda _:q
-target_ui.discover_targets=lambda:Inventory([])
+target_ui.discover_targets=lambda:Inventory([],providers=("codex",))
 commands=[]
 def control(command='status',**kwargs):
     commands.append(command)

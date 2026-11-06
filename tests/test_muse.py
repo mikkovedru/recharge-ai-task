@@ -186,12 +186,12 @@ def test_cli_settings_keep_provider_paths_and_arguments_independent(monkeypatch)
     assert captured[1].muse_path=='/other' and captured[1].muse_args==['--version']
 
 
-def test_muse_default_never_enters_unsupported_desktop_watch(monkeypatch):
+def test_terminal_default_does_not_choose_watch_provider(monkeypatch):
     config.AppConfig(provider='muse',mode='desktop').save()
     calls=[]
-    monkeypatch.setattr(cli,'run_wrapper',lambda cfg:calls.append(cfg.provider) or 0)
-    assert cli.main([])==0 and calls==['muse']
-    assert cli.main(['watch','--provider','muse'])==1
+    monkeypatch.setattr(cli,'run_desktop_watch',lambda cfg:calls.append(cfg.provider) or 0)
+    assert cli.main([])==0 and calls==['all']
+    assert cli.main(['watch','--provider','muse'])==0 and calls==['all','muse']
 
 
 def test_configure_and_quota_use_muse_executable(monkeypatch):
@@ -201,22 +201,24 @@ def test_configure_and_quota_use_muse_executable(monkeypatch):
     calls=[]
     monkeypatch.setattr(muse,'fetch_muse_quota',lambda path:calls.append(path) or muse.parse_usage(usage()))
     assert cli.main(['quota'])==0 and calls==['/custom/muse']
-    with pytest.raises(SystemExit):cli.main(['configure','--provider','muse','--mode','desktop'])
+    assert cli.main(['configure','--provider','muse','--mode','desktop'])==0
+    assert config.AppConfig.load().mode=='desktop'
 
 
-def test_unsupported_browser_targets_do_not_become_codex_targets(monkeypatch):
+def test_local_muse_discovery_does_not_guess_browser_identity(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     monkeypatch.setattr(targets,'discover_windows',lambda *_:pytest.fail('Guessed app identity'))
     inventory=targets.discover_targets('muse')
-    assert not inventory.targets and 'app/browser' in inventory.warnings[0]
+    assert not inventory.targets
     assert watch.run_desktop_watch(watch.WatchConfig(provider='muse'))==1
     a=Target('thread','codex-chat','Codex',send_prompt=True,send_goal=False)
     b=replace(a,id='claude',provider='claude',kind='window')
     c=replace(a,id='muse',provider='muse')
     settings=config.AppConfig(provider='muse',desktop_targets=[t.to_dict() for t in (a,b,c)])
     settings.save();stored=config.AppConfig.load()
-    assert stored.targets()==[] and len(stored.all_targets())==3
-    stored.provider='codex';assert stored.targets()[0].id=='codex-chat'
-    stored.provider='claude';assert stored.targets()[0].id=='claude'
+    assert len(stored.targets())==3 and len(stored.all_targets())==3
+    stored.provider='codex';assert stored.targets('codex')[0].id=='codex-chat'
+    stored.provider='claude';assert stored.targets('claude')[0].id=='claude'
 
 
 def test_tray_starts_muse_with_its_arguments_and_no_codex_goal(monkeypatch):

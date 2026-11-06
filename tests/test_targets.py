@@ -243,7 +243,8 @@ def test_focus_lost_after_typing_is_uncertain(monkeypatch):
 def test_cli_selects_ids_with_duplicate_titles(monkeypatch, capsys):
     from recharge_ai_task import cli
     a, b = Target("thread", "a", "Same"), Target("thread", "b", "Same")
-    monkeypatch.setattr(targets, "discover_targets", lambda: targets.Inventory([a,b]))
+    from recharge_ai_task import providers
+    monkeypatch.setattr(providers, "discover_all_targets", lambda: targets.Inventory([a,b]))
     assert cli.main(["targets", "--select", "a", "--select", "b", "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert all(t["selected"] for t in result["targets"])
