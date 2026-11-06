@@ -130,9 +130,9 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
                     actions.confirm_goal()
                 if send_prompt:
                     if goal is not None and task["type"] == "active":
-                        perform("prompt", lambda: desktop.steer(target.id, text, owner))
+                        perform("prompt", lambda: desktop.steer(target.id, actions.message if actions is not None else text, owner))
                     else:
-                        perform("prompt", lambda: desktop.send(target.id, text, owner))
+                        perform("prompt", lambda: desktop.send(target.id, actions.message if actions is not None else text, owner))
                 if goal is not None:
                     try:
                         after = goals.get(target.id)
@@ -245,7 +245,7 @@ def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12)
         message = effective_message(target, text)
         budget = None
         try:
-            budget = ActionBudget(ledger, target, config, source=source, message=message)
+            budget = ActionBudget(ledger, target, config, source=source, message=message, default_message=text)
             withheld = prompt and not budget.available("prompt")
             if withheld:
                 prompt = False
@@ -261,12 +261,12 @@ def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12)
                 if result.skipped and prompt:
                     # Preserve the independent message choice for protected or
                     # missing goals. A failed/unconfirmed activation never falls through.
-                    sent = budget.perform("prompt", lambda: deliver_targets([target], message,
+                    sent = budget.perform("prompt", lambda: deliver_targets([target], budget.message,
                         enter_presses=enter_presses, key_delay=key_delay)[0])
                     result = DeliveryResult(target, sent.success,
                         f"Goal: {result.detail}; Prompt: {sent.detail}", sent.retryable, sent.skipped, uncertain=sent.uncertain)
             else:
-                result = budget.perform("prompt", lambda: deliver_targets([target], message,
+                result = budget.perform("prompt", lambda: deliver_targets([target], budget.message,
                     enter_presses=enter_presses, key_delay=key_delay)[0])
             if withheld:
                 result = replace(result, detail=result.detail + "; message limit reached")

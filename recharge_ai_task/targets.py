@@ -35,13 +35,14 @@ class Target:
     project_name: str = ""
     last_active_at: float | None = None
     custom_prompt: str | None = None
+    custom_prompt_once: str = ""
     # None inherits the global default; -1 explicitly allows unlimited sends.
     prompt_limit: int | None = None
     goal_limit: int | None = None
 
     def with_preferences(self, saved):
         return self if saved is None else replace(self, **{field: getattr(saved, field) for field in
-            ("send_prompt", "send_goal", "custom_prompt", "prompt_limit", "goal_limit")})
+            ("send_prompt", "send_goal", "custom_prompt", "custom_prompt_once", "prompt_limit", "goal_limit")})
 
     def signal_actions(self, legacy_goal=False):
         return (True if self.send_prompt is None else self.send_prompt,

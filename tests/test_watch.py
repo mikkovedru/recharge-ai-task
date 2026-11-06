@@ -330,3 +330,18 @@ def test_pending_counts_respect_remaining_allowances(monkeypatch):
     assert state.progress['pending_recipients']==0
     assert state.progress['pending_messages']==0
     assert state.progress['selected_recipients']==0
+
+
+def test_one_use_custom_does_not_replay_when_worker_restarts(monkeypatch):
+    from recharge_ai_task.config import AppConfig
+    from recharge_ai_task import target_delivery
+    target=replace(A,send_prompt=True,send_goal=False,custom_prompt='Use once',custom_prompt_once='once-token')
+    AppConfig(continue_prompt='Default',desktop_targets=[target.to_dict()]).save()
+    sent=[]
+    monkeypatch.setattr(target_delivery,'_send_thread',lambda t,text:sent.append(text))
+    # Simulate completion during a prior recovery, then restart with a stale target.
+    assert target_delivery.send_signals([target],'Default')[0].success
+    state=watch.WatchState(startup_checked=True,pending=False,delivered={target.key})
+    run_snapshots(monkeypatch,[AVAILABLE],selected=(target,),state=state)
+    assert sent==['Use once']
+    assert AppConfig.load().targets()[0].custom_prompt is None

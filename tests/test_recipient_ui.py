@@ -124,6 +124,15 @@ w=make();p=w.recipient_panel
 assert w.selected[a.key].custom_prompt=='Specific\nmessage' and w.selected[a.key].prompt_limit==-1
 assert w.selected[b.key].custom_prompt=='Other message'
 assert AppConfig.load().prompt_limit==3
+p.list.select_row(p.rows[a.key])
+p.once.set_active(True)
+first=w.selected[a.key].custom_prompt_once
+assert first and AppConfig.load().targets()[0].custom_prompt_once==first
+p.message_buffer.set_text('Armed draft')
+assert w.selected[a.key].custom_prompt_once!=first
+p.once.set_active(False)
+assert not w.selected[a.key].custom_prompt_once and w.selected[a.key].custom_prompt=='Armed draft'
+p.message_buffer.set_text('Specific\nmessage')
 original_load=AppConfig.__dict__['load']
 AppConfig.load=classmethod(lambda cls:(_ for _ in ()).throw(OSError('settings unreadable')))
 w.send()

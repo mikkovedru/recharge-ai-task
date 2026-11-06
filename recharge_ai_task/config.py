@@ -93,9 +93,10 @@ class AppConfig:
 
     def all_targets(self):
         from .targets import Target
+        from .delivery_policy import clear_consumed_custom_prompt
         result = []
         for value in self.desktop_targets or []:
-            target = Target.from_dict(value)
+            target = clear_consumed_custom_prompt(Target.from_dict(value))
             prompt, goal = target.signal_actions(self.goal_mode)
             result.append(replace(target, send_prompt=prompt, send_goal=goal))
         return result

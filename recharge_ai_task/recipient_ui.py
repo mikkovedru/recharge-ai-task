@@ -1,5 +1,6 @@
 """Editable recipient plans, effective messages and continuation allowances."""
 from dataclasses import replace
+from uuid import uuid4
 from gi.repository import GLib, Gtk, Pango
 
 from .config import AppConfig
@@ -175,7 +176,13 @@ class RecipientPanel(Gtk.Box):
         self.custom = Gtk.CheckButton(label="Use a custom message for this recipient")
         self.custom.set_tooltip_text("Override the default message for only this recipient; edits save automatically (Space)")
         self.custom.connect("toggled", self._custom_toggled)
-        self.editor.pack_start(self.custom, False, False, 0)
+        self.custom_row = Gtk.Box(spacing=6)
+        self.custom_row.pack_start(self.custom, False, False, 0)
+        self.editor.pack_start(self.custom_row, False, False, 0)
+        self.once = Gtk.CheckButton(label="Send once")
+        self.once.set_tooltip_text("Use this custom message for one accepted send, then return to the default. Unconfirmed sends are not repeated (Space)")
+        self.once.connect("toggled", self._once_changed)
+        self.editor.pack_start(self.once, False, False, 0)
         self.message = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
         preview_css = Gtk.CssProvider()
         preview_css.load_from_data(b"textview.inherited-message, textview.inherited-message text { background-color: @theme_bg_color; color: @theme_fg_color; }")
@@ -397,6 +404,7 @@ class RecipientPanel(Gtk.Box):
         self.goal_limit.inherited_value(config.goal_limit)
         if target is None:
             self.custom.set_active(False)
+            self.once.set_active(False)
             self.prompt_limit.set_value(None, enabled=False)
             self.goal_limit.set_value(None, enabled=False)
             self.message_buffer.set_text("")
@@ -407,6 +415,8 @@ class RecipientPanel(Gtk.Box):
         for kind, button in self.goal_limit.modes.items():
             button.set_sensitive(target.kind == "thread" or kind == "off")
         self.custom.set_active(target.custom_prompt is not None)
+        self.once.set_active(bool(target.custom_prompt_once))
+        self.once.set_sensitive(target.custom_prompt is not None)
         self._set_custom_appearance(target.custom_prompt is not None)
         text = effective_message(target, self.picker._prompt_text())
         current = self.message_buffer.get_text(*self.message_buffer.get_bounds(), True)
@@ -439,6 +449,7 @@ class RecipientPanel(Gtk.Box):
             prompt_limit=self.prompt_limit.value(), goal_limit=self.goal_limit.value()))
 
     def _set_custom_appearance(self, enabled):
+        self.once.set_sensitive(enabled)
         self.message.set_editable(enabled)
         self.message.set_cursor_visible(enabled)
         context = self.message.get_style_context()
@@ -455,7 +466,22 @@ class RecipientPanel(Gtk.Box):
         target = self.picker.selected.get(self.selected_key)
         if target is not None:
             self._set_custom_appearance(self.custom.get_active())
-            self.picker.update_recipient(replace(target, custom_prompt=effective_message(target, self.picker._prompt_text()) if self.custom.get_active() else None))
+            self.picker.update_recipient(replace(target, custom_prompt=effective_message(target, self.picker._prompt_text()) if self.custom.get_active() else None,
+                custom_prompt_once=str(uuid4()) if self.custom.get_active() and self.once.get_active() else ""))
+
+    def _once_changed(self, *_):
+        if self.updating:
+            return
+        target = self.picker.selected.get(self.selected_key)
+        if target is not None and target.custom_prompt is not None:
+            runtime = self.picker.runtime or {}
+            if self.once.get_active() and (runtime.get("desktop_watch") or runtime.get("watch_requested")) and not runtime.get("one_use_messages"):
+                self.updating = True
+                self.once.set_active(False)
+                self.updating = False
+                self.picker._message("Restart the tray before enabling Send once for an active watch.", "error")
+                return
+            self.picker.update_recipient(replace(target, custom_prompt_once=str(uuid4()) if self.once.get_active() else ""))
 
     def _message_changed(self, *_):
         if self.updating or not self.custom.get_active():
@@ -463,7 +489,8 @@ class RecipientPanel(Gtk.Box):
         target = self.picker.selected.get(self.selected_key)
         if target is not None:
             self._set_custom_appearance(self.custom.get_active())
-            self.picker.update_recipient(replace(target, custom_prompt=self.message_buffer.get_text(*self.message_buffer.get_bounds(), True)))
+            self.picker.update_recipient(replace(target, custom_prompt=self.message_buffer.get_text(*self.message_buffer.get_bounds(), True),
+                custom_prompt_once=str(uuid4()) if self.once.get_active() else ""))
 
     def _reset(self, *_):
         if self.selected_key is None:

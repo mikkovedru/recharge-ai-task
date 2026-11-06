@@ -420,6 +420,12 @@ a passive theme-colored tint and remains read-only. Enabling the checkbox
 restores the normal editor appearance. An empty custom message is an invalid draft; it never silently
 falls back to the default. Overrides survive refresh, deselection and restarting.
 
+Enable **Send once** to use the custom message for one accepted message send,
+then return to the current default. A definite failure or skipped message leaves
+it armed. An unconfirmed send is treated as used, so the custom text is not
+repeated automatically. Count resets do not rearm it; editing or re-enabling Send
+once does. New edits are preserved if an earlier message finishes in the meantime.
+See [one-use message handling](../doc/architecture/2026-11-06_one-use-custom-messages.md).
 
 Counts cover both **Send now** and automatic Desktop watch recovery. They last
 until explicitly reset, across quota resets, watch restarts and app restarts.

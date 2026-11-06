@@ -1,6 +1,6 @@
 """Per-recipient policies and durable, process-safe continuation allowances."""
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import sqlite3
 import os
@@ -26,7 +26,22 @@ def effective_limit(target, action, config):
 
 
 def effective_message(target, default):
-    return default if target.custom_prompt is None else target.custom_prompt
+    if target.custom_prompt is None:
+        return default
+    if target.custom_prompt_once and UsageLedger().once_state(target.key, target.custom_prompt_once) not in {None, "failed"}:
+        return default
+    return target.custom_prompt
+
+
+def clear_consumed_custom_prompt(target):
+    """The delivery ledger is authoritative, including across worker restarts.
+
+    Do not rewrite settings from the worker: a concurrent editor may have armed
+    a newer token. Normalizing the matching consumed token preserves those edits.
+    """
+    if target.custom_prompt_once and UsageLedger().once_state(target.key, target.custom_prompt_once) in {"sent", "uncertain"}:
+        return replace(target, custom_prompt=None, custom_prompt_once="")
+    return target
 
 
 @dataclass(frozen=True)
@@ -47,6 +62,7 @@ class UsageLedger:
             if "owner_pid" not in {row[1] for row in db.execute("PRAGMA table_info(attempts)")}:
                 db.execute("ALTER TABLE attempts ADD COLUMN owner_pid INTEGER")
             db.execute("CREATE INDEX IF NOT EXISTS attempts_target ON attempts(target,action,state)")
+            db.execute("CREATE TABLE IF NOT EXISTS custom_once (target TEXT NOT NULL, token TEXT NOT NULL, attempt INTEGER NOT NULL, state TEXT NOT NULL, owner_pid INTEGER, PRIMARY KEY(target,token))")
 
     @contextmanager
     def connection(self):
@@ -81,6 +97,35 @@ class UsageLedger:
     def finish(self, attempt, state, detail=""):
         with self.connection() as db:
             db.execute("UPDATE attempts SET state=?,detail=? WHERE id=?", (state, detail, attempt))
+            db.execute("UPDATE custom_once SET state=? WHERE attempt=? AND state='pending'", (state, attempt))
+
+    def once_state(self, key, token):
+        with self.connection() as db:
+            row = db.execute("SELECT state,owner_pid FROM custom_once WHERE target=? AND token=?", (key, token)).fetchone()
+        if row is None:
+            return None
+        state, owner = row
+        return "uncertain" if state == "pending" and not self._owner_alive(owner) else state
+
+    def reserve_prompt(self, target, limit, message, default):
+        # The allowance and one-use claim share a transaction. Separate workers
+        # cannot both reserve the custom text, even with unlimited allowances.
+        token = target.custom_prompt_once if target.custom_prompt is not None else ""
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if limit is not None and self._usage(db, target.key, "prompt").used >= limit:
+                raise LimitReached("Prompt limit reached")
+            previous = db.execute("SELECT state FROM custom_once WHERE target=? AND token=?", (target.key, token)).fetchone() if token else None
+            custom = bool(token and (previous is None or previous[0] == "failed"))
+            text = target.custom_prompt if custom else default if token else message
+            if not text.strip():
+                raise ValueError("Prompt message cannot be empty")
+            attempt = db.execute("INSERT INTO attempts(target,action,state,created,owner_pid) VALUES (?, 'prompt', 'pending', ?, ?)",
+                                 (target.key, time.time(), os.getpid())).lastrowid
+            if custom:
+                db.execute("INSERT OR REPLACE INTO custom_once(target,token,attempt,state,owner_pid) VALUES (?,?,?,'pending',?)",
+                           (target.key, token, attempt, os.getpid()))
+            return attempt, text
 
     def reset(self, keys):
         with self.connection() as db:
@@ -89,6 +134,7 @@ class UsageLedger:
                 owners = db.execute("SELECT owner_pid FROM attempts WHERE target=? AND state='pending'", (key,)).fetchall()
                 if any(self._owner_alive(pid) for (pid,) in owners):
                     raise ValueError("A delivery is still in progress. Wait for it to finish before resetting counts.")
+                db.execute("UPDATE custom_once SET state='uncertain' WHERE target=? AND state='pending'", (key,))
                 db.execute("DELETE FROM attempts WHERE target=?", (key,))
 
     @staticmethod
@@ -117,9 +163,10 @@ class UsageLedger:
 
 
 class ActionBudget:
-    def __init__(self, ledger, target, config, *, source="automatic", message=""):
+    def __init__(self, ledger, target, config, *, source="automatic", message="", default_message=""):
         self.ledger, self.target, self.config = ledger, target, config
         self.source, self.message = source, message
+        self.default_message = default_message
         self.completed = set()
         self.attempted = set()
         self.outcomes = {}
@@ -150,7 +197,10 @@ class ActionBudget:
         return limit is None or usage.used < limit
 
     def perform(self, action, operation):
-        attempt = self.ledger.reserve(self.target.key, action, self.limit(action))
+        if action == "prompt" and self.target.custom_prompt_once:
+            attempt, self.message = self.ledger.reserve_prompt(self.target, self.limit(action), self.message, self.default_message)
+        else:
+            attempt = self.ledger.reserve(self.target.key, action, self.limit(action))
         self.attempted.add(action)
         self.attempt_ids[action] = attempt
         self.report(action, "attempting")

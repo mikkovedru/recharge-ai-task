@@ -19,7 +19,7 @@ from .wrapping_button import WrappingButton
 from .window_layout import WindowLayout
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
-from .delivery_policy import invalid_messages
+from .delivery_policy import invalid_messages, clear_consumed_custom_prompt
 from .config import AppConfig, config_path
 from .autostart import is_autostart_enabled, set_autostart
 from .quota import discover_codex, fetch_quota
@@ -532,12 +532,29 @@ class TargetPicker(Gtk.Window):
 
     @staticmethod
     def _signature(targets, text):
-        return (frozenset((t.key, *t.signal_actions(), t.custom_prompt, t.prompt_limit, t.goal_limit) for t in targets), text)
+        return (frozenset((t.key, *t.signal_actions(), t.custom_prompt, t.prompt_limit, t.goal_limit, t.custom_prompt_once) for t in targets), text)
 
     def dirty(self):
         return self._signature(self.selected.values(), self._prompt_text()) != self.saved_signature
 
     def _summary(self):
+        consumed_settings = None
+        for key, target in list(self.preferences.items()):
+            normalized = clear_consumed_custom_prompt(target)
+            if normalized != target:
+                if consumed_settings is None:
+                    consumed_settings = AppConfig.load()
+                latest = next((t for t in consumed_settings.all_targets() if t.key == key), None)
+                if latest is not None:
+                    normalized = replace(normalized, custom_prompt=latest.custom_prompt, custom_prompt_once=latest.custom_prompt_once)
+                self.preferences[key] = normalized
+                if key in self.selected:
+                    self.selected[key] = normalized
+                identity = target.instance + "\0" + target.id
+                if identity in self.targets:
+                    self.targets[identity] = self.targets[identity].with_preferences(normalized)
+        if consumed_settings is not None:
+            self.saved_signature = self._signature(consumed_settings.targets(), consumed_settings.continue_prompt)
         prompts = sum(t.signal_actions()[0] for t in self.selected.values())
         goals = sum(t.signal_actions()[1] for t in self.selected.values())
         count = len(self.selected)
@@ -740,6 +757,8 @@ class TargetPicker(Gtk.Window):
                 t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in self.selected.values())
             if command == "start-watch" and uses_policies and not live.get("recipient_policies"):
                 raise RuntimeError("Restart the tray to enforce recipient messages and continuation limits.")
+            if command == "start-watch" and any(t.custom_prompt_once for t in self.selected.values()) and not live.get("one_use_messages"):
+                raise RuntimeError("Restart the tray to use Send once custom messages.")
             return tray_control.request(command)
         def show(value):
             self.runtime = value
