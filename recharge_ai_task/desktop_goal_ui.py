@@ -16,7 +16,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, Gdk, Gtk
-from .scoped_accessibility import ApplicationBus
+from .scoped_accessibility import ApplicationBus, AccessibilityUnavailable
 from Xlib import display
 
 
@@ -95,16 +95,45 @@ def active_window(pid):
 _application_bus = None
 
 
-def visible_frame(pid):
-    active_window(pid)
+def accessibility_bus():
     global _application_bus
     if _application_bus is None:
         _application_bus = ApplicationBus()
-    app = _application_bus.application(pid)
-    frames = [frame for frame in app if frame.getState().contains(Atspi.StateType.ACTIVE)]
-    if len(frames) != 1:
-        raise RuntimeError("Could not identify the active Codex window; no Goal action sent")
-    return frames[0]
+    return _application_bus
+
+
+def preflight_accessibility(pid):
+    """Retry read-only registration once, before clipboard or focus effects."""
+    global _application_bus
+    for attempt in range(2):
+        try:
+            return accessibility_bus().application(pid)
+        except AccessibilityUnavailable:
+            if _application_bus is not None:
+                _application_bus.close()
+            _application_bus = None
+            if attempt:
+                raise
+            time.sleep(.1)
+
+
+def visible_frame(pid):
+    global _application_bus
+    for attempt in range(2):
+        active_window(pid)
+        try:
+            app = accessibility_bus().application(pid)
+            frames = [frame for frame in app if frame.getState().contains(Atspi.StateType.ACTIVE)]
+            if len(frames) != 1:
+                raise RuntimeError("Could not identify the active Codex window; no Goal action sent")
+            return frames[0]
+        except AccessibilityUnavailable:
+            if _application_bus is not None:
+                _application_bus.close()
+            _application_bus = None
+            if attempt:
+                raise
+            time.sleep(.1)
 
 
 def wait_for(check, timeout=3):
@@ -214,6 +243,7 @@ def _expand_project(frame, target, pid):
 
 def show_chat(target, pid):
     """Wait for canonical-ID navigation, retaining exact-ID sidebar fallback."""
+    preflight_accessibility(pid)  # Verify registration before opening a chat.
     link = "codex://threads/" + quote(target.id, safe="")
     subprocess.run(["xdg-open", link], check=True, capture_output=True, timeout=8)
     # xdg-open acknowledges dispatch, not completed navigation. Re-read the
@@ -226,7 +256,7 @@ def show_chat(target, pid):
             try:
                 if current_chat_id(pid) == target.id:
                     return visible_frame(pid)
-            except InterruptedError:
+            except (InterruptedError, AccessibilityUnavailable):
                 raise
             except Exception as exc:
                 last_error = str(exc)
@@ -239,7 +269,7 @@ def show_chat(target, pid):
                     break
                 try:
                     identity = row_chat_id(pid, row)
-                except InterruptedError:
+                except (InterruptedError, AccessibilityUnavailable):
                     raise
                 except Exception as exc:
                     last_error = str(exc)
@@ -254,12 +284,13 @@ def show_chat(target, pid):
                 # canonical selection; its label alone never authorizes a Goal.
                 time.sleep(.1)
                 break
-        except InterruptedError:
+        except (InterruptedError, AccessibilityUnavailable):
             raise
         except Exception as exc:
             last_error = str(exc)
         time.sleep(.05)
-    raise RuntimeError(f"Could not open the exact selected chat ID {target.id}: {last_error}; no Goal action sent")
+    detail = last_error.replace("; no Goal action sent", "")
+    raise RuntimeError(f"Could not open the exact selected chat ID {target.id}: {detail}; no Goal action sent")
 
 
 def resume_goal(target, expected, pid):
@@ -267,6 +298,9 @@ def resume_goal(target, expected, pid):
     from .recovery_rules import goal_allowed
     if not goal_allowed(expected.get("status"), manual=True):
         raise RuntimeError("This Goal state cannot be resumed")
+    # A reachable bus does not imply Codex rejoined it after a bus restart.
+    # Check the verified process before clipboard or navigation side effects.
+    preflight_accessibility(pid)
     snapshot = ClipboardSnapshot()
     clicked = False
     try:

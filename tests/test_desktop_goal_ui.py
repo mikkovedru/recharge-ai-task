@@ -14,6 +14,12 @@ GOAL = {"threadId": "chosen", "status": "paused", "objective": "Fixture objectiv
 TARGET = Target("thread", "chosen", "Duplicate title", instance="/fixture")
 
 
+@pytest.fixture(autouse=True)
+def isolated_accessibility_transport(monkeypatch):
+    monkeypatch.setattr(ui, "_application_bus", None)
+    monkeypatch.setattr(ui, "ApplicationBus", lambda: SimpleNamespace(application=lambda _: None))
+
+
 class Node:
     def __init__(self, name, role="push button", children=(), action=None):
         self.name, self.role, self.children, self.action = name, role, list(children), action
@@ -270,3 +276,105 @@ def test_identity_check_failure_after_click_does_not_claim_no_goal_sent(monkeypa
         ui.resume_goal(TARGET,GOAL,123)
     assert error.value.goal_clicked and state['clicked']==1
     assert 'no Goal action sent' not in str(error.value)
+
+
+def test_missing_accessibility_bus_fails_before_clipboard_or_navigation(monkeypatch):
+    def broken():raise ui.AccessibilityUnavailable('Advertised socket is missing; no Goal action sent')
+    monkeypatch.setattr(ui,'ApplicationBus',broken)
+    monkeypatch.setattr(ui,'ClipboardSnapshot',lambda:pytest.fail('Clipboard touched while transport was unavailable'))
+    monkeypatch.setattr(ui.subprocess,'run',lambda *a,**k:pytest.fail('Opened a chat while transport was unavailable'))
+    with pytest.raises(ui.AccessibilityUnavailable,match='Advertised socket is missing'):
+        ui.resume_goal(TARGET,GOAL,123)
+
+
+def test_bus_failure_is_not_misreported_as_wrong_chat_identity(monkeypatch):
+    navigation_clock(monkeypatch)
+    calls=[]
+    def frame(_):
+        calls.append(True)
+        raise ui.AccessibilityUnavailable('Desktop accessibility connection is unavailable; no Goal action sent')
+    monkeypatch.setattr(ui,'visible_frame',frame)
+    with pytest.raises(ui.AccessibilityUnavailable) as error:ui.show_chat(TARGET,123)
+    assert len(calls)==1 and 'Could not open the exact selected chat ID' not in str(error.value)
+
+
+def test_frame_reconnection_rechecks_the_same_active_pid(monkeypatch):
+    active=[];closed=[];scoped=[]
+    frame=Node('Frame','frame')
+    frame.getState=lambda:SimpleNamespace(contains=lambda _:True)
+    def failed(pid):
+        scoped.append(pid)
+        raise ui.AccessibilityUnavailable('connection closed')
+    first=SimpleNamespace(application=failed,close=lambda:closed.append(True))
+    second=SimpleNamespace(application=lambda pid:scoped.append(pid) or [frame])
+    monkeypatch.setattr(ui,'_application_bus',first)
+    monkeypatch.setattr(ui,'ApplicationBus',lambda:second)
+    monkeypatch.setattr(ui,'active_window',lambda pid:active.append(pid))
+    monkeypatch.setattr(ui.time,'sleep',lambda _:None)
+    assert ui.visible_frame(123) is frame
+    assert active==scoped==[123,123] and closed==[True]
+
+
+def test_focus_change_during_bus_retry_prevents_further_queries(monkeypatch):
+    count=[0]
+    first=SimpleNamespace(application=lambda _:(_ for _ in ()).throw(ui.AccessibilityUnavailable('closed')),close=lambda:None)
+    monkeypatch.setattr(ui,'_application_bus',first)
+    monkeypatch.setattr(ui,'ApplicationBus',lambda:pytest.fail('Connected after another app gained focus'))
+    def active(_):
+        count[0]+=1
+        if count[0]>1:raise RuntimeError('Another application has focus')
+    monkeypatch.setattr(ui,'active_window',active)
+    monkeypatch.setattr(ui.time,'sleep',lambda _:None)
+    with pytest.raises(RuntimeError,match='Another application'):ui.visible_frame(123)
+
+
+def test_bus_failure_after_resume_stays_uncertain_and_is_not_replayed(monkeypatch):
+    state,button,frame=fixture(monkeypatch)
+    def clicked(_):
+        state['clicked']+=1
+        raise ui.AccessibilityUnavailable('connection closed; no Goal action sent')
+    button.action=clicked
+    with pytest.raises(RuntimeError,match='goal may already be running') as error:ui.resume_goal(TARGET,GOAL,123)
+    assert state['clicked']==1 and error.value.goal_clicked
+    assert 'no Goal action sent' not in str(error.value)
+
+
+@pytest.mark.parametrize('entrypoint',['show_chat','resume_goal'])
+def test_unregistered_codex_fails_before_clipboard_or_navigation(monkeypatch,entrypoint):
+    pids=[]
+    def application(pid):
+        pids.append(pid)
+        raise ui.AccessibilityUnavailable('Codex is not registered; fully quit and reopen Codex; no Goal action sent')
+    monkeypatch.setattr(ui,'ApplicationBus',lambda:SimpleNamespace(application=application,close=lambda:None))
+    monkeypatch.setattr(ui,'ClipboardSnapshot',lambda:pytest.fail('Clipboard touched before registration'))
+    monkeypatch.setattr(ui.subprocess,'run',lambda *a,**k:pytest.fail('Opened chat before registration'))
+    with pytest.raises(ui.AccessibilityUnavailable,match='reopen Codex') as error:
+        if entrypoint=='show_chat':ui.show_chat(TARGET,123)
+        else:ui.resume_goal(TARGET,GOAL,123)
+    assert pids==[123,123]
+    assert 'exact selected chat ID' not in str(error.value)
+    assert str(error.value).count('no Goal action sent')==1
+
+
+def test_navigation_timeout_does_not_duplicate_no_action_suffix(monkeypatch):
+    navigation_clock(monkeypatch)
+    def frame(_):raise RuntimeError('Native sidebar unavailable; no Goal action sent')
+    monkeypatch.setattr(ui,'visible_frame',frame)
+    with pytest.raises(RuntimeError,match='exact selected chat ID') as error:
+        ui.show_chat(TARGET,123)
+    assert str(error.value).count('no Goal action sent')==1
+
+
+def test_registration_preflight_reconnects_a_failed_transport_before_side_effects(monkeypatch):
+    calls=[];closed=[]
+    def stale(pid):
+        calls.append(('old',pid))
+        raise ui.AccessibilityUnavailable('connection closed')
+    first=SimpleNamespace(application=stale,close=lambda:closed.append('old'))
+    app=object()
+    second=SimpleNamespace(application=lambda pid:calls.append(('new',pid)) or app)
+    monkeypatch.setattr(ui,'_application_bus',first)
+    monkeypatch.setattr(ui,'ApplicationBus',lambda:second)
+    monkeypatch.setattr(ui.time,'sleep',lambda _:None)
+    assert ui.preflight_accessibility(123) is app
+    assert calls==[('old',123),('new',123)] and closed==['old']

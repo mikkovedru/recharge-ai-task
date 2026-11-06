@@ -71,3 +71,8 @@ libatspi discovery remains uninitialized. No live chat or Goal was changed.
 Live Codex recovery after this change and long-running Cinnamon stability remain
 unverified. If crashes continue, compare their main-thread stacks and investigate
 the system AT-SPI package separately; do not assume every restart is this defect.
+
+
+The [2026-11-07 missing-bus investigation](2026-11-07_missing-accessibility-bus.md)
+documents a separate transport failure and isolated test-runtime requirements.
+Its bounded reconnection preserves the scoped-cache workaround described here.

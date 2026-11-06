@@ -615,3 +615,28 @@ be verified afterward, the log says the Goal may already be running; that
 uncertain attempt is not automatically repeated. See the
 [Cinnamon crash investigation](../doc/investigations/2026-11-05_cinnamon-goal-accessibility.md)
 for the observed stack, workaround and remaining validation limits.
+
+
+## Missing desktop accessibility connection
+
+Native Goal recovery preflights both the accessibility bus and the verified
+Codex process's registration before touching the clipboard or opening a chat.
+It refreshes a stale address once and may reconnect read-only discovery while
+rechecking the same active Codex PID. It never repeats a Resume action after a
+connection failure. If the desktop advertises a missing accessibility socket,
+the error identifies that transport problem instead of claiming an exact-chat
+identity failure. Session accessibility must be restored, or the session logged
+out and back in, before native controls can work. A missing registry service is
+reported separately from an available registry that has no Codex registration.
+If the bus has restarted, an existing Codex process may still be disconnected:
+check running chats, fully quit Codex, and reopen it before retrying. Reconnecting
+this helper alone cannot restore the application's own accessibility connection.
+If an ordinary restart leaves Codex unregistered, Recharge cannot read its native
+Resume goal button. Restarting Recharge cannot enable accessibility inside Codex.
+After running chats finish, fully Quit the desktop app; closing its window can
+leave it running. On installations using the `chatgpt` launcher, a next-start
+diagnostic is `chatgpt --force-renderer-accessibility`. The installed executable
+may also be shown in the error. This workaround needs live registration verification
+after restart; it is not an acknowledgement that Goal activation succeeded.
+The dashboard never restarts Codex or shared desktop services automatically. See the
+[missing-bus investigation](../doc/investigations/2026-11-07_missing-accessibility-bus.md).
