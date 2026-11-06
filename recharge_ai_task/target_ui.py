@@ -58,6 +58,7 @@ class TargetPicker(Gtk.Window):
         self.autosave_error = ""
         self.apply_error = ""
         self.apply_revision = 0
+        self._auto_start_pending = False
         self._apply_notice = ""
         self._save_notice = ""
         self._runtime_notice = None
@@ -514,12 +515,17 @@ class TargetPicker(Gtk.Window):
             send_goal=not goal if action == "send_goal" else goal))
 
     def update_recipient(self, target):
+        first_recipient = not self.selected
         self.preferences[target.key] = target
         self.targets[target.instance + "\0" + target.id] = target
         if any(target.signal_actions()):
             self.selected[target.key] = target
         else:
             self.selected.pop(target.key, None)
+        if first_recipient and self.selected:
+            self._auto_start_pending = True
+        elif not self.selected:
+            self._auto_start_pending = False
         # Locate by identity. A checkbox change can reorder the source model.
         for row in self.store:
             if row[4] == target.id and row[6] == target.instance:
@@ -529,7 +535,7 @@ class TargetPicker(Gtk.Window):
         self._main_selection_changed()
 
     def _preferences_changed(self, *_):
-        self.save()
+        return self.save()
 
     def _prompt_text(self):
         return self.signal_buffer.get_text(*self.signal_buffer.get_bounds(), True)
@@ -722,7 +728,9 @@ class TargetPicker(Gtk.Window):
         self.send_actions_label.set_text(actions)
         self.send_actions_label.set_tooltip_text(actions)
 
-    def toggle_watch(self, *_):
+    def toggle_watch(self, *_, ensure_started=False):
+        if ensure_started and self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested") or self.runtime.get("restarting")):
+            return
         if self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested")):
             command = "stop-watch"
         else:
@@ -759,6 +767,8 @@ class TargetPicker(Gtk.Window):
                 raise RuntimeError("Restart the tray to enforce recipient messages and continuation limits.")
             if command == "start-watch" and any(t.custom_prompt_once for t in self.selected.values()) and not live.get("one_use_messages"):
                 raise RuntimeError("Restart the tray to use Send only once custom messages.")
+            if ensure_started and (live.get("desktop_watch") or live.get("watch_requested") or live.get("restarting")):
+                return live
             return tray_control.request(command)
         def show(value):
             self.runtime = value
@@ -1010,6 +1020,9 @@ class TargetPicker(Gtk.Window):
         self.saved_signature = self._signature(self.selected.values(), config.continue_prompt)
         self._summary()
         self._reload_saved_settings()
+        if self._auto_start_pending and self.selected:
+            self._auto_start_pending = False
+            self.toggle_watch(ensure_started=True)
         return True
 
     def _reload_saved_settings(self):

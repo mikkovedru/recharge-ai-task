@@ -66,7 +66,7 @@ class SettingsDialog(Gtk.Dialog):
         for text in (
             "Message text, continuation limits and per-recipient overrides are in the main window.",
             "Those choices save automatically for future quota recovery; Send now acts immediately.",
-            "Startup launches the tray; Desktop watch starts when you turn it on.",
+            "Startup launches the tray; Desktop watch starts when the first recipient is added or you turn it on.",
             "Changes to an active watch apply automatically."):
             row = Gtk.Box(spacing=6)
             bullet = Gtk.Label(label="•", valign=Gtk.Align.START)

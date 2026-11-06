@@ -480,7 +480,9 @@ available in Settings.
 Use **Start/Stop Desktop watch** and **Settings…** directly from this window.
 Each row has independent **Send message** and **Resume goal** checkboxes.
 Choices and message text save automatically for future quota recovery; editing
-them does not send a manual signal. **Send now to N recipients** applies those
+them does not send a manual signal. Adding the first recipient to an empty list
+starts Desktop watch after saving; loading saved recipients or editing existing
+ones does not start a stopped watch. **Send now to N recipients** applies those
 choices immediately, even with monitoring off. Its label shows the recipient
 count, and the button is disabled when no recipients are selected:
 

@@ -189,3 +189,46 @@ try:
     assert pos(w.quota_heading,w)[1]==pos(w.send_time_label,w)[1]
 finally:w.destroy()
 ''')
+
+
+def test_first_added_recipient_starts_watch_without_toggling_existing_watch():
+    run_gui(r'''
+AppConfig(continue_prompt='Default').save()
+w=make()
+def toggle(identity,action):
+    path=next(row.path for row in w.filtered if row[4]==identity)
+    w._toggle(None,path,action);pump(w)
+try:
+    assert not w.selected and commands.count('start-watch')==0
+    toggle('a','send_goal')
+    assert commands.count('start-watch')==1 and runtime['desktop_watch']
+    assert AppConfig.load().targets()[0].send_goal
+    toggle('b','send_prompt')
+    w.update_recipient(replace(w.selected[b.key],custom_prompt='Edit'));pump(w)
+    assert commands.count('start-watch')==1 and 'stop-watch' not in commands
+    w.toggle_watch();pump(w)
+    assert not runtime['desktop_watch']
+    w.update_recipient(replace(w.selected[b.key],custom_prompt='Another edit'));pump(w)
+    assert commands.count('start-watch')==1
+    toggle('a','send_goal');toggle('b','send_prompt')
+    assert not w.selected
+    # Do not start until the first selection has actually been saved.
+    original=AppConfig.save;AppConfig.save=lambda *_:(_ for _ in ()).throw(OSError('disk full'))
+    path=next(row.path for row in w.filtered if row[4]=='b')
+    w._toggle(None,path,'send_prompt')
+    assert commands.count('start-watch')==1 and w.autosave_error
+    AppConfig.save=original
+    w.save();pump(w)
+    assert commands.count('start-watch')==2 and runtime['desktop_watch']
+    # Loading the saved recipient or changing it never starts or stops monitoring.
+    w.destroy();runtime['desktop_watch']=False;w=make()
+    assert w.selected and commands.count('start-watch')==2
+    w.update_recipient(replace(w.selected[b.key],custom_prompt='Loaded edit'));pump(w)
+    assert commands.count('start-watch')==2
+    w.update_recipient(replace(w.selected[b.key],custom_prompt=None));pump(w)
+    toggle('b','send_prompt')
+    w.signal_buffer.set_text('');pump(w)
+    toggle('b','send_prompt')
+    assert commands.count('start-watch')==2 and 'Enter a message' in w.status.latest_text
+finally:w.destroy()
+''')

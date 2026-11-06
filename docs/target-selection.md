@@ -72,7 +72,10 @@ the tray menu, including **Exit** to quit.
 Search by title, ID, project, PID or deep link. Enable **Send message**, **Resume goal**, or both
 for each recipient and edit the multiline message. Newlines are preserved
 when saving and sending. These changes save automatically for quota-reset
-delivery; editing them does not send a manual signal. **Send now to N recipients**
+delivery; editing them does not send a manual signal. Adding the first recipient
+to an empty list starts Desktop watch after the selection is saved. Loading saved
+recipients, adding further recipients and editing existing ones do not start a
+stopped watch. **Send now to N recipients**
 uses the current choices immediately, even when monitoring is off. The button
 shows the recipient count and is disabled when none are selected. Manual sends
 may resume paused goals; automatic recovery continues to respect intentional pauses.
@@ -241,7 +244,8 @@ in the main window. Saved settings and recipients automatically restart an activ
 quota-reset identities, accepted/uncertain recipients and pending retries survive
 the restart. Prompt typing and checkbox changes coalesce into one update.
 An empty selection or blank Prompt draft suspends the watch until settings become
-valid. Stop cancels pending restarts; saving while Off does not start a watch.
+valid. Stop cancels pending restarts. Editing existing recipients while Off does
+not start a watch; adding the first recipient to an empty list does.
 Configuration is saved atomically.
 
 On Linux, the picker and tray communicate through a private Recharge AI-task control

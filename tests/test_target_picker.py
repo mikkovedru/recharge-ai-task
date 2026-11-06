@@ -61,6 +61,7 @@ def check():
         window.table_layout.sort("id", True)
         assert window.filtered[0][4] == "beta"
         window._toggle(None, "0", "send_goal")
+        idle()
         window.table_layout.sort("send_goal", True)
         window._toggle(None, "0")
         assert [(t.id, t.send_prompt, t.send_goal) for t in window.selected.values()] == [("beta", True, True)]
@@ -264,6 +265,7 @@ def check():
         window.filtered.refilter()
         assert len(window.filtered) == 1
         window._toggle(None, "0")
+        idle()
         assert list(window.selected.values()) == [replace(beta, send_prompt=True, send_goal=False)]
         assert not hasattr(window,"recipient_label")
         assert window.send_button.get_label() == "Send now to 1 recipient"
