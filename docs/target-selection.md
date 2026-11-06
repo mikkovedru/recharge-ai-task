@@ -570,7 +570,8 @@ Settings highlights its default Save button: Enter saves and Escape cancels.
 Left/Right moves between its action buttons when one is focused; arrow keys keep
 their normal editing behavior in text fields. Enter in a main-window multiline
 message editor continues to insert a newline. The logo is keyboard-focusable;
-Enter/Space opens GitHub and Shift+F10 opens its copy-link menu.
+Enter/Space opens GitHub and Shift+F10 opens its copy-link menu. The copy item
+shows the repository URL in round brackets.
 
 Status-help hovering does not take editor focus or sort the column. The popup
 stays open while the pointer moves into it. Expanding an explanation or scrolling

@@ -15,7 +15,7 @@ class ProjectLogo(Gtk.Button):
         self.connect("clicked",self._open)
         self.connect("popup-menu",self._popup)
         self.menu = Gtk.Menu()
-        item = Gtk.MenuItem(label="Copy GitHub repository link")
+        item = Gtk.MenuItem(label=f"Copy GitHub repository link ({REPOSITORY_URL})")
         item.connect("activate", self.copy_link)
         self.menu.append(item)
         self.menu.show_all()

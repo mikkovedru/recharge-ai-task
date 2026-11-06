@@ -11,7 +11,7 @@
 > Auto-continue Codex after 5h/7d quota resets — CLI PTY wrapper + ChatGPT Codex desktop watch, MIT.
 
 The primary command, `recharge-ai-task`, opens the desktop app. Use
-`recharge-ai-task-cli` for terminal operation.
+`recharge-ai-task-cli` for terminal operation. The current project version is **1.0**.
 
 ### Usage at a glance
 

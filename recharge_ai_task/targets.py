@@ -12,6 +12,7 @@ from contextlib import closing
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from urllib.parse import quote
+from . import __version__
 from .recovery_rules import valid_status
 
 
@@ -142,7 +143,7 @@ class AppServer:
             sock.connect(self.path)
             self.connection = websocket.create_connection("ws://localhost/", socket=sock,
                 timeout=4, suppress_origin=True)
-            init = self.call("initialize", {"clientInfo": {"name": "recharge-ai-task", "version": "1.1.1"}})
+            init = self.call("initialize", {"clientInfo": {"name": "recharge-ai-task", "version": __version__}})
             self.home = Path(init["codexHome"])
             self.connection.send(json.dumps({"method": "initialized"}))
         except Exception:

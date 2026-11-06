@@ -12,7 +12,8 @@ from recharge_ai_task.brand_ui import ProjectLogo, Gtk, Gdk, REPOSITORY_URL
 window = Gtk.Window()
 logo = ProjectLogo(Gtk.Image())
 window.add(logo)
-assert __version__ in logo.get_tooltip_text()
+assert __version__ == "1.0" and __version__ in logo.get_tooltip_text()
+assert logo.menu.get_children()[0].get_label() == f"Copy GitHub repository link ({REPOSITORY_URL})"
 calls = []
 Gtk.show_uri_on_window = lambda *args: calls.append(args)
 assert logo.get_can_focus()
