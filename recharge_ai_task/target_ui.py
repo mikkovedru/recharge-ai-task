@@ -19,7 +19,7 @@ from .wrapping_button import WrappingButton
 from .window_layout import WindowLayout
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
-from .delivery_policy import invalid_messages, clear_consumed_custom_prompt
+from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit, effective_limit
 from .config import AppConfig, config_path
 from .autostart import is_autostart_enabled, set_autostart
 from .quota import discover_codex, fetch_quota
@@ -58,6 +58,9 @@ class TargetPicker(Gtk.Window):
         self.quota_error = ""
         self.quota_updated = None
         self.autosave_error = ""
+        self.apply_error = ""
+        self.apply_revision = 0
+        self._apply_notice = ""
         self._save_notice = ""
         self._runtime_notice = None
         self._inventory_notice = ""
@@ -610,6 +613,10 @@ class TargetPicker(Gtk.Window):
             self.runtime = value
             try:
                 saved = AppConfig.load()
+                if value is not None and (not value.get("desktop_watch") and not value.get("restarting") or
+                        value.get("watch_settings") == tray_control.watch_settings(saved)):
+                    self.apply_error = ""
+                    self._apply_notice = ""
                 self.saved_signature = self._signature(saved.targets(), saved.continue_prompt) if config_path().exists() else None
                 self._summary()
             except Exception as exc:
@@ -671,12 +678,9 @@ class TargetPicker(Gtk.Window):
         self.watch_button.set_always_show_image(True)
         self.watch_button.set_sensitive(not self.busy and not self.runtime_busy and (not stopping or restarting) and not runtime.get("cli_running", False))
         self.send_button.set_sensitive(not self.busy and bool(self.selected))
-        notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or (
-            "Applying saved settings; Desktop watch will restart automatically." if restarting else "")
+        notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or ""
         if notice and notice != self._runtime_notice and hasattr(self, "status"):
             self._message(notice, "error" if runtime.get("watch_error") else "warning" if runtime.get("watch_pause_reason") else "normal")
-        elif self._runtime_notice and not notice and alive and hasattr(self, "status"):
-            self._message("Desktop watch is running with saved settings.")
         self._runtime_notice = notice
         try:
             enabled = is_autostart_enabled()
@@ -758,7 +762,7 @@ class TargetPicker(Gtk.Window):
             if command == "start-watch" and uses_policies and not live.get("recipient_policies"):
                 raise RuntimeError("Restart the tray to enforce recipient messages and continuation limits.")
             if command == "start-watch" and any(t.custom_prompt_once for t in self.selected.values()) and not live.get("one_use_messages"):
-                raise RuntimeError("Restart the tray to use Send once custom messages.")
+                raise RuntimeError("Restart the tray to use Send only once custom messages.")
             return tray_control.request(command)
         def show(value):
             self.runtime = value
@@ -831,8 +835,7 @@ class TargetPicker(Gtk.Window):
         config = SettingsDialog(self).edit()
         if config is not None:
             self.config = config
-            self._message("Settings saved; active watch changes apply automatically.")
-            self._background(lambda: tray_control.request("reload"), lambda *_: self.poll_runtime())
+            self._reload_saved_settings()
             self.refresh_quota()
             self._render_runtime()
 
@@ -1007,15 +1010,68 @@ class TargetPicker(Gtk.Window):
             self.autosave_error = str(exc)
             self._summary()
             return False
-        recovered_save = bool(self.autosave_error)
         self.config = config
         self.autosave_error = ""
         self.saved_signature = self._signature(self.selected.values(), config.continue_prompt)
         self._summary()
-        if recovered_save:
-            self._message("Settings saved after retry.")
-        self._background(lambda: tray_control.request("reload"), lambda *_: self.poll_runtime())
+        self._reload_saved_settings()
         return True
+
+    def _reload_saved_settings(self):
+        self.apply_error = ""
+        self.apply_revision += 1
+        revision = self.apply_revision
+        def applied(value, error):
+            if revision != self.apply_revision:
+                return
+            self.apply_error = error or ""
+            if error and error != self._apply_notice:
+                self._message("Could not apply saved settings: " + error, "error")
+            self._apply_notice = error or ""
+            if value is not None:
+                self.runtime = value
+            self._summary()
+            self.poll_runtime()
+        self._background(lambda: tray_control.request("reload"), applied)
+
+    def custom_message_status(self, target):
+        if target is not None:
+            reason = "Send messages is Off for this recipient." if not target.signal_actions()[0] else ""
+            try:
+                limit = effective_limit(target, "prompt", self.config)
+                if not reason and limit == 0:
+                    reason = "The effective message limit is 0."
+            except ValueError:
+                return "error", "The message limit is invalid."
+            if reason:
+                extra = (" Could not save changes: " + self.autosave_error if self.autosave_error else
+                         " Saved changes could not be applied: " + self.apply_error if self.apply_error else
+                         " The custom text is retained for when messages are enabled.")
+                return "paused", "Message sending is paused. " + reason + extra
+        if self.autosave_error:
+            return "error", "Could not save changes: " + self.autosave_error
+        if target is None or target.custom_prompt is None:
+            return "default", "Default message is in use; no custom message is enabled."
+        try:
+            saved = next((t for t in AppConfig.load().all_targets() if t.key == target.key), None)
+        except Exception as exc:
+            return "error", "Could not verify the saved custom message: " + str(exc)
+        if saved is None or (saved.custom_prompt, saved.custom_prompt_once) != (target.custom_prompt, target.custom_prompt_once):
+            return "error", "This custom message differs from saved settings; its save has not been confirmed."
+        if self.apply_error:
+            return "error", "Saved, but changes could not be applied: " + self.apply_error
+        runtime = self.runtime
+        if runtime is None:
+            return "unknown", "Saved. The tray is unavailable, so application by an active watch cannot be verified."
+        if target.custom_prompt_once and runtime.get("desktop_watch") and not runtime.get("one_use_messages"):
+            return "error", "Saved, but the running tray must be restarted to support Send only once messages."
+        error = runtime.get("watch_error") or runtime.get("watch_pause_reason")
+        if error:
+            return "error", "Saved, but Desktop watch needs attention: " + error
+        if runtime.get("restarting") or runtime.get("desktop_watch") and runtime.get("watch_settings") != tray_control.watch_settings(self.config):
+            return "pending", "Saved; waiting for Desktop watch to apply these settings."
+        return "saved", ("Saved and applied by Desktop watch." if runtime.get("desktop_watch") else
+                         "Saved. Desktop watch is off; the custom message is ready for Send now or the next watch start.")
 
     def _messages_ready(self):
         try:

@@ -49,7 +49,10 @@ for control in (p.prompt_limit,p.goal_limit):
     if control is p.goal_limit: control.off.clicked()
 assert w.selected[a.key].prompt_limit is None and w.selected[a.key].goal_limit is None
 p.prompt_limit.inherited_value(-1)
-assert p.prompt_limit.default.get_label()=='Global default (Unlimited)'
+assert p.prompt_limit.default.get_label()=='Global default (∞)'
+assert p.prompt_limit.unlimited.get_label()=='∞'
+assert p.prompt_limit.unlimited.get_accessible().get_name()=='Unlimited'
+assert '∞' in p.rows[a.key].allowance.get_text()
 p.render()
 assert not p.message.get_editable() and not p.message.get_cursor_visible()
 passive=p.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
@@ -93,7 +96,9 @@ p.prompt_limit.limited.clicked()
 p.prompt_limit.number_popover.popdown()
 p.prompt_limit.number.set_value(1)
 assert w.selected[a.key].custom_prompt=='Specific\nmessage' and w.selected[a.key].prompt_limit==1
-assert 'Custom: Specific' in p.rows[a.key].preview.get_text()
+assert 'Message: used 0 / 1' in p.rows[a.key].allowance.get_text()
+assert '    |    Custom message: Specific message' in p.rows[a.key].allowance.get_text()
+assert not p.rows[a.key].preview.get_visible()
 # Same-titled recipients have independent identities and inherited defaults.
 assert w.selected[b.key].custom_prompt is None and w.selected[b.key].prompt_limit is None
 p.message_buffer.place_cursor(p.message_buffer.get_iter_at_offset(4))
@@ -108,7 +113,7 @@ w.update_recipient(replace(w.preferences[a.key],send_prompt=True))
 assert w.selected[a.key].custom_prompt=='Specific\nmessage'
 assert target_delivery.send_signals([w.selected[a.key]],w._prompt_text(),manual=True)[0].success
 w._summary()
-assert '0 left of 1' in p.rows[a.key].allowance.get_text()
+assert 'used 1 / 1' in p.rows[a.key].allowance.get_text()
 assert 'limit reached' in p.rows[a.key].plan.get_text()
 assert target_delivery.send_signals([w.selected[a.key]],w._prompt_text(),manual=True)[0].skipped
 assert sent==[(a.key,'Specific\nmessage')]

@@ -1,6 +1,6 @@
 # One-use custom messages
 
-A recipient can arm **Send once** while using a custom message. A confirmed
+A recipient can arm **Send only once** while using a custom message. A confirmed
 message send consumes that custom message, and future sends use the current
 default. Definite rejection and skipped delivery leave it armed. If delivery is
 unconfirmed, the custom message remains consumed to avoid sending it twice.

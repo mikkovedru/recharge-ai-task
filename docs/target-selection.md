@@ -377,8 +377,14 @@ No test signal is sent to existing user chats.
 **Recipients & actions** lists the chosen chats/windows, automatic and
 manual action previews, used/remaining allowances and effective messages. Choose
 an entry to edit its actions, message and limits. Hover over its preview for the
-full message; the action preview’s tooltip explains current status checks. The preview
+full custom message; the action preview’s tooltip explains current status checks. The preview
 uses the latest refresh; the sender verifies live Goal state and allowances.
+
+Allowances read **used N / limit**, using a larger **∞** for an unlimited
+allowance. Default message previews are hidden. A custom message appears on the
+same line as its message allowance, separated by **|** and labeled
+**Custom message:**. Long text is ellipsized with the full multiline custom
+message available on hover.
 
 Each recipient has a single project-first title line and an obvious filled
 selection highlight. The full title is available on hover. Rows with no eligible
@@ -390,8 +396,10 @@ show the difference between automatic recovery and **Send now**, while an
 already active Goal says that no activation is needed. Message-only recipients
 are not made passive by task or Goal status labels.
 
-Routine ready messages and badges are hidden. Information and warning icons
-indicate actions that need context or attention; they are not delivery receipts.
+Routine ready messages and checkmarks are hidden. Every recipient has an
+information/details button, including message-only recipients. Warning icons
+indicate actions needing attention; these icons are not delivery receipts.
+Their contrasting background remains visible on selected rows.
 Goal-only rows have no message-preview placeholder. Hover over an issue icon
 for the full explanation, or focus it and press
 Enter/Space to open the same details. Unreadable status or allowance data is
@@ -404,13 +412,16 @@ and Codex profile, or the window identity.
 
 The **Global limits per recipient** controls beside the default message set
 separate limits for **Send messages** and **Reactivate goals**. Each offers two buttons:
-**Unlimited** and its numeric limit. The pressed button is the active mode;
+**∞** (unlimited) and its numeric limit. The larger infinity glyph matches the surrounding text height. The pressed button is the active mode;
 click the number to select that mode and edit the value. These are defaults for each
 recipient, rather than a shared pool. Each recipient can inherit a default,
-choose its own limit, or explicitly choose Unlimited. The per-recipient controls
-use **Off**, **Global default (value)**, **Unlimited** and a numeric button.
+choose its own limit, or explicitly choose ∞ (unlimited). The per-recipient controls
+use **Off**, **Global default (value)**, **∞** and a numeric button.
+**Reactivate goals** appears before **Send messages** in both groups.
+Only the local controls below the list color their active button: red for Off
+and green for other modes. Global buttons keep their normal theme styling.
 **Off** replaces the separate action checkbox and retains its saved limit.
-The local Global default button shows the current Unlimited/numeric value in
+The local Global default button shows the current ∞/numeric value in
 parentheses and follows future global changes. Turning both actions off removes
 the recipient; reselect it in the main list to use it again.
 Zero prevents that action.
@@ -420,12 +431,21 @@ a passive theme-colored tint and remains read-only. Enabling the checkbox
 restores the normal editor appearance. An empty custom message is an invalid draft; it never silently
 falls back to the default. Overrides survive refresh, deselection and restarting.
 
-Enable **Send once** to use the custom message for one accepted message send,
+Enable **Send only once**, beside the custom-message checkbox, to use the custom message for one accepted message send,
 then return to the current default. A definite failure or skipped message leaves
 it armed. An unconfirmed send is treated as used, so the custom text is not
 repeated automatically. Count resets do not rearm it; editing or re-enabling Send
-once does. New edits are preserved if an earlier message finishes in the meantime.
+only once does. New edits are preserved if an earlier message finishes in the meantime.
 See [one-use message handling](../doc/architecture/2026-11-06_one-use-custom-messages.md).
+
+The colored icon in neutral round brackets beside **Use a custom message for this recipient** reports persistence
+and application status: saved/applied, saved but waiting for the watch, unknown,
+or failed. Green indicates saved/applied, yellow indicates pending or uncertain,
+and red indicates failure. A red pause icon replaces the OK mark when Send
+messages is Off or its effective allowance is zero. Hover for details. When monitoring is off, it reports that the message
+is saved and available for Send now or a future watch start. This icon confirms
+settings status, not delivery. Routine successful saves and watch restarts stay
+out of the error log; failures to save, apply or restart are still reported.
 
 Counts cover both **Send now** and automatic Desktop watch recovery. They last
 until explicitly reset, across quota resets, watch restarts and app restarts.
@@ -437,8 +457,8 @@ A successful Goal action remains counted if its later message fails.
 
 When both actions are selected, a reached Goal limit withholds the message too.
 Untick Resume goal to send a message independently. A reached Message limit still
-allows Goal-only activation. **Reset counts** renews both allowances for the
-chosen recipient; **Reset all recipient counts** renews all stored allowances.
+allows Goal-only activation. **Reset current recipient's counts** renews both allowances for the
+chosen recipient; **Reset counts for all** renews all stored allowances.
 Neither reset sends anything or replays an earlier quota recovery. Resets refuse
 to run while a sender still has a delivery in progress. Check the chat before
 resetting unconfirmed deliveries. Counts live in `delivery.sqlite` beside the
