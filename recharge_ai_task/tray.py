@@ -59,7 +59,7 @@ def _console_command(args):
         path = shutil.which(name)
         if path:
             return [path, *flags, *args]
-    raise FileNotFoundError("Install a terminal emulator to open Codex or Settings")
+    raise FileNotFoundError("Install a terminal emulator to open an AI CLI or Settings")
 
 
 class TrayApp:
@@ -118,16 +118,21 @@ class TrayApp:
             return
 
         self._cancel_restart_locked()
+        self.config = AppConfig.load()
         args = [*_resolve_cli_exe(), "run"]
+        args.extend(["--provider", self.config.provider])
+        goal = goal and self.config.provider == "codex"
         args.append("--goal" if goal else "--no-goal")
         if self.config.grace_seconds != 60:
             args.extend(["--grace", str(self.config.grace_seconds)])
         if self.config.continue_prompt != "Continue":
             args.extend(["--continue", self.config.continue_prompt])
-        if self.config.codex_path:
-            args.extend(["--codex", self.config.codex_path])
-        if self.config.codex_args:
-            args.extend(["--", *self.config.codex_args])
+        path = self.config.claude_path if self.config.provider == "claude" else self.config.codex_path
+        cli_args = self.config.claude_args if self.config.provider == "claude" else self.config.codex_args
+        if path:
+            args.extend(["--claude" if self.config.provider == "claude" else "--codex", path])
+        if cli_args:
+            args.extend(["--", *cli_args])
 
         creationflags = CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
         with self._lock:
@@ -163,6 +168,7 @@ class TrayApp:
         self._watch_pause_reason = ""
         self._watch_stop = StopEvent()
         cfg = WatchConfig(
+            provider=self.config.provider,
             codex_path=self.config.codex_path,
             continue_prompt=self.config.continue_prompt,
             goal_mode=self.config.goal_mode,
@@ -249,7 +255,8 @@ class TrayApp:
                 elif invalid_messages(targets, config.continue_prompt, config):
                     self._watch_pause_reason = "Enter a prompt message; watch will resume automatically."
                 else:
-                    discover_codex(config.codex_path)
+                    if config.provider == "codex":
+                        discover_codex(config.codex_path)
                     self._start_desktop_locked(restarting=True)
             except Exception as exc:
                 self._watch_error = f"Could not apply saved watch settings: {exc}"
@@ -275,7 +282,13 @@ class TrayApp:
     def show_quota(self, _icon=None, _item=None) -> None:
         def worker() -> None:
             try:
-                text = format_quota(fetch_quota(discover_codex(self.config.codex_path)))
+                config = AppConfig.load()
+                if config.provider == "claude":
+                    from .claude import fetch_claude_quota
+                    quota = fetch_claude_quota()
+                else:
+                    quota = fetch_quota(discover_codex(config.codex_path))
+                text = format_quota(quota)
             except Exception as exc:
                 text = t("tray.quota_unavailable", error=exc)
             if self._icon is not None:
@@ -339,10 +352,10 @@ class TrayApp:
             pystray.MenuItem(
                 t("tray.start_goal"),
                 self.start_goal,
-                enabled=lambda _: not self._is_running(),
+                enabled=lambda _: not self._is_running() and AppConfig.load().provider == "codex",
             ),
             pystray.MenuItem(
-                t("tray.start_normal"),
+                lambda _: "Start Claude Code" if AppConfig.load().provider == "claude" else t("tray.start_normal"),
                 self.start_normal,
                 enabled=lambda _: not self._is_running(),
             ),
@@ -385,7 +398,8 @@ class TrayApp:
             config = AppConfig.load()
             if not config.targets():
                 raise RuntimeError("Save at least one target before starting Desktop watch")
-            discover_codex(config.codex_path)
+            if config.provider == "codex":
+                discover_codex(config.codex_path)
             self.start_desktop()
         elif command == "check-quota":
             if self._watch_thread is None or not self._watch_thread.is_alive():
@@ -413,7 +427,7 @@ class TrayApp:
             self._watch_error = f"Could not read saved watch settings: {exc}"
         thread = self._watch_thread
         alive = thread is not None and thread.is_alive()
-        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True,
+        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True,
                 "restarting": self._restart_pending, "watch_requested": self._watch_requested,
                 "watch_pause_reason": self._watch_pause_reason,
                 "stopping": alive and self._watch_stop.is_set(),

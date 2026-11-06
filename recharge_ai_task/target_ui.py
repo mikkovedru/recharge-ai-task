@@ -22,7 +22,8 @@ from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
 from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
 from .config import AppConfig, config_path
-from .quota import discover_codex, fetch_quota, quota_from_snapshot
+from .quota import discover_codex, fetch_quota, quota_from_snapshot, quota_windows
+from .claude import fetch_claude_quota
 from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target, discover_targets
@@ -40,6 +41,7 @@ class TargetPicker(Gtk.Window):
         set_window_icon(self)
         self.set_default_size(1440, 980)
         self.config = AppConfig.load()
+        self.set_title("Recharge AI-task — " + ("Anthropic Claude" if self.config.provider == "claude" else "OpenAI Codex"))
         apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
         self.preferences = {t.key: t for t in self.config.all_targets()}
@@ -646,6 +648,8 @@ class TargetPicker(Gtk.Window):
             self.runtime = value
             try:
                 saved = AppConfig.load()
+                if saved.provider != self.config.provider and not self.busy:
+                    self._apply_provider_config(saved)
                 self._configure_quota_poll(saved.poll_seconds)
                 self._adopt_watch_quota()
                 if self.quota is None and not self._uses_watch_quota():
@@ -820,6 +824,8 @@ class TargetPicker(Gtk.Window):
                         time.sleep(.2)
             if command == "start-watch" and live.get("per_target_signals") is not True:
                 raise RuntimeError("Restart the tray to use per-recipient Prompt / Goal signals; the running tray is an older version.")
+            if command == "start-watch" and self.config.provider == "claude" and not live.get("claude_support"):
+                raise RuntimeError("Restart the tray to enable Anthropic Claude monitoring.")
             uses_policies = self.config.prompt_limit is not None or self.config.goal_limit is not None or any(
                 t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in self.selected.values())
             if command == "start-watch" and uses_policies and not live.get("recipient_policies"):
@@ -851,7 +857,8 @@ class TargetPicker(Gtk.Window):
         return True
 
     def _uses_watch_quota(self):
-        return bool(self.runtime and self.runtime.get("desktop_watch") and self.runtime.get("shared_quota"))
+        return bool(self.runtime and self.runtime.get("desktop_watch") and self.runtime.get("shared_quota")
+                    and (self.runtime.get("watch_settings") or {}).get("provider", "codex") == self.config.provider)
 
     def _adopt_watch_quota(self):
         if not self._uses_watch_quota():
@@ -901,6 +908,9 @@ class TargetPicker(Gtk.Window):
             self.quota_busy = False
             self.quota_button.set_sensitive(True)
             self.quota_button.set_label("Check quota now")
+            if provider != self.config.provider:
+                self.refresh_quota()
+                return
             self.quota_error = error or ""
             if error and error != self._quota_notice:
                 self._message("Quota refresh failed: " + error, "error")
@@ -909,7 +919,8 @@ class TargetPicker(Gtk.Window):
                 self.quota = value
                 self.quota_updated = time.time()
             self.render_quota()
-        self._background(lambda: fetch_quota(discover_codex(AppConfig.load().codex_path)), show)
+        provider = self.config.provider
+        self._background(lambda: fetch_claude_quota() if provider == "claude" else fetch_quota(discover_codex(AppConfig.load().codex_path)), show)
         return True
 
     def render_quota(self):
@@ -921,7 +932,9 @@ class TargetPicker(Gtk.Window):
             return True
         colors = status_colors(self.quota_label)
         def window_text(window):
-            label = "5-hour" if window.window_duration_mins == 300 else "Weekly" if window.window_duration_mins == 10080 else f"{window.window_duration_mins}-minute"
+            label = window.label or ("5-hour" if window.window_duration_mins == 300 else "Weekly" if window.window_duration_mins == 10080 else f"{window.window_duration_mins}-minute")
+            if not window.resets_at:
+                return GLib.markup_escape_text(f"{label}: {window.used_percent:g}% used · window not started")
             remaining = max(0, int(window.resets_at - time.time()))
             days, remainder = divmod(remaining, 86400)
             hours, remainder = divmod(remainder, 3600)
@@ -932,7 +945,7 @@ class TargetPicker(Gtk.Window):
             suffix = GLib.markup_escape_text(f" · resets {reset} ({countdown})")
             level = "error" if window.used_percent >= 100 else "warning" if window.used_percent >= 85 else None
             return (f'<span foreground="{colors[level]}">{text}</span>' if level else text) + suffix
-        lines = [window_text(w) for w in (self.quota.primary, self.quota.secondary) if w is not None]
+        lines = [window_text(w) for w in quota_windows(self.quota)]
         if self.quota.has_credits or self.quota.unlimited_credits:
             lines.append("Additional credits are available" + (" · backend still reports a limit" if self.quota.rate_limit_reached or self.quota.spend_control_reached else " · usable without waiting for the included window reset"))
         age = max(0, int(time.time() - self.quota_updated))
@@ -940,11 +953,26 @@ class TargetPicker(Gtk.Window):
         self.quota_label.set_markup("\n".join(lines))
         return True
 
+    def _apply_provider_config(self, config):
+        changed_provider = config.provider != self.config.provider
+        self.config = config
+        self.set_title("Recharge AI-task — " + ("Anthropic Claude" if config.provider == "claude" else "OpenAI Codex"))
+        if changed_provider:
+            self.preferences = {t.key: t for t in config.all_targets()}
+            self.selected = {t.key: t for t in config.targets()}
+            self.targets = {}
+            self.store.clear()
+            self.quota = None
+            self.quota_error = ""
+            self.saved_signature = self._signature(self.selected.values(), config.continue_prompt)
+            self._summary()
+            self.refresh()
+
     def settings(self, *_):
         from .settings_ui import SettingsDialog
         config = SettingsDialog(self).edit()
         if config is not None:
-            self.config = config
+            self._apply_provider_config(config)
             self._configure_quota_poll(config.poll_seconds)
             self._reload_saved_settings()
             self.refresh_quota()
@@ -988,7 +1016,7 @@ class TargetPicker(Gtk.Window):
         rows = {}
         for index in range(len(self.store) - 1, -1, -1):
             row = self.store[index]
-            key = Target(row[2], row[4], row[1], instance=row[6]).key
+            key = Target(row[2], row[4], row[1], instance=row[6], provider=self.config.provider).key
             if key not in targets:
                 self.store.remove(row.iter)
             else:
@@ -1019,10 +1047,14 @@ class TargetPicker(Gtk.Window):
         if self.closed or self.discovery_busy or self.busy:
             return
         self.discovery_busy = True
+        provider = self.config.provider
         if not automatic:
             self.inventory_status.set_text("Refreshing targets and statuses…")
         def show(inventory, error):
             self.discovery_busy = False
+            if provider != self.config.provider:
+                self.refresh()
+                return
             if error:
                 # Retain the recipients, but never display stale state as current.
                 for row in self.store:
@@ -1032,7 +1064,7 @@ class TargetPicker(Gtk.Window):
                 self._message(f"Status refresh failed: {error}", "error")
             else:
                 self._apply_inventory(inventory)
-        self._background(discover_targets, show)
+        self._background(discover_targets if provider == "codex" else lambda: discover_targets(provider), show)
 
     def refresh_statuses(self):
         if self.closed:

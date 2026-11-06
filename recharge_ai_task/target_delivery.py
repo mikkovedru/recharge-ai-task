@@ -58,6 +58,8 @@ def _owner_for_delivery(desktop, target):
 
 
 def _send_thread(target, text):
+    if target.provider != "codex":
+        raise ValueError("Claude recipients require an explicit desktop window")
     if not target.endpoint:
         raise RuntimeError("Desktop chat routing unavailable; open Codex and refresh targets")
     with DesktopIPC(target.endpoint, timeout=5) as desktop:
@@ -70,7 +72,7 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
     Explicit manual recovery may also resume paused goals. Automatic recovery
     respects pauses. Window identities cannot identify an individual goal.
     """
-    if target.kind != "thread":
+    if target.kind != "thread" or target.provider != "codex":
         return DeliveryResult(target, False,
             "Native goal recovery requires a chat ID; select a chat or turn off Goal for this recipient", retryable=False)
     from .goal_control import NativeGoals
@@ -160,7 +162,8 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
 
 
 def _send_window(target, text, enter_presses, key_delay):
-    current = {w.key: w for w in discover_windows()}.get(target.key)
+    windows = discover_windows() if target.provider == "codex" else discover_windows(target.provider)
+    current = {w.key: w for w in windows}.get(target.key)
     if target.pid is None or current is None or current.pid != target.pid:
         raise RuntimeError("Selected window closed or its ID was reused; refresh targets")
     if sys.platform == "win32":
@@ -174,7 +177,7 @@ def _send_window(target, text, enter_presses, key_delay):
         user32.SetForegroundWindow(hwnd)
         time.sleep(.2)
         if user32.GetForegroundWindow() != hwnd:
-            raise RuntimeError("Selected Codex window could not be activated")
+            raise RuntimeError("Selected AI window could not be activated")
         _win_paste_text(text)
         for _ in range(max(1, enter_presses)):
             if user32.GetForegroundWindow() != hwnd:
@@ -187,7 +190,7 @@ def _send_window(target, text, enter_presses, key_delay):
         def check_focus():
             active = subprocess.check_output(["xdotool", "getactivewindow"], text=True, timeout=3).strip()
             if active != target.id:
-                raise RuntimeError("Focus moved away from the selected Codex window")
+                raise RuntimeError("Focus moved away from the selected AI window")
         check_focus()
         try:
             subprocess.run(["xdotool", "type", "--clearmodifiers", "--delay", "0", "--", text], check=True, timeout=10)

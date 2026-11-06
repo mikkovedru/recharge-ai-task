@@ -1,4 +1,4 @@
-"""Atomic recovery checkpoints scoped to the selected Codex profiles."""
+"""Atomic recovery checkpoints scoped to provider profiles and recipients."""
 import hashlib
 import json
 import os
@@ -10,6 +10,9 @@ from .config import config_dir
 
 def state_path(config):
     identity = [config.codex_path, sorted({t.instance for t in config.targets()})]
+    if config.provider != "codex":
+        from .claude import claude_home
+        identity = [config.provider, str(claude_home().resolve()), identity[1]]
     key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:20]
     return config_dir() / f"watch-state-{key}.json"
 

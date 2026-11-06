@@ -157,7 +157,7 @@ try:
         surface.write_to_png('/tmp/2026-11-06_monitoring-'+('dark' if dark else 'light')+'.png')
     dialog=settings_ui.SettingsDialog(w);pump(w)
     try:
-        assert len(dialog.notes.get_children())==4
+        assert len(dialog.notes.get_children())==5
         assert all(row.get_children()[0].get_text()=='•' for row in dialog.notes.get_children())
         assert not dialog.autostart.get_active()
         assert dialog.startup_info.get_text()=='(This tray started at login: Yes)'
@@ -166,7 +166,7 @@ try:
         if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
             click(dialog.grace,dialog);click(dialog.poll,dialog)
         else:
-            dialog.grace.spin(Gtk.SpinType.STEP_FORWARD,1);dialog.poll.spin(Gtk.SpinType.STEP_FORWARD,1)
+            dialog.grace.spin(Gtk.SpinType.STEP_FORWARD,10);dialog.poll.spin(Gtk.SpinType.STEP_FORWARD,5)
         assert dialog.grace.get_value_as_int()==47 and dialog.poll.get_value_as_int()==14
         dialog.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*dialog.get_size());dialog.draw(cairo.Context(surface))
         surface.write_to_png('/tmp/2026-11-06_monitoring-settings.png')

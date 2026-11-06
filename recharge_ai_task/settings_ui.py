@@ -25,7 +25,7 @@ class SettingsDialog(Gtk.Dialog):
         cancel_button=self.get_widget_for_response(Gtk.ResponseType.CANCEL)
         cancel_button.set_tooltip_text("Close without saving settings (Escape)")
         self.connect("key-press-event",self._dialog_keys)
-        self.set_default_size(540, 390)
+        self.set_default_size(620, 620)
         self.window_layout = WindowLayout(self, "settings")
         self.connect("destroy", self.window_layout.close)
         config = AppConfig.load()
@@ -33,13 +33,25 @@ class SettingsDialog(Gtk.Dialog):
         apply_color_theme(config.color_theme)
         self.connect("destroy", self._restore_saved_theme)
         grid = Gtk.Grid(column_spacing=12, row_spacing=12, margin=18)
-        self.get_content_area().add(grid)
+        self.scroller = Gtk.ScrolledWindow(hexpand=True, vexpand=True)
+        self.scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.scroller.add(grid)
+        self.get_content_area().pack_start(self.scroller, True, True, 0)
         self.mode = Gtk.ComboBoxText()
-        for key, label in (("desktop", "Desktop watch"), ("cli", "Codex CLI")):
+        for key, label in (("desktop", "Desktop watch"), ("cli", "AI CLI")):
             self.mode.append(key, label)
         self.mode.set_active_id(config.mode)
         self.path = Gtk.Entry(text=config.codex_path or "", placeholder_text="Auto-detect Codex CLI")
         self.args = Gtk.Entry(text=shlex.join(config.codex_args or []), placeholder_text="Optional CLI arguments")
+        self.provider = Gtk.ComboBoxText()
+        self.provider.append("codex", "OpenAI Codex")
+        self.provider.append("claude", "Anthropic Claude")
+        self.provider.set_active_id(config.provider)
+        self.provider.set_tooltip_text("Choose whose quota and desktop recipients to monitor. Each provider keeps its recipients (Alt + Down)")
+        self.claude_path = Gtk.Entry(text=config.claude_path or "", placeholder_text="Auto-detect Claude Code")
+        self.claude_path.set_tooltip_text("Optional path to the Claude Code executable; desktop quota uses its subscription login")
+        self.claude_args = Gtk.Entry(text=shlex.join(config.claude_args or []), placeholder_text="Optional Claude Code arguments")
+        self.claude_args.set_tooltip_text("Arguments for new Claude Code terminal sessions, for example --continue")
         self.grace = Gtk.SpinButton.new_with_range(0, 86400, 10)
         self.grace.set_value(config.grace_seconds)
         self.poll = Gtk.SpinButton.new_with_range(1, 3600, 5)
@@ -59,9 +71,11 @@ class SettingsDialog(Gtk.Dialog):
         self.autostart.set_active(startup == "Enabled")
         runtime = getattr(parent, "runtime", None)
         launched = "Unknown (tray unavailable)" if runtime is None else "Yes" if runtime.get("launched_at_startup") else "No"
-        for index, (name, widget) in enumerate((("Default mode", self.mode),
+        rows = (("AI provider", self.provider), ("Default mode", self.mode),
             ("Codex CLI path", self.path), ("CLI arguments", self.args),
-            ("Reset grace (seconds)", self.grace), ("Quota polling (seconds)", self.poll), ("Color theme", self.theme))):
+            ("Claude Code path", self.claude_path), ("Claude arguments", self.claude_args),
+            ("Reset grace (seconds)", self.grace), ("Quota polling (seconds)", self.poll), ("Color theme", self.theme))
+        for index, (name, widget) in enumerate(rows):
             grid.attach(Gtk.Label(label=name, xalign=0), 0, index, 1, 1)
             widget.set_hexpand(True)
             grid.attach(widget, 1, index, 1, 1)
@@ -71,12 +85,13 @@ class SettingsDialog(Gtk.Dialog):
         self.startup_info.set_line_wrap(True)
         self.startup_info.set_max_width_chars(35)
         startup_row.pack_start(self.startup_info, True, True, 0)
-        grid.attach(startup_row, 0, 6, 2, 1)
+        grid.attach(startup_row, 0, len(rows), 2, 1)
         self.notes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         for text in (
             "Message text, continuation limits and per-recipient overrides are in the main window.",
             "Those choices save automatically for future quota recovery; Send now acts immediately.",
             "Startup launches the tray; Desktop watch starts when the first recipient is added or you turn it on.",
+            "Claude desktop uses selected windows with an empty, focused composer and a Claude Code login for the same account. Resume goal is Codex-only.",
             "Changes to an active watch apply automatically."):
             row = Gtk.Box(spacing=6)
             bullet = Gtk.Label(label="•", valign=Gtk.Align.START)
@@ -86,10 +101,18 @@ class SettingsDialog(Gtk.Dialog):
             row.pack_start(bullet, False, False, 0)
             row.pack_start(note, True, True, 0)
             self.notes.pack_start(row, False, False, 0)
-        grid.attach(self.notes, 0, 7, 2, 1)
+        grid.attach(self.notes, 0, len(rows) + 1, 2, 1)
         self.error = Gtk.Label(xalign=0)
         self.error.set_line_wrap(True)
-        grid.attach(self.error, 0, 8, 2, 1)
+        grid.attach(self.error, 0, len(rows) + 2, 2, 1)
+        def provider_changed(*_):
+            is_claude = self.provider.get_active_id() == "claude"
+            for widget in (self.path, self.args):
+                widget.set_sensitive(not is_claude)
+            for widget in (self.claude_path, self.claude_args):
+                widget.set_sensitive(is_claude)
+        self.provider.connect("changed", provider_changed)
+        provider_changed()
         self.show_all()
 
     def _restore_saved_theme(self, *_):
@@ -109,10 +132,14 @@ class SettingsDialog(Gtk.Dialog):
 
     def save_settings(self):
         args = shlex.split(self.args.get_text())
+        claude_args = shlex.split(self.claude_args.get_text())
         config = AppConfig.load()
         config.mode = self.mode.get_active_id()
         config.codex_path = self.path.get_text().strip() or None
         config.codex_args = args or None
+        config.provider = self.provider.get_active_id()
+        config.claude_path = self.claude_path.get_text().strip() or None
+        config.claude_args = claude_args or None
         config.grace_seconds = self.grace.get_value_as_int()
         config.poll_seconds = self.poll.get_value_as_int()
         config.autostart = self.autostart.get_active()

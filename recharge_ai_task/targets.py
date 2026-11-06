@@ -1,4 +1,4 @@
-"""Discover selectable Codex chats and desktop windows without changing them."""
+"""Discover selectable Codex chats and provider-specific desktop windows."""
 from __future__ import annotations
 
 import json
@@ -40,6 +40,7 @@ class Target:
     # None inherits the global default; -1 explicitly allows unlimited sends.
     prompt_limit: int | None = None
     goal_limit: int | None = None
+    provider: str = "codex"
 
     def with_preferences(self, saved):
         return self if saved is None else replace(self, **{field: getattr(saved, field) for field in
@@ -47,11 +48,15 @@ class Target:
 
     def signal_actions(self, legacy_goal=False):
         return (True if self.send_prompt is None else self.send_prompt,
-                legacy_goal and self.kind == "thread" if self.send_goal is None else self.send_goal)
+                (legacy_goal and self.kind == "thread" if self.send_goal is None else self.send_goal)
+                if self.provider == "codex" else False)
 
     @property
     def key(self):
-        return json.dumps([self.kind, self.instance, self.id], separators=(",", ":"))
+        identity = [self.kind, self.instance, self.id]
+        if self.provider != "codex":
+            identity.insert(0, self.provider)
+        return json.dumps(identity, separators=(",", ":"))
 
     def to_dict(self):
         return asdict(self)
@@ -262,7 +267,9 @@ def _saved_project_names(home):
     return result
 
 
-def discover_windows():
+def discover_windows(provider="codex"):
+    if provider not in ("codex", "claude"):
+        raise ValueError("Unknown AI provider")
     if sys.platform.startswith("linux"):
         from Xlib import display
         connection = display.Display()
@@ -275,7 +282,10 @@ def discover_windows():
                     window = connection.create_resource_object("window", int(xid))
                     wmclass = " ".join(window.get_wm_class() or ())
                     # Match application identity, never generic title text (browsers etc.).
-                    if not any(token in wmclass.lower() for token in ("chatgpt", "codex")) or "recharge-ai-task" in wmclass.lower():
+                    identities = {part.lower() for part in (window.get_wm_class() or ())}
+                    matched = (bool(identities & {"claude", "claude-desktop", "claude desktop", "com.anthropic.claudefordesktop"})
+                               if provider == "claude" else any(token in wmclass.lower() for token in ("chatgpt", "codex")))
+                    if not matched or "recharge-ai-task" in wmclass.lower():
                         continue
                     pid_prop = window.get_full_property(connection.intern_atom("_NET_WM_PID"), 0)
                     pid = int(pid_prop.value[0]) if pid_prop is not None else None
@@ -283,7 +293,7 @@ def discover_windows():
                     title = name.value.decode("utf-8", errors="replace") if name is not None else window.get_wm_name() or wmclass
                     windows.append(Target("window", str(int(xid)), title,
                         instance=f"{os.environ.get('DISPLAY', '')}:{pid}", pid=pid,
-                        status="Current chat in this window"))
+                        status="Current chat in this window", provider=provider))
                 except Exception:
                     continue  # A window can close while inventory is being read.
             return windows
@@ -313,14 +323,14 @@ def discover_windows():
                 size = wintypes.DWORD(len(buf))
                 if not kernel32.QueryFullProcessImageNameW(process, 0, buf, ctypes.byref(size)):
                     return True
-                if Path(buf.value).stem.lower() not in {"codex", "chatgpt"}:
+                if Path(buf.value).stem.lower() not in ({"claude"} if provider == "claude" else {"codex", "chatgpt"}):
                     return True
             finally:
                 kernel32.CloseHandle(process)
             title = ctypes.create_unicode_buffer(user32.GetWindowTextLengthW(hwnd) + 1)
             user32.GetWindowTextW(hwnd, title, len(title))
             windows.append(Target("window", str(hwnd), title.value,
-                instance=f"windows:{pid.value}", pid=pid.value, status="Current chat in this window"))
+                instance=f"windows:{pid.value}", pid=pid.value, status="Current chat in this window", provider=provider))
             return True
         user32.EnumWindows(callback, 0)
         return windows
@@ -349,14 +359,19 @@ def discover_homes():
     return homes
 
 
-def discover_targets():
+def discover_targets(provider="codex"):
     from dataclasses import replace
     from .codex_ipc import DesktopIPC
     inventory = Inventory()
     try:
-        inventory.targets.extend(discover_windows())
+        inventory.targets.extend(discover_windows() if provider == "codex" else discover_windows(provider))
     except Exception as exc:
         inventory.warnings.append(f"Window discovery: {exc}")
+    if provider == "claude":
+        inventory.warnings.append("Claude recipients use the current chat in each selected window. Keep its empty message composer focused. Native Codex Goal recovery and saved-chat routing are unavailable.")
+        return inventory
+    if provider != "codex":
+        raise ValueError("Unknown AI provider")
     homes = discover_homes()
     records_by_home = {}
     if sys.platform.startswith("linux"):

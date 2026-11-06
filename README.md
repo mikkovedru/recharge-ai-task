@@ -8,7 +8,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Ubuntu%20x86__64-lightgrey.svg)](#release-builds-x86_64-only)
 
-> Auto-continue Codex after 5h/7d quota resets — CLI PTY wrapper + ChatGPT Codex desktop watch, MIT.
+> Auto-continue Codex and Anthropic Claude after quota resets — CLI PTY wrapper and desktop watch, MIT.
 
 The primary command, `recharge-ai-task`, opens the desktop app. Use
 `recharge-ai-task-cli` for terminal operation. The current project version is **1.0**.
@@ -32,11 +32,13 @@ recharge-ai-task-cli configure          # choose mode (cli/desktop) and defaults
 | **CLI + task args** | `recharge-ai-task-cli --goal -- exec "your task"` | Pass args to codex after `--` |
 | **Linux graphical dashboard** | `recharge-ai-task` | Select recipients, view quota, change settings, start/stop Desktop watch |
 | **ChatGPT Codex desktop app** | `recharge-ai-task-cli watch` | Open Codex and save recipients in the GUI first |
+| **Claude Code CLI** | `recharge-ai-task-cli run --provider claude` | Uses the Claude terminal limit/reset message and configured continuation text |
+| **Claude desktop app** | `recharge-ai-task-cli watch --provider claude` | Select Claude windows in Settings and save recipients first; see [Claude setup](#anthropic-claude) |
 | **Start directly in tray** | `recharge-ai-task --tray` or `recharge-ai-task-cli tray` | Starts without opening the dashboard or starting monitoring |
 | **Check quota only** | `recharge-ai-task-cli quota` | Shows short/long window usage |
 | **No Python (Release zip)** | Run `recharge-ai-task.exe` (Win) or `recharge-ai-task` (Linux) | Two binaries: CLI and combined desktop app. Keep them together for CLI integration; Codex CLI must be installed and signed in |
 
-**Prerequisites:** Install [Codex CLI](https://github.com/openai/codex) and sign in with ChatGPT. Linux desktop mode also needs `sudo apt install xdotool` (X11). Native Goal signals use Codex's Resume goal control and require accessibility plus a clipboard manager (included in Mint Cinnamon). Source installs also need `gir1.2-atspi-2.0`.
+**Prerequisites:** Install [Codex CLI](https://github.com/openai/codex) and sign in with ChatGPT, or follow [Claude setup](#anthropic-claude). Linux desktop mode also needs `sudo apt install xdotool` (X11). Native Goal signals use Codex's Resume goal control and require accessibility plus a clipboard manager (included in Mint Cinnamon). Source installs also need `gir1.2-atspi-2.0`.
 
 → [Full guide](#english)
 
@@ -46,21 +48,21 @@ recharge-ai-task-cli configure          # choose mode (cli/desktop) and defaults
 
 ## Overview
 
-Auto-continue **Codex CLI** and the **ChatGPT Codex desktop app** after 5-hour / 7-day usage limits reset.
+Auto-continue **Codex**, **Claude Code** and their desktop windows after usage limits reset.
 
-When quota is exhausted, Recharge AI-task waits for recovery and the grace period, then continues selected tasks. Desktop recipients have independent Prompt and Goal signals; CLI Goal mode enters `/goal resume` in the terminal on its first recovery.
+When quota is exhausted, Recharge AI-task waits for recovery and the grace period, then continues selected tasks. Codex recipients have independent Prompt and Goal signals; Codex CLI Goal mode enters `/goal resume` on its first recovery. Claude recipients use the configured continuation message. See [Claude setup](#anthropic-claude) for authentication and native continuation behavior.
 
 ### Features
 
 - **Two modes**
-  - `cli` — PTY wrapper around `codex` in the terminal (most reliable)
-  - `desktop` — watches quota and signals selected Codex chats or windows
-- **Dual-channel reset detection (CLI mode)** — terminal message parsing + `codex app-server` quota API
+  - `cli` — PTY wrapper around `codex` or `claude` in the terminal
+  - `desktop` — watches the selected provider's quota and signals its saved recipients
+- **Reset detection** — Codex terminal parsing plus `codex app-server`; Claude terminal reset messages or subscription usage for desktop
 - **Cross-platform** — Windows and Ubuntu (x86_64); `pip install` for developers
 - **Optional tray app** — system tray on Windows & Linux (start/stop, quota, autostart)
 - **MIT licensed** — open source, release-ready
 
-### How it works
+### How Codex recovery works
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -175,7 +177,7 @@ matching has been replaced by explicit recipients.
 | **Pre-built binary** | Users without Python | CLI plus one combined GUI/tray executable; no separate GUI runtime |
 | **pip install** | Developers | `pip install "recharge-ai-task[all]"` |
 
-> End users still need **Codex CLI installed and signed in** with a ChatGPT account. This tool only handles auto-continue after quota resets.
+> End users need their selected provider's CLI installed and signed in. This tool handles auto-continue after quota resets.
 
 #### Tray menu
 
@@ -264,6 +266,8 @@ You can leave the tray running in the background — it is lightweight. Codex it
 | `--continue TEXT` | Auto-send text | `Continue` |
 | `--goal` | First send `/goal resume` | off |
 | `--codex PATH` | Codex executable | auto-detect |
+| `--provider codex/claude` | Select the AI provider | saved setting, initially `codex` |
+| `--claude PATH` | Claude Code executable | auto-detect |
 
 The CLI, tray and dashboard use English. Language selectors and language
 environment variables are no longer supported. Existing language preferences
@@ -276,7 +280,7 @@ Custom prompts (including non-English text) and recipient choices are preserved.
 Yes — use `desktop` mode or tray **Start Desktop Watch**. It uses the same quota API as CLI, not Electron hooks.
 
 **Does it work with Cursor / VS Code?**  
-It wraps **Codex CLI** in a terminal. IDE extensions are out of scope; run `recharge-ai-task-cli` in a terminal instead.
+It wraps **Codex CLI** or **Claude Code CLI** in a terminal. IDE extensions are out of scope; run `recharge-ai-task-cli` in a terminal instead.
 
 **What happens at quota reset?**  
 Detect availability through live checks, including manual early resets and usable additional credits, then wait the configured grace period (60 seconds by default) and send the selected actions. A forecast timestamp does not delay an observed early recovery.
@@ -314,14 +318,15 @@ pip install -e ".[all,dev]"
 pytest tests/ -v
 ```
 
-Tests cover: English limit parsing, Goal mode E2E (fake Codex), desktop watch, real Codex spawn smoke.
+Tests cover Codex and Claude limit parsing, PTY continuation, desktop recovery,
+provider isolation, quota failures, recipient accounting and GTK controls.
 
 See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · [OPEN_SOURCE.md](OPEN_SOURCE.md)
 
 ### Requirements
 
 - Python 3.10+
-- [Codex CLI](https://github.com/openai/codex) installed and signed in (ChatGPT account)
+- The selected provider's CLI installed and signed in: [Codex CLI](https://github.com/openai/codex) with ChatGPT or [Claude Code](https://code.claude.com/docs/en/setup) with Claude
 - Windows CLI mode: `pywinpty` (included in `[windows]` extra)
 - Linux desktop mode: `xdotool` on X11
 
@@ -329,8 +334,9 @@ See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · [OPE
 
 - Official release binaries: **x86_64 only** (Windows + Ubuntu)
 - Desktop mode on Linux: **X11 only** (Wayland → use CLI mode)
-- Requires local Codex CLI auth (`codex app-server` must work)
-- Terminal limit message formats may change; quota API is the fallback
+- Codex desktop quota requires local Codex CLI auth (`codex app-server` must work)
+- Claude desktop quota requires a local Claude Code subscription login and its private usage endpoint
+- Terminal limit message formats may change; Codex has a quota API fallback, while Claude CLI uses the printed reset
 
 ### Logs
 
@@ -350,7 +356,7 @@ Log files: `~/.recharge-ai-task/tray.log`, `~/.recharge-ai-task/wrapper.log`
 | **Repository** | [Recharge AI-task source](https://github.com/mikkovedru/recharge-ai-task) |
 | **GUI / package name** | `recharge-ai-task` (also the pip install name) |
 | **CLI command** | `recharge-ai-task-cli` |
-| **Description** | Auto-continue Codex CLI & ChatGPT Codex desktop app after 5h/7d quota resets — Windows & Ubuntu x86_64, MIT |
+| **Description** | Auto-continue Codex and Claude CLI and desktop sessions after quota resets — Windows & Ubuntu x86_64, MIT |
 | **License** | MIT |
 | **Topics** | `codex`, `openai`, `chatgpt`, `automation`, `quota`, `rate-limit`, `cli`, `python`, `windows`, `linux`, `tray-app` |
 
@@ -536,3 +542,96 @@ and added usable credits are checked immediately. **Ctrl+F** searches, **Ctrl+R*
 refreshes chats and **Ctrl+Enter** sends. Focus a status ⓘ button and press
 Enter/Space for its details.
 See [status help and keyboard controls](docs/target-selection.md#status-help-and-keyboard-controls).
+
+## Anthropic Claude
+
+Select **Settings → AI provider → Anthropic Claude**, then save. The dashboard
+shows Claude windows and Claude subscription quota. Codex remains the default
+for existing installations. Each provider retains its recipients, overrides,
+allowances and recovery checkpoints when you switch; one provider is monitored
+at a time. Settings has separate executable paths and terminal arguments for
+Codex and Claude. The tray's normal terminal action starts the selected provider;
+its Codex Goal action is disabled for Claude.
+
+### Claude Code terminal
+
+Install [Claude Code](https://code.claude.com/docs/en/setup), sign in, and run:
+
+```bash
+recharge-ai-task-cli run --provider claude
+recharge-ai-task-cli run --provider claude -- --continue
+recharge-ai-task-cli run --provider claude -- --resume SESSION_ID
+recharge-ai-task-cli run --provider claude --claude /path/to/claude --grace 60
+# Save the provider for future CLI and tray launches:
+recharge-ai-task-cli configure --provider claude --mode cli
+```
+
+Arguments after `--` go to Claude. Discovery uses `--claude`, `CLAUDE_CLI_PATH`,
+PATH and the standard native-install location. The wrapper reads Claude's
+terminal limit messages, including clock times, dated weekly resets and named
+timezones. After the indicated reset plus grace, it submits the configured
+message (default `Continue`). It never sends Codex's `/goal resume` to Claude,
+even if Goal mode was previously enabled. Terminal recovery does not require
+access to a quota API and cannot detect an early refill before the printed reset.
+Unknown reset formats leave the terminal under manual control.
+Typing in the terminal cancels Recharge's pending continuation for that limit.
+
+Recent Claude Code versions have their own
+[automatic continuation](https://code.claude.com/docs/en/interactive-mode#wait-for-a-usage-limit-to-reset).
+When Claude reports native automatic continuation or its cancellation, the
+wrapper leaves that wait to Claude and does not queue another prompt. To use
+Recharge's continuation message and grace instead, turn off **Continue
+automatically at usage limit** in Claude's `/config`. Leave the terminal open.
+Interactive sessions are supported; `claude -p` exits after its response and
+cannot be resumed through that terminated PTY.
+
+### Claude desktop
+
+1. Run `claude auth login` using the **same subscription account** as Claude desktop.
+2. Open Claude desktop. In Recharge Settings, select Anthropic Claude and save.
+3. Select **Send message** for the desired window recipients. Keep the intended
+   chat open with its empty message composer focused. Adding the first recipient
+   starts Desktop watch; use Start/Stop Desktop watch to control it thereafter.
+4. Recharge observes exhaustion, waits for fresh usage to show recovery across
+   every reported window, retains the configured grace, then sends the message.
+
+The same workflow is available through the CLI:
+
+```bash
+recharge-ai-task-cli targets --provider claude --json
+recharge-ai-task-cli targets --provider claude --select WINDOW_ID
+recharge-ai-task-cli quota --provider claude
+recharge-ai-task-cli watch --provider claude
+```
+
+Window discovery checks application identity, not page titles in browsers.
+Delivery rechecks the provider, window ID, process and foreground window.
+Recipients address the **current chat in a window**, not a saved Claude chat ID;
+changing that window's chat changes where its next signal goes. OS input cannot
+verify that Claude accepted a turn. Check the composer before retrying an
+unconfirmed send. Per-recipient messages, limits and one-use overrides use the
+same accounting as Codex. Native Codex Goal recovery is unavailable for Claude;
+use Send message. Disable Claude's own automatic continuation for any desktop
+session managed by Recharge to avoid independent continuations. Linux requires
+X11 and `xdotool`; Windows uses foreground window input. Wayland and macOS are
+not supported by this desktop delivery implementation.
+
+Desktop quota uses the private read-only usage endpoint used by Claude Code's
+`/usage`, authenticated from `~/.claude/.credentials.json` (or
+`CLAUDE_CONFIG_DIR/.credentials.json`). It sends the existing access token only
+to `https://api.anthropic.com/api/oauth/usage`, refuses redirects, never copies
+it into Recharge settings/logs, and does not refresh or write Claude credentials.
+API-key billing, setup-token-only logins and desktop-only logins do not supply
+the required subscription profile access. Open Claude Code or sign in again when
+its token expires. Missing, malformed, expired or failed usage reads remain
+unavailable and never trigger a desktop recovery. HTTP 429 means the usage read
+was throttled; it does not prove that model quota is exhausted.
+
+The endpoint is undocumented and may change. See Anthropic's issue tracker for
+[profile-scope requirements](https://github.com/anthropics/claude-code/issues/81015)
+and [usage endpoint throttling](https://github.com/anthropics/claude-code/issues/30930).
+Recharge checks all returned five-hour and weekly windows, including model
+windows, conservatively waiting for every exhausted window. Enabling extra usage
+alone does not prove that funds are usable, so it does not bypass those checks.
+The configured quota polling interval applies to Claude too; increase it if
+reads are throttled. No model requests are made to check quota.

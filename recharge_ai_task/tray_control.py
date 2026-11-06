@@ -19,7 +19,8 @@ def watch_settings(config):
             "recipient_policies": [[t.key, t.custom_prompt, t.prompt_limit, t.goal_limit, t.custom_prompt_once] for t in sorted(config.targets(), key=lambda t: t.key)],
             "signal": config.continue_prompt, "goal": config.goal_mode,
             "grace": config.grace_seconds, "poll": config.poll_seconds,
-            "codex_path": config.codex_path, "prompt_limit": config.prompt_limit, "goal_limit": config.goal_limit}
+            "codex_path": config.codex_path, "prompt_limit": config.prompt_limit, "goal_limit": config.goal_limit,
+            "provider": config.provider}
 
 
 def control_path():

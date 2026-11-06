@@ -1,4 +1,4 @@
-"""PTY wrapper that auto-continues Codex CLI after quota resets."""
+"""PTY wrapper that auto-continues Codex and Claude Code after quota resets."""
 
 from __future__ import annotations
 
@@ -23,6 +23,9 @@ class WrapperConfig:
     enter_presses: int = 1
     key_delay: float = 0.12
     poll_seconds: int = 30
+    provider: str = "codex"
+    claude_path: str | None = None
+    claude_args: list[str] | None = None
 
 
 def _log(message: str) -> None:
@@ -30,16 +33,16 @@ def _log(message: str) -> None:
     sys.stderr.flush()
 
 
-def _submit(pty, text: str, enter_presses: int, key_delay: float) -> None:
+def _submit(pty, text: str, enter_presses: int, key_delay: float, *, carriage_return=False) -> None:
     pty.write(text)
     time.sleep(key_delay)
     for _ in range(max(1, enter_presses)):
-        pty.write("\r" if sys.platform == "win32" else "\n")
+        pty.write("\r" if carriage_return or sys.platform == "win32" else "\n")
         time.sleep(key_delay)
 
 
 def _continue_prompt(config: WrapperConfig, first_goal_resume: bool) -> str:
-    if config.goal_mode and first_goal_resume:
+    if config.provider == "codex" and config.goal_mode and first_goal_resume:
         return "/goal resume"
     return config.continue_prompt
 
@@ -82,9 +85,48 @@ def wait_for_quota_recovery(pty, stop, codex, fallback_at, grace_seconds, initia
     return False
 
 
+def wait_for_claude_reset(pty, stop, wake_at, watcher, grace_seconds=0, user_input=None):
+    """Observe native recovery/cancellation even when printed in a later read.
+
+    None means Claude owns the wait or the user cancelled it; False means exit.
+    """
+    settled_at = time.monotonic() + .3
+    previous_reset = watcher.reset_at
+    while not stop.is_set() and pty.isalive():
+        if user_input is not None and user_input.is_set():
+            watcher.reset()
+            _log("[recharge-ai-task-cli] Manual terminal input cancelled Recharge's pending continuation.")
+            return None
+        try:
+            data = pty.read(4096)
+        except EOFError:
+            return False
+        if data:
+            sys.stdout.write(data)
+            sys.stdout.flush()
+            detected = watcher.feed(data)
+            if watcher.native_owned:
+                _log("[recharge-ai-task-cli] Claude owns or cancelled automatic continuation; no extra prompt queued.")
+                return None
+            if detected and detected[0] != previous_reset:
+                wake_at = max(time.time(), detected[0]) + grace_seconds
+                previous_reset = detected[0]
+        if time.time() >= wake_at and time.monotonic() >= settled_at:
+            return True
+        stop.wait(.05)
+    return False
+
+
 def run_wrapper(config: WrapperConfig) -> int:
-    codex = discover_codex(config.codex_path)
-    args = config.codex_args or []
+    if config.provider == "claude":
+        from .claude import discover_claude, ClaudeLimitWatcher
+        codex = discover_claude(config.claude_path)
+        args = config.claude_args or []
+    elif config.provider == "codex":
+        codex = discover_codex(config.codex_path)
+        args = config.codex_args or []
+    else:
+        raise ValueError("Unknown AI provider")
     argv = [codex, *args]
     cmdline = " ".join(argv)
 
@@ -105,8 +147,9 @@ def run_wrapper(config: WrapperConfig) -> int:
         _log(f"[recharge-ai-task-cli] {t('cli.not_found')}")
         return 1
 
-    watcher = LimitWatcher()
+    watcher = ClaudeLimitWatcher() if config.provider == "claude" else LimitWatcher()
     stop = StopEvent()
+    user_input = threading.Event()
     goal_resume_pending = config.goal_mode
     limit_lock = threading.Lock()
     waiting_for_reset = False
@@ -133,9 +176,10 @@ def run_wrapper(config: WrapperConfig) -> int:
             waiting_for_reset = True
 
         parsed_reset_at, raw = detected
+        user_input.clear()
         quota_reset_at = None
         quota = None
-        quota_enabled = looks_like_codex_cli(codex)
+        quota_enabled = config.provider == "codex" and looks_like_codex_cli(codex)
         if quota_enabled:
             try:
                 quota = fetch_quota(codex)
@@ -164,23 +208,40 @@ def run_wrapper(config: WrapperConfig) -> int:
         _log(
             f"[recharge-ai-task-cli] {t('cli.limit_detected', raw=raw, source=source, prompt=prompt, time=wake_local)}"
         )
-        watcher.reset()
+        if config.provider != "claude":
+            watcher.reset()
 
         try:
-            ready = (wait_for_quota_recovery(pty, stop, codex, wake_at, config.grace_seconds, initial=quota, poll_seconds=config.poll_seconds)
-                     if quota_enabled else sleep_with_proxy(pty, stop, wake_at))
+            if config.provider == "claude":
+                ready = wait_for_claude_reset(pty, stop, wake_at, watcher, config.grace_seconds, user_input)
+                if ready is None:
+                    return
+            else:
+                ready = (wait_for_quota_recovery(pty, stop, codex, wake_at, config.grace_seconds, initial=quota, poll_seconds=config.poll_seconds)
+                         if quota_enabled else sleep_with_proxy(pty, stop, wake_at))
             if not ready:
                 _log(f"[recharge-ai-task-cli] {t('cli.exited_before_continue')}")
                 stop.set()
                 return
 
-            _submit(pty, prompt, config.enter_presses, config.key_delay)
+            if config.provider == "claude":
+                watcher.reset()
+            _submit(pty, prompt, config.enter_presses, config.key_delay, carriage_return=config.provider == "claude")
             _log(f"[recharge-ai-task-cli] {t('cli.auto_continue_sent')}")
         finally:
             with limit_lock:
                 waiting_for_reset = False
 
-    stdin_thread = threading.Thread(target=forward_stdin, args=(pty, stop), daemon=True)
+    class InputProxy:
+        def isalive(self):
+            return pty.isalive()
+
+        def write(self, data):
+            user_input.set()
+            pty.write(data)
+
+    stdin_pty = InputProxy() if config.provider == "claude" else pty
+    stdin_thread = threading.Thread(target=forward_stdin, args=(stdin_pty, stop), daemon=True)
     reader_thread = threading.Thread(target=reader, daemon=True)
 
     stdin_thread.start()

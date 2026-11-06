@@ -1,4 +1,4 @@
-"""Quota watcher for ChatGPT Codex desktop app (no PTY)."""
+"""Provider-scoped quota watcher for Codex and Claude desktop recipients."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .activity import target_label
 from .target_delivery import DeliveryResult, deliver_targets, recover_target, send_signals
 from .goal_control import quota_stopped_targets
 from .i18n import t
-from .quota import discover_codex, fetch_quota, exhausted_windows, quota_blocked, quota_to_snapshot
+from .quota import discover_codex, fetch_quota, exhausted_windows, quota_blocked, quota_to_snapshot, quota_windows
 from .pty_backend import StopEvent
 
 _log = logging.getLogger("recharge-ai-task.watch")
@@ -52,6 +52,7 @@ class WatchConfig:
     desktop_targets: tuple[Target, ...] = ()
     state: WatchState | None = None
     checkpoint: object = None
+    provider: str = "codex"
 
 
 def _log_status(message: str) -> None:
@@ -62,8 +63,10 @@ def _log_status(message: str) -> None:
 
 def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int:
     stop = stop or StopEvent()
-    codex = discover_codex(config.codex_path)
-    targets = tuple(t for t in config.desktop_targets if any(t.signal_actions(config.goal_mode)))
+    if config.provider not in ("codex", "claude"):
+        raise ValueError("Unknown AI provider")
+    codex = discover_codex(config.codex_path) if config.provider == "codex" else None
+    targets = tuple(t for t in config.desktop_targets if t.provider == config.provider and any(t.signal_actions(config.goal_mode)))
     if not targets:
         _log_status("Choose signal targets first: recharge-ai-task-cli targets --gui")
         return 1
@@ -134,7 +137,11 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
     while not stop.is_set():
         state.progress = observation("checking_quota")
         try:
-            quota = fetch_quota(codex)
+            if config.provider == "claude":
+                from .claude import fetch_claude_quota
+                quota = fetch_claude_quota()
+            else:
+                quota = fetch_quota(codex)
         except Exception as exc:
             available = None
             quota_error = str(exc)
@@ -148,12 +155,12 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
 
         exhausted = exhausted_windows(quota)
         available = not quota_blocked(quota)
-        used = max(quota.primary.used_percent, quota.secondary.used_percent if quota.secondary else 0)
-        windows = [w for w in (quota.primary, quota.secondary) if w is not None]
+        windows = quota_windows(quota)
+        used = max(w.used_percent for w in windows)
         missed_keys = set()
         near_windows = {}
         for window in windows:
-            duration = str(window.window_duration_mins)
+            duration = window.label or str(window.window_duration_mins)
             previous = state.previous_windows.get(duration)
             near = state.near_limit_windows.get(duration, [window.resets_at, 0])
             if window.used_percent >= 95:
@@ -165,7 +172,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                 # One stale near-limit frame must not replay a completed refill.
                 if (rolled or refilled) and (key not in state.seen_resets or near[1] >= 2):
                     missed_keys.add(key)
-        state.previous_windows = {str(w.window_duration_mins): [w.used_percent, w.resets_at] for w in windows}
+        state.previous_windows = {w.label or str(w.window_duration_mins): [w.used_percent, w.resets_at] for w in windows}
         state.near_limit_windows = near_windows
         if available and missed_keys and not state.pending:
             state.seen_resets.update(missed_keys)
@@ -254,7 +261,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                 if target.send_goal is not None or target.send_prompt is not None:
                     result = send_signals([remaining_target(target)], config.continue_prompt,
                         enter_presses=config.enter_presses, key_delay=config.key_delay)[0]
-                elif config.goal_mode:
+                elif config.goal_mode and config.provider == "codex":
                     result = recover_target(target, config.continue_prompt,
                         enter_presses=config.enter_presses, key_delay=config.key_delay)
                 else:

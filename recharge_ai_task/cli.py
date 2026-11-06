@@ -23,6 +23,8 @@ def _build_run_parser(prog: str = "recharge-ai-task-cli") -> argparse.ArgumentPa
         description=t("cli.description"),
     )
     parser.add_argument("--codex", metavar="PATH", help="Path to codex executable")
+    parser.add_argument("--provider", choices=["codex", "claude"], help="AI provider (default from settings)")
+    parser.add_argument("--claude", metavar="PATH", help="Path to Claude Code executable")
     goal = parser.add_mutually_exclusive_group()
     goal.add_argument("--goal", dest="goal_mode", action="store_true", help="CLI: first /goal resume; desktop: native recovery of quota-stopped goals")
     goal.add_argument("--no-goal", dest="goal_mode", action="store_false", help="Use the normal continue prompt")
@@ -39,7 +41,7 @@ def _build_run_parser(prog: str = "recharge-ai-task-cli") -> argparse.ArgumentPa
     parser.add_argument(
         "codex_args",
         nargs=argparse.REMAINDER,
-        help="Arguments passed to codex (prefix with -- if needed)",
+        help="Arguments passed to the selected AI CLI (prefix with -- if needed)",
     )
     return parser
 
@@ -55,10 +57,13 @@ def _load_user_config() -> AppConfig:
     return config
 
 
-def _cmd_quota(codex_path: str | None) -> int:
+def _cmd_quota(codex_path: str | None, provider="codex") -> int:
     try:
-        codex = discover_codex(codex_path)
-        quota = fetch_quota(codex)
+        if provider == "claude":
+            from .claude import fetch_claude_quota
+            quota = fetch_claude_quota()
+        else:
+            quota = fetch_quota(discover_codex(codex_path))
     except Exception as exc:
         sys.stderr.write(f"recharge-ai-task-cli: {exc}\n")
         return 1
@@ -69,6 +74,8 @@ def _cmd_quota(codex_path: str | None) -> int:
 def _cmd_configure(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="recharge-ai-task-cli configure")
     parser.add_argument("--mode", choices=["cli", "desktop"])
+    parser.add_argument("--provider", choices=["codex", "claude"])
+    parser.add_argument("--claude", dest="claude_path", metavar="PATH")
     parser.add_argument("--goal", action="store_true")
     parser.add_argument("--no-goal", action="store_true")
     parser.add_argument("--grace", type=int)
@@ -76,6 +83,10 @@ def _cmd_configure(argv: list[str]) -> int:
     ns = parser.parse_args(argv)
 
     overrides = {}
+    if ns.provider:
+        overrides["provider"] = ns.provider
+    if ns.claude_path:
+        overrides["claude_path"] = ns.claude_path
     if ns.mode:
         overrides["mode"] = ns.mode
     if ns.goal:
@@ -96,6 +107,7 @@ def _cmd_watch(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="recharge-ai-task-cli watch", description=t("help.desktop_mode"))
     parser.add_argument("--desktop", action="store_true", default=True)
     parser.add_argument("--codex", metavar="PATH")
+    parser.add_argument("--provider", choices=["codex", "claude"], default=user.provider)
     goal = parser.add_mutually_exclusive_group()
     goal.add_argument("--goal", action="store_true", dest="goal", help="Verify native recovery of quota-stopped goals for Linux chat IDs")
     goal.add_argument("--no-goal", action="store_false", dest="goal", help="Send only the normal signal text; allows window targets")
@@ -104,11 +116,13 @@ def _cmd_watch(argv: list[str]) -> int:
     parser.add_argument("--continue", dest="continue_prompt", default=None)
     ns = parser.parse_args(argv)
 
+    user.provider = ns.provider
     recipients = user.targets()
     if ns.goal is not None:
         recipients = [replace(target, send_goal=ns.goal and target.kind == "thread",
                               send_prompt=target.send_prompt if ns.goal else True) for target in recipients]
     config = WatchConfig(
+        provider=ns.provider,
         codex_path=ns.codex or user.codex_path,
         continue_prompt=ns.continue_prompt or user.continue_prompt,
         goal_mode=user.goal_mode if ns.goal is None else ns.goal,
@@ -127,12 +141,17 @@ def _cmd_targets(argv):
     parser.add_argument("--gui", action="store_true", help="Open the multi-target picker")
     parser.add_argument("--select", action="append", metavar="ID", help="Save this target (repeat for multiple targets)")
     parser.add_argument("--clear", action="store_true", help="Clear saved selection")
+    parser.add_argument("--provider", choices=["codex", "claude"], default=_load_user_config().provider)
     ns = parser.parse_args(argv)
     if ns.gui:
+        config = _load_user_config()
+        config.provider = ns.provider
+        config.save()
         from .desktop_launch import launch
         return launch([])
-    inventory = discover_targets()
+    inventory = discover_targets() if ns.provider == "codex" else discover_targets(ns.provider)
     config = _load_user_config()
+    config.provider = ns.provider
     if ns.select is not None and ns.clear:
         parser.error("--select and --clear cannot be combined")
     if ns.select:
@@ -151,12 +170,13 @@ def _cmd_targets(argv):
                            send_goal=saved.send_goal if active else False)
         chosen = [choose(t) for t in selection]
         keys = {t.key for t in chosen}
-        inactive = [replace(t, send_prompt=False, send_goal=False) for key, t in previous.items() if key not in keys]
+        inactive = [replace(t, send_prompt=False, send_goal=False) if t.provider == ns.provider else t
+                    for key, t in previous.items() if key not in keys]
         config.desktop_targets = [t.to_dict() for t in chosen + inactive]
         config.mode = "desktop"
         config.save()
     elif ns.clear:
-        config.desktop_targets = [replace(t, send_prompt=False, send_goal=False).to_dict() for t in config.all_targets()]
+        config.desktop_targets = [(replace(t, send_prompt=False, send_goal=False) if t.provider == ns.provider else t).to_dict() for t in config.all_targets()]
         config.save()
     selected = {t.key: t for t in config.targets()}
     preferences = {t.key: t for t in config.all_targets()}
@@ -178,6 +198,9 @@ def _cmd_run(argv: list[str]) -> int:
     ns = parser.parse_args(argv)
 
     config = WrapperConfig(
+        provider=ns.provider or user.provider,
+        claude_path=ns.claude or user.claude_path,
+        claude_args=_normalize_codex_args(ns.codex_args) or user.claude_args,
         codex_path=ns.codex or user.codex_path,
         codex_args=_normalize_codex_args(ns.codex_args) or user.codex_args,
         continue_prompt=ns.continue_prompt or user.continue_prompt,
@@ -198,14 +221,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if argv and argv[0] in {"--help", "-h", "help"}:
         parser = _build_run_parser()
-        parser.usage = "%(prog)s [COMMAND] [OPTIONS] [-- CODEX_ARGS...]"
+        parser.usage = "%(prog)s [COMMAND] [OPTIONS] [-- AI_ARGS...]"
         parser.formatter_class = argparse.RawDescriptionHelpFormatter
         parser.epilog = """Commands:
   gui              Open the graphical dashboard, targets and settings
   tray             Start directly in the system tray without a dashboard
   targets --gui    Open the same graphical dashboard
-  targets --json   List available Codex targets as JSON
-  run              Run Codex CLI with auto-continue
+  targets --json   List targets for the selected AI provider as JSON
+  run              Run Codex or Claude Code CLI with auto-continue
   watch            Watch quota and signal saved desktop recipients
   quota            Show current quota and reset times
   configure        Configure command-line settings
@@ -240,8 +263,9 @@ Use recharge-ai-task --tray to start only the tray."""
     if head == "quota":
         parser = argparse.ArgumentParser(prog="recharge-ai-task-cli quota")
         parser.add_argument("--codex", metavar="PATH")
+        parser.add_argument("--provider", choices=["codex", "claude"], default=user.provider)
         ns = parser.parse_args(tail)
-        return _cmd_quota(ns.codex)
+        return _cmd_quota(ns.codex or user.codex_path, ns.provider)
 
     if head == "configure":
         return _cmd_configure(tail)

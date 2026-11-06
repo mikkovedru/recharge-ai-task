@@ -70,7 +70,7 @@ def check():
         window._toggle(None, beta_path)
         assert not window.selected
         window.table_layout.sort("id")
-        assert window.get_title() == "Recharge AI-task"
+        assert window.get_title() == "Recharge AI-task — OpenAI Codex"
         assert window.logo.get_pixbuf().get_width() == 64
         assert {icon.get_width() for icon in window.get_icon_list()} == {16,24,32,48,64,128,256}
         assert not any(isinstance(child, Gtk.Label) and "Choose chats by ID" in child.get_text() for child in window.get_child().get_children())

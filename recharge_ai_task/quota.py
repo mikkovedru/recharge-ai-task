@@ -21,6 +21,7 @@ class RateWindow:
     used_percent: float
     window_duration_mins: int
     resets_at: int  # unix seconds
+    label: str = ""
 
     @property
     def resets_in_seconds(self) -> int:
@@ -36,6 +37,7 @@ class Quota:
     has_credits: bool = False
     unlimited_credits: bool = False
     spend_control_reached: bool = False
+    additional: tuple[RateWindow, ...] = ()
 
     def exhausted_window(self) -> RateWindow | None:
         windows = exhausted_windows(self)
@@ -45,23 +47,33 @@ class Quota:
 def quota_to_snapshot(quota):
     """Publish quota values without coupling delivery to a concrete result type."""
     def window(value):
-        return {"used_percent": value.used_percent, "window_duration_mins": value.window_duration_mins,
-                "resets_at": value.resets_at}
+        result = {"used_percent": value.used_percent, "window_duration_mins": value.window_duration_mins,
+                  "resets_at": value.resets_at}
+        if value.label:
+            result["label"] = value.label
+        return result
     result = {"plan_type": getattr(quota, "plan_type", "unknown"), "primary": window(quota.primary),
               "secondary": window(quota.secondary) if quota.secondary else None}
     for key in ("rate_limit_reached", "has_credits", "unlimited_credits", "spend_control_reached"):
         result[key] = bool(getattr(quota, key, False))
+    if getattr(quota, "additional", ()):
+        result["additional"] = [window(w) for w in quota.additional]
     return result
 
 
 def quota_from_snapshot(value):
     """Restore the worker's last successful quota observation for the dashboard."""
     def window(item):
-        return RateWindow(float(item["used_percent"]), int(item["window_duration_mins"]), int(item["resets_at"]))
+        return RateWindow(float(item["used_percent"]), int(item["window_duration_mins"]), int(item["resets_at"]), item.get("label", ""))
     return Quota(str(value["plan_type"]), window(value["primary"]),
                  window(value["secondary"]) if value.get("secondary") else None,
                  bool(value.get("rate_limit_reached")), bool(value.get("has_credits")),
-                 bool(value.get("unlimited_credits")), bool(value.get("spend_control_reached")))
+                 bool(value.get("unlimited_credits")), bool(value.get("spend_control_reached")),
+                 tuple(window(w) for w in value.get("additional", ())))
+
+
+def quota_windows(quota):
+    return [w for w in (quota.primary, quota.secondary, *getattr(quota, "additional", ())) if w is not None]
 
 
 def exhausted_windows(quota):
@@ -70,7 +82,7 @@ def exhausted_windows(quota):
     credits = getattr(quota, "has_credits", False) or getattr(quota, "unlimited_credits", False)
     if credits and not getattr(quota, "rate_limit_reached", False) and not getattr(quota, "spend_control_reached", False):
         return []
-    return [w for w in (quota.primary, quota.secondary) if w is not None and w.used_percent >= 100]
+    return [w for w in quota_windows(quota) if w.used_percent >= 100]
 
 
 def quota_blocked(quota):
@@ -234,6 +246,8 @@ def _window_label(duration_mins: int) -> str:
 
 def format_quota(quota: Quota) -> str:
     def remaining(resets_at: int) -> str:
+        if not resets_at:
+            return "not started"
         secs = max(0, resets_at - int(time.time()))
         hours, rem = divmod(secs, 3600)
         if hours >= 24:
@@ -243,29 +257,29 @@ def format_quota(quota: Quota) -> str:
         return f"{hours}h{mins}m"
 
     lines = [
-        t("quota.plan", plan=quota.plan_type),
+        f"Claude Quota ({quota.plan_type})" if quota.plan_type.startswith("Claude ") else t("quota.plan", plan=quota.plan_type),
         "─" * 40,
         t(
             "quota.used",
-            label=_window_label(quota.primary.window_duration_mins),
+            label=quota.primary.label or _window_label(quota.primary.window_duration_mins),
             percent=quota.primary.used_percent,
             remaining=remaining(quota.primary.resets_at),
         ),
     ]
-    if quota.secondary is not None:
+    for window in quota_windows(quota)[1:]:
         lines.append(
             t(
                 "quota.used",
-                label=_window_label(quota.secondary.window_duration_mins),
-                percent=quota.secondary.used_percent,
-                remaining=remaining(quota.secondary.resets_at),
+                label=window.label or _window_label(window.window_duration_mins),
+                percent=window.used_percent,
+                remaining=remaining(window.resets_at),
             )
         )
     exhausted = quota.exhausted_window()
     if exhausted:
         reset_dt = time.strftime(
             "%Y-%m-%d %H:%M:%S",
-            time.localtime(exhausted.resets_at),
+            time.localtime(max(w.resets_at for w in exhausted_windows(quota))),
         )
         lines.append(t("quota.blocked", time=reset_dt))
     return "\n".join(lines)

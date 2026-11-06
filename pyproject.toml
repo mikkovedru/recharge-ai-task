@@ -5,18 +5,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "recharge-ai-task"
 version = "1.0"
-description = "Auto-continue Codex CLI & ChatGPT Codex desktop app after 5h/7d quota resets — Windows & Ubuntu x86_64"
+description = "Auto-continue Codex and Claude Code CLI and desktop sessions after quota resets — Windows & Ubuntu x86_64"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Recharge AI-task contributors" }]
-keywords = ["codex", "openai", "quota", "rate-limit", "automation"]
+keywords = ["codex", "openai", "claude", "anthropic", "quota", "rate-limit", "automation"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: Microsoft :: Windows",
   "Operating System :: POSIX :: Linux",
 ]
-dependencies = ["websocket-client>=1.8", "python-xlib>=0.33; sys_platform == 'linux'"]
+dependencies = ["websocket-client>=1.8", "python-xlib>=0.33; sys_platform == 'linux'", "tzdata>=2024.1; sys_platform == 'win32'"]
 
 [project.optional-dependencies]
 windows = ["pywinpty>=2.0.15"]

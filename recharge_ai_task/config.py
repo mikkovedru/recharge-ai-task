@@ -46,6 +46,9 @@ class AppConfig:
     color_theme: str = "auto"
     prompt_limit: int | None = None
     goal_limit: int | None = None
+    provider: str = "codex"
+    claude_path: str | None = None
+    claude_args: list[str] | None = None
 
     @classmethod
     def load(cls) -> AppConfig:
@@ -73,6 +76,9 @@ class AppConfig:
             color_theme=data.get("color_theme") if data.get("color_theme") in ("dark", "light", "auto") else "auto",
             prompt_limit=data.get("prompt_limit"),
             goal_limit=data.get("goal_limit"),
+            provider=data.get("provider") if data.get("provider") in ("codex", "claude") else "codex",
+            claude_path=data.get("claude_path"),
+            claude_args=data.get("claude_args"),
         )
 
     def save(self) -> None:
@@ -104,4 +110,4 @@ class AppConfig:
         return result
 
     def targets(self):
-        return [t for t in self.all_targets() if any(t.signal_actions())]
+        return [t for t in self.all_targets() if t.provider == self.provider and any(t.signal_actions())]

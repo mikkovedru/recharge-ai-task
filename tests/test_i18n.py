@@ -47,7 +47,8 @@ def test_setup_has_no_language_questions(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", answer)
     result = configure.run_configure()
     assert result.continue_prompt == "Continue"
-    assert len(prompts) == 4
+    assert len(prompts) == 5
+    assert "AI provider" in prompts[0]
     assert all("Language" not in prompt for prompt in prompts)
     assert "Welcome to Recharge AI-task setup." in capsys.readouterr().out
 

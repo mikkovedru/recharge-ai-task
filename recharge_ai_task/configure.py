@@ -36,11 +36,15 @@ def run_configure(*, non_interactive: dict | None = None) -> AppConfig:
 
     print(t("configure.welcome"))
 
+    provider = _prompt("AI provider (codex/claude)", config.provider).lower()
+    if provider not in {"codex", "claude"}:
+        provider = config.provider
+
     mode = _prompt(t("configure.mode_prompt"), config.mode).lower()
     if mode not in {"cli", "desktop"}:
         mode = config.mode
 
-    goal_mode = _prompt_yes_no(t("configure.goal_prompt"), config.goal_mode)
+    goal_mode = _prompt_yes_no(t("configure.goal_prompt"), config.goal_mode) if provider == "codex" else config.goal_mode
     grace = _prompt(t("configure.grace_prompt"), str(config.grace_seconds))
     continue_prompt = _prompt(t("configure.continue_prompt"), config.continue_prompt)
 
@@ -50,6 +54,7 @@ def run_configure(*, non_interactive: dict | None = None) -> AppConfig:
         grace_seconds = config.grace_seconds
 
     config.mode = mode  # type: ignore[assignment]
+    config.provider = provider
     config.goal_mode = goal_mode
     config.grace_seconds = grace_seconds
     config.continue_prompt = continue_prompt
