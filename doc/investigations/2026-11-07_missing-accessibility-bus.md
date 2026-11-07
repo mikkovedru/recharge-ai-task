@@ -125,3 +125,7 @@ confirms the `chatgpt` launcher. Neither that page nor the
 checked for this investigation established a supported repair for this exact
 Linux AT-SPI condition. The flag suggestion comes from inspecting the installed
 binary, not from a documented OpenAI repair procedure.
+
+The [daemon metadata reset investigation](2026-11-07_codex-daemon-metadata-reset.md)
+documents a separate, confirmed protocol-selection bug that does not require
+restarting Codex or deleting sockets.

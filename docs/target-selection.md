@@ -691,3 +691,12 @@ labels provider events **Codex**, **Claude** or **Muse**, and labels shared
 application events **Program**. Older records without stored provider identity
 show **Provider unknown** rather than guessing from their title. Export retains
 the same attribution.
+
+## Daemon metadata and management sockets
+
+Codex can expose separate daemon-management and app-server metadata listeners in
+the same runtime directory. Recharge identifies management peers and closes those
+connections before sending a WebSocket handshake. Genuine metadata failures remain
+visible with the endpoint name, and saved chat metadata remains available. This
+avoids the repeatable connection-reset warning caused by probing management as
+metadata. See the [protocol diagnosis](../doc/investigations/2026-11-07_codex-daemon-metadata-reset.md).

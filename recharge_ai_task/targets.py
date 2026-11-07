@@ -7,6 +7,7 @@ import os
 import socket
 import sqlite3
 import stat
+import struct
 import sys
 from contextlib import closing
 from dataclasses import asdict, dataclass, field, replace
@@ -133,6 +134,33 @@ def _saved_goals(home):
     return None
 
 
+class DaemonControlSocket(Exception):
+    """The daemon supervisor has a control protocol, not metadata WebSocket RPC."""
+
+
+def daemon_socket_directory():
+    return Path(f"/tmp/codex-daemon-{os.getuid()}")
+
+
+def _daemon_control_peer(connection):
+    """Identify a management listener by its kernel-provided peer process."""
+    if not sys.platform.startswith("linux") or not hasattr(socket, "SO_PEERCRED"):
+        return False
+    pid, uid, _gid = struct.unpack("3i", connection.getsockopt(
+        socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")))
+    if uid != os.getuid():
+        raise OSError("Codex metadata peer is not owned by this user")
+    process = Path("/proc") / str(pid)
+    try:
+        executable = Path(os.readlink(process / "exe")).name.removesuffix(" (deleted)")
+        arguments = [os.fsdecode(value) for value in (process / "cmdline").read_bytes().split(b"\0") if value]
+    except OSError:
+        return False  # Unknown peers retain normal validation and visible failures.
+    return executable == "codex" and any(
+        pair == ["app-server", "daemon"] for pair in
+        (arguments[index:index + 2] for index in range(1, len(arguments) - 1)))
+
+
 class AppServer:
     """Read metadata from an existing daemon. Never launch a second server."""
     def __init__(self, path):
@@ -149,6 +177,8 @@ class AppServer:
         sock.settimeout(4)
         try:
             sock.connect(self.path)
+            if _daemon_control_peer(sock):
+                raise DaemonControlSocket("Codex daemon management socket")
             self.connection = websocket.create_connection("ws://localhost/", socket=sock,
                 timeout=4, suppress_origin=True)
             init = self.call("initialize", {"clientInfo": {"name": "recharge-ai-task", "version": __version__}})
@@ -384,7 +414,8 @@ def discover_targets(provider="codex"):
     homes = discover_homes()
     records_by_home = {}
     if sys.platform.startswith("linux"):
-        directory = Path(f"/tmp/codex-daemon-{os.getuid()}")
+        directory = daemon_socket_directory()
+        control_sockets = 0
         try:
             endpoints = list(directory.iterdir()) if directory.exists() else []
             for endpoint in endpoints:
@@ -395,8 +426,13 @@ def discover_targets(provider="codex"):
                         home = server.home.resolve()
                         records_by_home[home] = server.threads()
                         homes.add(home)
+                except DaemonControlSocket:
+                    control_sockets += 1
                 except Exception as exc:
-                    inventory.warnings.append(f"Codex daemon metadata: {exc}")
+                    inventory.warnings.append(f"Codex daemon metadata ({endpoint.name}): {exc}")
+            if control_sockets and not records_by_home:
+                inventory.warnings.append("Codex daemon management is running, but no metadata connection succeeded. "
+                    "Using saved chat metadata; check that the app-server worker is running.")
         except OSError as exc:
             inventory.warnings.append(f"Control socket discovery: {exc}")
     for home in sorted(homes):
