@@ -73,6 +73,23 @@ def test_no_signal_while_api_still_reports_exhaustion(monkeypatch):
     assert sent == []
 
 
+def test_automatic_start_does_not_replay_saved_recovery_before_exhaustion(monkeypatch):
+    state = watch.WatchState(pending=True, waiting_for_quota=True,
+                             awaiting_initial_block=True)
+    sent, _ = run_snapshots(monkeypatch, [AVAILABLE, AVAILABLE], state=state, goal=True)
+    assert not sent and state.awaiting_initial_block
+    assert state.progress['phase'] == 'monitoring'
+    assert not state.progress['pending_cycle'] and state.progress['pending_recipients'] == 0
+
+
+def test_automatic_start_arms_after_current_block_then_recovers(monkeypatch):
+    state = watch.WatchState(pending=True, delivered={A.key}, seen_resets={(300, 100)},
+                             awaiting_initial_block=True)
+    sent, _ = run_snapshots(monkeypatch, [AVAILABLE, BLOCKED, AVAILABLE], state=state)
+    assert len(sent) == 1 and sent[0][2] == 160
+    assert not state.awaiting_initial_block
+
+
 def test_weekly_limit_must_also_reset(monkeypatch):
     both = replace(BLOCKED, secondary=RateWindow(100, 10080, 160))
     weekly = replace(AVAILABLE, secondary=both.secondary, rate_limit_reached=True)

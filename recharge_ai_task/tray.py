@@ -147,11 +147,11 @@ class TrayApp:
     def start_normal(self, _icon=None, _item=None) -> None:
         self._start_cli(goal=False)
 
-    def start_desktop(self, _icon=None, _item=None) -> None:
+    def start_desktop(self, _icon=None, _item=None, *, wait_for_block=False) -> None:
         with self._lock:
-            self._start_desktop_locked()
+            self._start_desktop_locked(wait_for_block=wait_for_block)
 
-    def _start_desktop_locked(self, *, restarting=False) -> None:
+    def _start_desktop_locked(self, *, restarting=False, wait_for_block=False) -> None:
         if self._is_running():
             return
         self.config = AppConfig.load()
@@ -165,6 +165,10 @@ class TrayApp:
         if not restarting or self._watch_state is None or self._watch_state_path != state_file:
             self._watch_state = watch_state.load(state_file)
         self._watch_state_path = state_file
+        if not restarting:
+            self._watch_state.awaiting_initial_block = wait_for_block
+            for child in self._watch_state.provider_states.values():
+                child["awaiting_initial_block"] = wait_for_block
         self._watch_requested = True
         self._watch_pause_reason = ""
         self._watch_stop = StopEvent()
@@ -398,13 +402,16 @@ class TrayApp:
     def control(self, command):
         if command == "start-cli":
             self.start_normal()
-        elif command == "start-watch":
+        elif command in ("start-watch", "start-watch-blocked"):
             if self._proc is not None and self._proc.poll() is None:
                 raise RuntimeError("Stop the CLI service before starting Desktop watch")
             config = AppConfig.load()
             if not config.targets():
                 raise RuntimeError("Save at least one target before starting Desktop watch")
-            self.start_desktop()
+            if command == "start-watch-blocked":
+                self.start_desktop(wait_for_block=True)
+            else:
+                self.start_desktop()
         elif command == "check-quota":
             if self._watch_thread is None or not self._watch_thread.is_alive():
                 raise RuntimeError("Desktop watch is off")
@@ -431,7 +438,7 @@ class TrayApp:
             self._watch_error = f"Could not read saved watch settings: {exc}"
         thread = self._watch_thread
         alive = thread is not None and thread.is_alive()
-        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True, "muse_support": True, "unified_providers": True,
+        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True, "muse_support": True, "unified_providers": True, "quota_blocked_start": True,
                 "restarting": self._restart_pending, "watch_requested": self._watch_requested,
                 "watch_pause_reason": self._watch_pause_reason,
                 "stopping": alive and self._watch_stop.is_set(),

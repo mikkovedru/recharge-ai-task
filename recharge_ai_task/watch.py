@@ -38,6 +38,7 @@ class WatchState:
     completed_actions: dict = field(default_factory=dict)
     in_flight: tuple | None = None
     provider_states: dict = field(default_factory=dict)
+    awaiting_initial_block: bool = False
 
 
 @dataclass
@@ -114,7 +115,8 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         return recipients, messages, goals
 
     def observation(phase, next_check_at=None):
-        pending = [remaining_target(t) for t in targets if t.key not in state.delivered] if state.pending else []
+        pending_cycle = state.pending and not state.awaiting_initial_block
+        pending = [remaining_target(t) for t in targets if t.key not in state.delivered] if pending_cycle else []
         error = ""
         try:
             recipients, messages, goals = counts(pending)
@@ -125,9 +127,9 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         return {"phase": phase, "updated_at": time.time(), "checked_at": checked_at,
                 "next_check_at": next_check_at, "quota_available": available,
                 "recovered_at": state.recovered_at,
-                "recovery_at": state.wake_at if state.pending and available else None,
+                "recovery_at": state.wake_at if pending_cycle and available else None,
                 "expected_reset_at": state.expected_reset_at, "grace_seconds": config.grace_seconds,
-                "pending_cycle": state.pending, "pending_recipients": recipients,
+                "pending_cycle": pending_cycle, "pending_recipients": recipients,
                 "pending_messages": messages, "pending_goals": goals,
                 "selected_recipients": selected_recipients, "selected_messages": selected_messages,
                 "selected_goals": selected_goals, "count_error": error, "poll_seconds": interval,
@@ -168,6 +170,18 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         available = not quota_blocked(quota)
         windows = quota_windows(quota)
         used = max(w.used_percent for w in windows)
+        if state.awaiting_initial_block:
+            if available:
+                # Automatic startup must not resume a saved cycle or a stopped
+                # Goal if quota recovered before this worker's first check.
+                wait(interval, "monitoring")
+                continue
+            state.awaiting_initial_block = False
+            state.startup_checked = True
+            state.pending = False
+            state.delivered.clear()
+            state.completed_actions.clear()
+            state.seen_resets.clear()
         missed_keys = set()
         near_windows = {}
         for window in windows:
@@ -346,6 +360,8 @@ def _run_provider_watches(config, stop):
     for provider in providers:
         saved = state.provider_states.get(provider)
         children[provider] = watch_state.from_dict(saved) if saved else WatchState()
+        if state.awaiting_initial_block and not saved:
+            children[provider].awaiting_initial_block = True
         events[provider] = StopEvent()
     def worker(provider):
         try:

@@ -23,11 +23,11 @@ target_ui.fetch_quota=lambda _:Quota('test',RateWindow(40,300,9999999999),None,F
 a=Target('thread','a','Goal recipient',instance='/fixture',endpoint='/fixture/ipc/ipc.sock',project_name='Work',send_prompt=False,send_goal=True,task_status='Idle',goal_status='Usage limited',custom_prompt='Custom')
 b=replace(a,id='b',title='Message recipient',send_prompt=True,send_goal=False,custom_prompt=None)
 target_ui.discover_targets=lambda:Inventory([a,b])
-runtime=dict(desktop_watch=False,per_target_signals=True,recipient_policies=True,one_use_messages=True,launched_at_startup=True)
+runtime=dict(desktop_watch=False,per_target_signals=True,recipient_policies=True,one_use_messages=True,quota_blocked_start=True,launched_at_startup=True)
 commands=[]
 def control(command='status',**kw):
     commands.append(command)
-    if command=='start-watch':runtime.update(desktop_watch=True,watch_settings=tray_control.watch_settings(AppConfig.load()))
+    if command in ('start-watch','start-watch-blocked'):runtime.update(desktop_watch=True,watch_settings=tray_control.watch_settings(AppConfig.load()))
     elif command=='stop-watch':runtime.update(desktop_watch=False,watch_requested=False)
     elif command=='reload' and runtime.get('desktop_watch'):runtime['watch_settings']=tray_control.watch_settings(AppConfig.load())
     return dict(runtime)
@@ -212,43 +212,68 @@ finally:w.destroy()
 def test_first_added_recipient_starts_watch_without_toggling_existing_watch():
     run_gui(r'''
 AppConfig(continue_prompt='Default').save()
+target_ui.fetch_quota=lambda _:Quota('test',RateWindow(100,300,int(time.time())+500),None,True)
 w=make()
 def toggle(identity,action):
     path=next(row.path for row in w.filtered if row[4]==identity)
     w._toggle(None,path,action);pump(w)
 try:
-    assert not w.selected and commands.count('start-watch')==0
+    assert not w.selected and commands.count('start-watch-blocked')==0
     toggle('a','send_goal')
-    assert commands.count('start-watch')==1 and runtime['desktop_watch']
+    assert commands.count('start-watch-blocked')==1 and runtime['desktop_watch']
     assert AppConfig.load().targets()[0].send_goal
     toggle('b','send_prompt')
     w.update_recipient(replace(w.selected[b.key],custom_prompt='Edit'));pump(w)
-    assert commands.count('start-watch')==1 and 'stop-watch' not in commands
+    assert commands.count('start-watch-blocked')==1 and 'stop-watch' not in commands
     w.toggle_watch();pump(w)
     assert not runtime['desktop_watch']
     w.update_recipient(replace(w.selected[b.key],custom_prompt='Another edit'));pump(w)
-    assert commands.count('start-watch')==1
+    assert commands.count('start-watch-blocked')==1
     toggle('a','send_goal');toggle('b','send_prompt')
     assert not w.selected
     # Do not start until the first selection has actually been saved.
     original=AppConfig.save;AppConfig.save=lambda *_:(_ for _ in ()).throw(OSError('disk full'))
     path=next(row.path for row in w.filtered if row[4]=='b')
     w._toggle(None,path,'send_prompt')
-    assert commands.count('start-watch')==1 and w.autosave_error
+    assert commands.count('start-watch-blocked')==1 and w.autosave_error
     AppConfig.save=original
     w.save();pump(w)
-    assert commands.count('start-watch')==2 and runtime['desktop_watch']
+    assert commands.count('start-watch-blocked')==2 and runtime['desktop_watch']
     # Loading the saved recipient or changing it never starts or stops monitoring.
     w.destroy();runtime['desktop_watch']=False;w=make()
-    assert w.selected and commands.count('start-watch')==2
+    assert w.selected and commands.count('start-watch-blocked')==2
     w.update_recipient(replace(w.selected[b.key],custom_prompt='Loaded edit'));pump(w)
-    assert commands.count('start-watch')==2
+    assert commands.count('start-watch-blocked')==2
     w.update_recipient(replace(w.selected[b.key],custom_prompt=None));pump(w)
     toggle('b','send_prompt')
     w.signal_buffer.set_text('');pump(w)
     toggle('b','send_prompt')
-    assert commands.count('start-watch')==2 and 'Enter a message' in w.status.latest_text
+    assert commands.count('start-watch-blocked')==2 and 'Enter a message' in w.status.latest_text
 finally:w.destroy()
+''')
+
+
+def test_adding_first_recipient_only_starts_watch_for_fresh_blocked_quota():
+    run_gui(r'''
+for case in ('available','weekly-ready','weekly-blocked','credits','unknown','failed','stale','old-tray'):
+    AppConfig(continue_prompt='Default').save();runtime['desktop_watch']=False;commands.clear()
+    runtime['quota_blocked_start']=case!='old-tray'
+    primary=RateWindow(100 if case in ('credits','old-tray') else 20,300,int(time.time())+500)
+    secondary=RateWindow(100 if case=='weekly-blocked' else 20,10080,int(time.time())+1000)
+    quota=Quota('fixture',primary,secondary,False,has_credits=case=='credits')
+    target_ui.fetch_quota=lambda _,q=quota:q
+    w=make()
+    try:
+        if case=='unknown':w.quotas.clear()
+        if case=='failed':w.quota_errors['codex']='refresh failed'
+        if case=='stale':w.quota_checked['codex']=time.time()-1000
+        path=next(row.path for row in w.filtered if row[4]=='b')
+        w._toggle(None,path,'send_prompt');pump(w)
+        assert AppConfig.load().targets()[0].id=='b'
+        assert commands.count('start-watch-blocked')==int(case=='weekly-blocked'),(case,commands)
+        assert 'start-watch' not in commands and 'stop-watch' not in commands
+        if case=='old-tray':assert 'Restart the tray' in w.status.text()
+    finally:w.destroy()
 ''')
 
 

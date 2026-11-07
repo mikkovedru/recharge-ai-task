@@ -25,7 +25,7 @@ from .provider_monitor import provider_status
 from .provider_monitor_ui import ProviderMonitor, update_selectable_markup
 from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
 from .config import AppConfig, config_path, PROVIDER_LABELS
-from .quota import discover_codex, fetch_quota, quota_from_snapshot, quota_windows
+from .quota import discover_codex, fetch_quota, quota_from_snapshot, quota_windows, quota_blocked
 from .claude import fetch_claude_quota
 from .muse import fetch_muse_quota
 from . import tray_control
@@ -868,7 +868,7 @@ class TargetPicker(Gtk.Window):
         finally:
             chooser.destroy()
 
-    def toggle_watch(self, *_, ensure_started=False):
+    def toggle_watch(self, *_, ensure_started=False, wait_for_block=False):
         if ensure_started and self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested") or self.runtime.get("restarting")):
             return
         if self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested")):
@@ -881,12 +881,12 @@ class TargetPicker(Gtk.Window):
                 return
             if not self._messages_ready():
                 return
-            command = "start-watch"
+            command = "start-watch-blocked" if wait_for_block else "start-watch"
         def control():
             try:
                 live = tray_control.request(timeout=1)
             except OSError:
-                if command not in ("start-watch", "start-cli"):
+                if command not in ("start-watch", "start-watch-blocked", "start-cli"):
                     raise
                 args = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, "-m", "recharge_ai_task.tray"]
                 subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -899,15 +899,18 @@ class TargetPicker(Gtk.Window):
                         if time.monotonic() >= deadline:
                             raise RuntimeError("Tray did not start; check the tray log")
                         time.sleep(.2)
-            if command == "start-watch" and live.get("per_target_signals") is not True:
+            starting = command in ("start-watch", "start-watch-blocked")
+            if wait_for_block and not live.get("quota_blocked_start"):
+                raise RuntimeError("Restart the tray to safely start monitoring when adding a quota-blocked recipient.")
+            if starting and live.get("per_target_signals") is not True:
                 raise RuntimeError("Restart the tray to use per-recipient Prompt / Goal signals; the running tray is an older version.")
-            if command == "start-watch" and any(t.provider != "codex" for t in self.selected.values()) and not live.get("unified_providers"):
+            if starting and any(t.provider != "codex" for t in self.selected.values()) and not live.get("unified_providers"):
                 raise RuntimeError("Restart the tray to monitor recipients from multiple providers.")
             uses_policies = self.config.prompt_limit is not None or self.config.goal_limit is not None or any(
                 t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in self.selected.values())
-            if command == "start-watch" and uses_policies and not live.get("recipient_policies"):
+            if starting and uses_policies and not live.get("recipient_policies"):
                 raise RuntimeError("Restart the tray to enforce recipient messages and continuation limits.")
-            if command == "start-watch" and any(t.custom_prompt_once for t in self.selected.values()) and not live.get("one_use_messages"):
+            if starting and any(t.custom_prompt_once for t in self.selected.values()) and not live.get("one_use_messages"):
                 raise RuntimeError("Restart the tray to use Send only once custom messages.")
             if ensure_started and (live.get("desktop_watch") or live.get("watch_requested") or live.get("restarting")):
                 return live
@@ -1255,8 +1258,21 @@ class TargetPicker(Gtk.Window):
         self._reload_saved_settings()
         if self._auto_start_pending and self.selected:
             self._auto_start_pending = False
-            self.toggle_watch(ensure_started=True)
+            if self._can_auto_start_watch():
+                self.toggle_watch(ensure_started=True, wait_for_block=True)
         return True
+
+    def _can_auto_start_watch(self):
+        """Only known, current exhaustion can opt a newly added recipient in."""
+        now = time.time()
+        for provider in {target.provider for target in self.selected.values()}:
+            quota = self.quotas.get(provider)
+            checked = self.quota_checked.get(provider)
+            if (quota is None or self.quota_errors.get(provider) or checked is None
+                    or not 0 <= now - checked <= max(10, self.config.poll_seconds * 2)
+                    or not quota_blocked(quota)):
+                return False
+        return bool(self.selected)
 
     def _reload_saved_settings(self):
         self.apply_error = ""

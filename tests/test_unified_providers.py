@@ -240,6 +240,27 @@ def test_single_watch_uses_recipient_provider_not_default_terminal(monkeypatch):
     assert seen==['muse']
 
 
+def test_automatic_start_guard_reaches_each_provider_and_survives_checkpoint(monkeypatch, tmp_path):
+    original = watch.run_desktop_watch
+    seen = {}
+    state = watch.WatchState(awaiting_initial_block=True, provider_states={
+        'codex':watch_state.to_dict(watch.WatchState(awaiting_initial_block=True, pending=True))})
+    def dispatch(config, event=None):
+        if config.provider == 'all':
+            return original(config, event)
+        seen[config.provider] = config.state.awaiting_initial_block
+        config.checkpoint(config.state)
+        return 0
+    monkeypatch.setattr(watch, 'run_desktop_watch', dispatch)
+    selected = tuple(Target('session', p, p, provider=p) for p in ('codex','claude','muse'))
+    path = tmp_path / 'automatic-start.json'
+    assert dispatch(watch.WatchConfig(provider='all', desktop_targets=selected, state=state,
+        checkpoint=lambda current:watch_state.save(path, current))) == 0
+    assert seen == {'codex':True, 'claude':True, 'muse':True}
+    restored = watch_state.load(path)
+    assert all(watch_state.from_dict(child).awaiting_initial_block for child in restored.provider_states.values())
+
+
 def test_real_mixed_watch_recovers_codex_and_muse_while_claude_login_fails(monkeypatch):
     available=quota.Quota('test',quota.RateWindow(20,300,int(time.time()+100)),None,False)
     blocked=replace(available,primary=replace(available.primary,used_percent=100),rate_limit_reached=True)

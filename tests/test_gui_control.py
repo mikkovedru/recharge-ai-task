@@ -130,6 +130,36 @@ def test_watch_controller_rejects_empty_selection(monkeypatch):
     assert not app.control("status")["desktop_watch"]
 
 
+def test_automatic_watch_start_waits_for_block_and_manual_start_opts_in(monkeypatch):
+    from recharge_ai_task import tray, watch, watch_state
+    captured = []
+    def runner(cfg, stop):
+        captured.append(cfg.state.awaiting_initial_block)
+        stop.wait(5)
+        return 0
+    monkeypatch.setattr(tray, "run_desktop_watch", runner)
+    settings = AppConfig(desktop_targets=[Target("thread", "a", "A").to_dict()])
+    settings.save()
+    watch_state.save(watch_state.state_path(settings), watch.WatchState(
+        pending=True, provider_states={'codex':watch_state.to_dict(watch.WatchState(pending=True))}))
+    app = tray.TrayApp()
+    try:
+        assert app.control('status')['quota_blocked_start']
+        app.control('start-watch-blocked')
+        assert captured == [True]
+        assert app._watch_state.provider_states['codex']['awaiting_initial_block']
+        thread = app._watch_thread
+        app.stop_service();thread.join(2)
+        app.control('start-watch')
+        assert captured == [True, False]
+        assert not app._watch_state.provider_states['codex']['awaiting_initial_block']
+    finally:
+        thread = app._watch_thread
+        app.stop_service()
+        if thread:
+            thread.join(2)
+
+
 def test_simultaneous_gui_and_menu_start_create_one_watch(monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from recharge_ai_task import tray

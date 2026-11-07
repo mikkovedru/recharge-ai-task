@@ -491,8 +491,11 @@ Use **Start/Stop Desktop watch** and **Settings…** directly from this window.
 Each row has independent **Send message** and **Resume goal** checkboxes.
 Choices and message text save automatically for future quota recovery; editing
 them does not send a manual signal. Adding the first recipient to an empty list
-starts Desktop watch after saving; loading saved recipients or editing existing
-ones does not start a stopped watch. **Send now to N recipients** applies those
+starts Desktop watch after saving only when fresh quota data shows that its
+provider is blocked. Available credits, unknown quota, stale data or a failed
+refresh leave Watch off. The automatically started worker must observe exhaustion
+before it can schedule recovery, even if credits return during startup. Loading
+saved recipients or editing existing ones does not start a stopped watch. **Send now to N recipients** applies those
 choices immediately, even with monitoring off. Its label shows the recipient
 count, and the button is disabled when no recipients are selected:
 
@@ -636,7 +639,8 @@ cannot be resumed through that terminated PTY.
 2. Open Claude desktop; its supported native windows appear automatically.
 3. Select **Send message** for the desired window recipients. Keep the intended
    chat open with its empty message composer focused. Adding the first recipient
-   starts Desktop watch; use Start/Stop Desktop watch to control it thereafter.
+   starts Desktop watch only while fresh quota data shows exhaustion; otherwise
+   use **Start Desktop watch** explicitly. Use Start/Stop to control it thereafter.
 4. Recharge observes exhaustion, waits for fresh usage to show recovery across
    every reported window, retains the configured grace, then sends the message.
 

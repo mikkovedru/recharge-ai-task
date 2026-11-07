@@ -4,6 +4,24 @@ The watch worker owns send timing. The dashboard displays its observations,
 deadlines and remaining allowances rather than deriving a schedule from its
 separate quota refresh. Polling the GUI cannot arm or complete a recovery.
 
+## Automatic startup from a new recipient
+
+The first recipient starts a stopped watch only when all selected providers have
+fresh, successful quota observations showing exhaustion. Available credits and
+unknown, failed or stale observations leave it off. This uses the same blocked
+quota rules as delivery, including weekly windows, explicit backend blocks and
+additional credits.
+
+Automatic startup uses the tray's `start-watch-blocked` command and requires its
+`quota_blocked_start` capability. Each provider checkpoint persists
+`awaiting_initial_block`: the worker must observe a current block before it may
+resume a saved recovery, infer a missed reset or recover a quota-stopped Goal.
+This closes the race where quota returns after the dashboard's observation but
+before the worker starts. Once exhaustion is observed, normal recovery and grace
+rules apply. Settings restarts preserve the guard; an explicit manual Start
+clears it and retains the usual manual-start recovery behavior. An older tray
+must be restarted before the dashboard can safely use automatic startup.
+
 ## Recoveries that occur between polls
 
 A quota reset can happen between a near-limit sample and the next check, so
