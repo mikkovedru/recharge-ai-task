@@ -114,6 +114,10 @@ def _send_linux(
     enter_presses: int,
     key_delay: float,
 ) -> bool:
+    from .display_session import is_wayland
+    if is_wayland():
+        _log.error("Wayland input requires an explicit recipient; select a chat or accessible AI window")
+        return False
     if not shutil.which("xdotool"):
         _log.error("xdotool not found; install with: sudo apt install xdotool")
         return False

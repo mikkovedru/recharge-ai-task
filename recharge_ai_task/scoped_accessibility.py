@@ -213,6 +213,15 @@ class Accessible:
     def queryComponent(self):
         return self
 
+    def get_interfaces(self):
+        return self.call(ACCESSIBLE, "GetInterfaces")[0]
+
+    def get_text(self):
+        return self.call("org.a11y.atspi.Text", "GetText", "(ii)", (0, -1))[0]
+
+    def set_text(self, text):
+        return self.call("org.a11y.atspi.EditableText", "SetTextContents", "(s)", (text,))[0]
+
     def getExtents(self, coordinates):
         from types import SimpleNamespace
         values = self.call("org.a11y.atspi.Component", "GetExtents", "(u)", (int(coordinates),))[0]

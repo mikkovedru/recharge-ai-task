@@ -165,7 +165,14 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
 
 
 def _send_window(target, text, enter_presses, key_delay):
-    windows = discover_windows() if target.provider == "codex" else discover_windows(target.provider)
+    if target.instance.startswith("atspi:"):
+        from .wayland_input import send_window
+        return send_window(target, text)
+    from .display_session import is_wayland
+    if is_wayland():
+        windows = discover_windows(target.provider, x11=True)
+    else:
+        windows = discover_windows() if target.provider == "codex" else discover_windows(target.provider)
     current = {w.key: w for w in windows}.get(target.key)
     if target.pid is None or current is None or current.pid != target.pid:
         raise RuntimeError("Selected window closed or its ID was reused; refresh targets")

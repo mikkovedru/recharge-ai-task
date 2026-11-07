@@ -39,7 +39,7 @@ recharge-ai-task-cli configure          # choose mode (cli/desktop) and defaults
 | **Check quota only** | `recharge-ai-task-cli quota` | Shows short/long window usage |
 | **No Python (Release zip)** | Run `recharge-ai-task.exe` (Win) or `recharge-ai-task` (Linux) | Two binaries: CLI and combined desktop app. Keep them together for CLI integration; Codex CLI must be installed and signed in |
 
-**Prerequisites:** Install [Codex CLI](https://github.com/openai/codex) and sign in with ChatGPT, or follow [Claude setup](#anthropic-claude). Linux desktop mode also needs `sudo apt install xdotool` (X11). Native Goal signals use Codex's Resume goal control and require accessibility plus a clipboard manager (included in Mint Cinnamon). Source installs also need `gir1.2-atspi-2.0`.
+**Prerequisites:** Install [Codex CLI](https://github.com/openai/codex) and sign in with ChatGPT, or follow [Claude setup](#anthropic-claude). X11/XWayland window input needs `sudo apt install xdotool`. Wayland supports the dashboard, tray, chat messages and accessible AI windows; see [Linux display support](#linux-display-support). Native Goal signals currently need Codex under X11/XWayland, accessibility and a clipboard manager (included in Mint Cinnamon). Source installs also need `gir1.2-atspi-2.0`.
 
 → [Full guide](#english)
 
@@ -166,9 +166,35 @@ The **ChatGPT Codex desktop app** is supported via `desktop` mode:
 4. Signal each saved recipient once; retry confirmed failures independently.
 
 Linux chat delivery uses exact IDs and the desktop router. X11 window delivery
-requires `xdotool` and a focused composer. The GTK dashboard is available on
-Linux. Windows uses CLI selection and window input. Legacy title-pattern
+requires `xdotool` and a focused composer. Native Wayland window delivery uses
+accessible composer and Send controls. The GTK dashboard is available on
+Linux with either display system. Windows uses CLI selection and window input. Legacy title-pattern
 matching has been replaced by explicit recipients.
+
+### Linux display support
+
+The dashboard and CLI support X11 and Wayland. Under Wayland the tray uses
+AppIndicator/StatusNotifier over D-Bus, including on Cinnamon, rather than an
+XEmbed icon. Your panel must support AppIndicators; GNOME may need its
+AppIndicator extension. Source installs need
+`sudo apt install gir1.2-ayatanaappindicator3-0.1`.
+
+Codex **chat-ID messages**, quota monitoring, wrapped terminals and saved CLI
+sessions do not depend on X11. Prefer chat-ID recipients for Codex.
+Native Wayland **window** recipients need native accessibility enabled in the
+AI app and one accessible multiline composer plus an enabled Send button.
+Delivery addresses that window's controls directly, refuses to replace drafts,
+and submits once without global typing, clipboard changes or focus stealing.
+An unsupported composer or ambiguous Send control produces an error. Failures
+after editing are marked uncertain and are not automatically retried.
+XWayland windows keep the existing X11 input path. Refresh and reselect window
+recipients after changing display sessions; saved chat-ID recipients stay stable.
+
+**Resume goal currently requires Codex under X11 or XWayland**, plus a clipboard
+manager. Only its isolated helper uses the X11 GTK backend; the dashboard can
+remain native Wayland. Native Wayland Codex Goal controls are not yet supported:
+use **Send message** without **Resume goal**. A Wayland login alone does not
+make an XWayland-only Goal control work with a native Wayland Codex window.
 
 ### Distribution options
 
@@ -330,12 +356,13 @@ See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · [OPE
 - Python 3.10+
 - The selected provider's CLI installed and signed in: [Codex CLI](https://github.com/openai/codex) with ChatGPT, [Claude Code](https://code.claude.com/docs/en/setup) with Claude, or [Muse Code](https://dev.meta.ai/docs/muse-code) with a Meta subscription
 - Windows CLI mode: `pywinpty` (included in `[windows]` extra)
-- Linux desktop mode: `xdotool` on X11
+- Linux window input: `xdotool` on X11/XWayland; native accessibility on Wayland
+- Linux Wayland tray: AppIndicator/StatusNotifier support in the panel
 
 ### Limitations
 
 - Official release binaries: **x86_64 only** (Windows + Ubuntu)
-- Desktop mode on Linux: **X11 only** (Wayland → use CLI mode)
+- Native Goal activation requires X11/XWayland; native Wayland window messages require accessible composer/Send controls
 - Codex desktop quota requires local Codex CLI auth (`codex app-server` must work)
 - Claude desktop quota requires a local Claude Code subscription login and its private usage endpoint
 - Terminal limit message formats may change; Codex has a quota API fallback, while Claude CLI uses the printed reset
@@ -413,7 +440,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the remote and branch setup.
 The tray uses the blue 5h recharge logo on an opaque white background with a dark border and a yellow (idle) or green (running) status strip. When Cinnamon's native XApp status applet is active, it uses XApp; with legacy or collapsible trays it uses an opaque XEmbed drawing surface at the actual allocated size, avoiding GTK StatusIcon caches and clipping. Image paths bypass symbolic icon recoloring; status is also shown by the tooltip and bottom color strip. Double-click toggles the dashboard; right-click opens the menu. The icon reconnects if Cinnamon or its tray socket is replaced. Cinnamon still controls the panel's icon size and whether its XApp status applet is visible.
 
 ```bash
-sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-xapp-1.0 gir1.2-atspi-2.0 xdotool
+sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-xapp-1.0 gir1.2-atspi-2.0 gir1.2-ayatanaappindicator3-0.1 xdotool
 /usr/bin/python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install -e ".[tray,dev]"
 PYTHON=.venv/bin/python bash scripts/build_linux.sh
@@ -662,8 +689,9 @@ unconfirmed send. Per-recipient messages, limits and one-use overrides use the
 same accounting as Codex. Native Codex Goal recovery is unavailable for Claude;
 use Send message. Disable Claude's own automatic continuation for any desktop
 session managed by Recharge to avoid independent continuations. Linux requires
-X11 and `xdotool`; Windows uses foreground window input. Wayland and macOS are
-not supported by this desktop delivery implementation.
+`xdotool` for X11/XWayland windows, or native accessible composer/Send controls
+for Wayland windows; Windows uses foreground window input. macOS is not
+supported by this desktop delivery implementation.
 
 Desktop quota uses the private read-only usage endpoint used by Claude Code's
 `/usage`, authenticated from `~/.claude/.credentials.json` (or

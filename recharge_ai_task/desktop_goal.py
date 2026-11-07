@@ -34,6 +34,15 @@ def ui_lock():
 
 
 def activate(target, expected, desktop):
+    from .display_session import is_wayland
+    helper_options = {}
+    if is_wayland():
+        if not os.environ.get("DISPLAY"):
+            raise RuntimeError("Native Goal controls currently require Codex under XWayland and a clipboard manager. "
+                               "On native Wayland, use Send message without Resume goal; no Goal action sent")
+        # The dashboard can use native Wayland; existing exact-ID Goal navigation
+        # needs X11 clipboard persistence and verified XWayland window geometry.
+        helper_options["env"] = dict(os.environ, GDK_BACKEND="x11")
     if getattr(sys, "frozen", False):
         from .desktop_launch import desktop_command
         command = [*desktop_command(), "--resume-goal-ui"]
@@ -45,7 +54,7 @@ def activate(target, expected, desktop):
     payload = {"target": target.to_dict(), "goal": expected, "pid": pid}
     with ui_lock():
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, text=True)
+                                   stderr=subprocess.PIPE, text=True, **helper_options)
         try:
             output, _errors = process.communicate(json.dumps(payload), timeout=HELPER_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired as exc:

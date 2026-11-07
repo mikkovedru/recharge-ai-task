@@ -360,6 +360,10 @@ def show_chat(target, pid):
 
 
 def resume_goal(target, expected, pid):
+    from .display_session import uses_x11_gdk
+    if not uses_x11_gdk():
+        raise RuntimeError("Native Goal controls require the XWayland helper and a Codex X11 window; "
+                           "use Send message for a native Wayland chat; no Goal action sent")
     from .goal_control import NativeGoals
     from .recovery_rules import goal_allowed
     if not goal_allowed(expected.get("status"), manual=True):

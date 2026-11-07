@@ -300,10 +300,30 @@ def _saved_project_names(home):
     return result
 
 
-def discover_windows(provider="codex"):
+def discover_windows(provider="codex", *, x11=False):
     if provider not in ("codex", "claude"):
         raise ValueError("Unknown AI provider")
     if sys.platform.startswith("linux"):
+        from .display_session import is_wayland
+        if is_wayland() and not x11:
+            from .wayland_input import discover_windows as accessible_windows
+            native_error = None
+            try:
+                native = accessible_windows(provider)
+            except (ImportError, RuntimeError) as exc:
+                native, native_error = [], exc
+            compatibility = []
+            if os.environ.get("DISPLAY"):
+                try:
+                    compatibility = discover_windows(provider, x11=True)
+                except Exception:
+                    pass  # XWayland is optional; native discovery is independent.
+            if native_error is not None and not compatibility:
+                raise native_error
+            # Keep XWayland windows on their proven input path even if the app
+            # also exports AT-SPI. Native composers need not implement editing.
+            compatibility_pids = {window.pid for window in compatibility}
+            return compatibility + [window for window in native if window.pid not in compatibility_pids]
         from Xlib import display
         connection = display.Display()
         try:

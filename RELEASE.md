@@ -69,7 +69,12 @@ chmod +x dist/recharge-ai-task-cli dist/recharge-ai-task
 | `dist/recharge-ai-task` | Combined dashboard and tray |
 | `dist/recharge-ai-task-linux-x86_64.tar.gz` | **Upload to GitHub Release** |
 
-Linux desktop mode users also need: `sudo apt install xdotool` (X11).
+X11/XWayland window input also needs: `sudo apt install xdotool`.
+Native Wayland window input needs accessible composer/Send controls in the AI app.
+The Wayland tray requires AppIndicator/StatusNotifier support in the desktop panel.
+Linux builds require `gir1.2-ayatanaappindicator3-0.1` alongside GTK/XApp/AT-SPI;
+the build bundles its typelib and shared libraries. See
+[Linux display support](README.md#linux-display-support) for native Goal limits.
 
 > **Cannot cross-compile:** Linux binaries must be built on Linux. Use a Ubuntu VM, WSL2, or GitHub Actions if you only have Windows.
 

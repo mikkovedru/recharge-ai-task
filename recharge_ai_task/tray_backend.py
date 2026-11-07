@@ -1,6 +1,7 @@
 """Select the native Cinnamon backend, retaining pystray elsewhere."""
 import os
 import sys
+from .display_session import is_wayland, uses_x11_gdk
 
 
 def is_cinnamon() -> bool:
@@ -8,6 +9,10 @@ def is_cinnamon() -> bool:
 
 
 def prepare_backend() -> None:
+    if is_wayland():
+        # Gtk.StatusIcon/Gtk.Plug and pystray's xorg fallback use XEmbed.
+        # AppIndicator publishes a StatusNotifierItem over D-Bus instead.
+        os.environ.setdefault("PYSTRAY_BACKEND", "appindicator")
     if is_cinnamon():
         os.environ.setdefault("PYSTRAY_BACKEND", "gtk")
         try:
@@ -28,8 +33,11 @@ def icon_class(default):
             if XApp.StatusIcon.any_monitors():
                 from .tray_xapp import XAppIcon
                 return XAppIcon
-            from .tray_gtk import CinnamonGtkIcon
-            return CinnamonGtkIcon
+            if uses_x11_gdk():
+                from .tray_gtk import CinnamonGtkIcon
+                return CinnamonGtkIcon
+            from pystray._appindicator import Icon
+            return Icon
         except (ImportError, ValueError):
             import logging
             logging.getLogger("recharge-ai-task.tray").warning("XApp is unavailable; using the GTK tray backend")

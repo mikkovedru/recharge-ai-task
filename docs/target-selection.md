@@ -4,7 +4,8 @@
   <img src="assets/logo-lockup.png" width="200" alt="Recharge AI-task logo">
 </p>
 
-The selector distinguishes **desktop windows** (X11 window ID + process ID)
+The selector distinguishes **desktop windows** (X11 window ID + process ID,
+or Wayland accessibility bus/connection/object identity + process ID)
 from **Codex chats** (stable thread ID + Codex profile) and **Claude/Muse Code
 sessions** (native session ID + provider profile). Titles are labels, not
 identities: two chats can have the same name, and several chats can use the same
@@ -46,6 +47,11 @@ in an arbitrary window or resuming the chat in another server.
 
 - Linux X11: enumerate managed windows through EWMH and match application class,
   rather than titles that could belong to browsers. Show title, XID, PID and display.
+- Linux Wayland: query native accessibility only for same-user AI executables.
+  Bind recipients to the accessibility bus ID, unique connection owner and frame
+  object path. A restarted application or bus invalidates saved windows instead
+  of redirecting them. Existing XWayland windows retain their X11 input path
+  when an X server is available.
 - Discover running same-user Codex profiles from their `CODEX_HOME` and existing
   daemon control sockets. Read only that environment field, not credentials.
 - Query all pages of user chat metadata from existing daemons. Fall back to a
@@ -57,7 +63,12 @@ in an arbitrary window or resuming the chat in another server.
 
 This inventories locally available Codex chats and desktop windows. It does not
 query account-wide ChatGPT conversation history or enumerate disconnected remote
-hosts. Linux Wayland cannot use X11 window delivery. The GTK picker is for Linux;
+hosts. Native Wayland windows use accessible multiline composer and Send actions;
+they never receive global simulated typing. Existing drafts are preserved, and
+failures after editing suppress automatic retries. Unsupported controls fail
+explicitly. Native Goal verification still requires an X11/XWayland Codex window
+and a clipboard manager. See [Linux display support](../README.md#linux-display-support).
+The GTK picker is for Linux;
 the CLI inventory/selection also supports Windows window discovery. Thread
 routing currently requires the Linux desktop's Unix socket.
 

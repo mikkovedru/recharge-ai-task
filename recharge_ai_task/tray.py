@@ -27,7 +27,12 @@ prepare_backend()
 try:
     import pystray
     from PIL import Image
-except ImportError as exc:  # pragma: no cover
+except (ImportError, ValueError) as exc:  # pragma: no cover
+    from .display_session import is_wayland
+    if is_wayland():
+        raise SystemExit("Wayland tray requires GTK and AppIndicator: install gir1.2-ayatanaappindicator3-0.1 "
+                         "and pip install 'recharge-ai-task[tray]'. Enable StatusNotifier/AppIndicator support "
+                         "in your desktop panel.") from exc
     raise SystemExit("Tray app requires: pip install 'recharge-ai-task[tray]'") from exc
 
 CREATE_NEW_CONSOLE = 0x00000010
