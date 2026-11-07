@@ -214,7 +214,7 @@ The private snapshot adapter currently supports version 11 and fails visibly if
 it becomes incompatible. Only status fields are retained; conversation contents
 and goal objectives are discarded.
 
-Goal status reports **Active**, **Paused**, **Blocked**, **Usage limited**,
+Goal status reports **Active**, **Paused**, **Blocked**, **Stopped by quota**,
 **Budget limited**, **Complete**, or **No goal**. A read-only, schema-checked
 `goals_*.sqlite` query supplies persisted status for saved chats and is read again
 after live snapshots. This keeps an older desktop cache from hiding native goal
@@ -223,6 +223,13 @@ no newer persisted goal exists. A missing or unsupported source
 is **Unavailable**, rather than an inferred idle task or absent goal. Window
 recipients show **Unavailable** because they do not identify a fixed chat.
 Disconnected saved selections remain listed with unavailable statuses.
+**Stopped by quota** describes Codex's saved reason for stopping the Goal. It is
+not a current account-quota reading: a stopped Goal can retain this state after
+5-hour and weekly quota recover, until native Resume succeeds. Provider monitoring
+shows current quota. Recharge does not invent an Active Goal state or alter its
+saved status just because account quota is available. In the 2026-11-07 live
+check, the saved database, native Goal API and desktop snapshot all agreed on
+this stopped state despite available account quota.
 The public runtime and goal states are documented in the
 [Codex App Server reference](https://learn.chatgpt.com/docs/app-server).
 
@@ -232,11 +239,11 @@ the cells or headings for a single legend of all supported states. **Running** (
 use normal text, and **Unavailable** is yellow. A task can need both approval
 and input simultaneously. **Active** is also accepted as a green display label.
 
-For goals, **Active** is green, **Paused** and **Usage limited** are yellow,
+For goals, **Active** is green, **Paused** and **Stopped by quota** are yellow,
 **Budget limited** and **Blocked** are red, **No goal** uses normal text, and
 **Unavailable** is yellow. **Complete** uses normal text preceded by a green
 checkmark. Persisted `usage_limited` and `budget_limited` are displayed as
-**Usage limited** and **Budget limited**.
+**Stopped by quota** and **Budget limited**.
 
 The multi-line status area scrolls and retains recent messages, each prefixed
 with the local date and time (`YYYY-MM-DD HH:MM:SS`). Warnings are

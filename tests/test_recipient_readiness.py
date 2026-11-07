@@ -87,3 +87,11 @@ def test_missing_or_invalid_routing_is_explained(target):
 def test_saved_unavailable_recipient_is_unverified_and_no_actions_are_passive():
     assert all(a.state == 'uncertain' for a in preview(replace(T, status='Unavailable — saved selection')).values())
     assert not recipient_readiness(replace(T, send_prompt=False, send_goal=False), AppConfig(), {}, '').ready
+
+
+@pytest.mark.parametrize('manual', [False, True])
+def test_stopped_by_quota_is_ready_to_resume_without_becoming_active(manual):
+    target = replace(T, goal_status='Stopped by quota', send_prompt=False)
+    readiness = preview(target, manual=manual)
+    assert readiness['goal'].ready
+    assert target.goal_status == 'Stopped by quota'

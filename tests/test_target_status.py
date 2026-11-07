@@ -26,7 +26,7 @@ def test_task_labels(state, label):
 
 @pytest.mark.parametrize("state,label", [
     ("active", "Active"), ("paused", "Paused"), ("blocked", "Blocked"),
-    ("usageLimited", "Usage limited"), ("usage_limited", "Usage limited"),
+    ("usageLimited", "Stopped by quota"), ("usage_limited", "Stopped by quota"),
     ("budgetLimited", "Budget limited"), ("budget_limited", "Budget limited"),
     ("complete", "Complete"), (None, "Unavailable"), ("future", "future"),
 ])
@@ -82,7 +82,7 @@ def test_live_status_overrides_unloaded_metadata(monkeypatch, tmp_path, snapshot
     one, two = inventory.targets
     assert one.status == "Open in desktop"
     assert one.task_status == ("Unavailable" if snapshot_error else "Running")
-    assert one.goal_status == "Usage limited"
+    assert one.goal_status == "Stopped by quota"
     assert two.task_status == "Not loaded" and two.goal_status == "No goal"
     assert bool(inventory.warnings) == snapshot_error
 

@@ -115,7 +115,7 @@ def task_status(value):
 
 def goal_status(value):
     return {"active": "Active", "paused": "Paused", "blocked": "Blocked",
-        "usageLimited": "Usage limited", "usage_limited": "Usage limited",
+        "usageLimited": "Stopped by quota", "usage_limited": "Stopped by quota",
         "budgetLimited": "Budget limited", "budget_limited": "Budget limited",
         "complete": "Complete", "error": "Error", "systemError": "Error"}.get(value, value if valid_status(value) else "Unavailable")
 

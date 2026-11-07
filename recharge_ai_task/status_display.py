@@ -150,7 +150,7 @@ GOAL_STATES = {
     "Error": ("error", "Codex reports a goal error. Native Goal activation can still be attempted after quota recovers; it must be verified live."),
     "Active": ("success", "The goal is enabled and may continue automatically; check Task status for current activity."),
     "Paused": ("warning", "The goal is intentionally paused. Manual Goal signals may resume it; quota recovery leaves it paused."),
-    "Usage limited": ("warning", "The goal stopped because account quota was exhausted. Goal signals can resume it when quota recovers."),
+    "Stopped by quota": ("warning", "Codex saved this goal as stopped after quota exhaustion. This is the reason it stopped, not current account quota. It remains stopped until resumed, even after quota becomes available. See provider monitoring for current quota."),
     "Budget limited": ("error", "The goal reached its own token budget. A continuation signal does not override this limit."),
     "Blocked": ("error", "The goal cannot make progress without user input or an external change."),
     "Complete": ("normal", "Codex marked the goal achieved. A continuation signal does not reopen it."),
@@ -160,6 +160,8 @@ GOAL_STATES = {
 
 
 def status_level(value, *, goal=False):
+    if goal and value == "Usage limited":
+        value = "Stopped by quota"  # Previously saved display labels.
     states = GOAL_STATES if goal else TASK_STATES
     # A task may simultaneously need approval and input.
     parts = value.split(" / ")
@@ -168,6 +170,8 @@ def status_level(value, *, goal=False):
 
 
 def status_tooltip(value, *, goal=False):
+    if goal and value == "Usage limited":
+        value = "Stopped by quota"
     states = GOAL_STATES if goal else TASK_STATES
     detail = states.get(value,("normal","Unrecognized status: allowed by default."))[1]
     automatic = "Continue" if continuation_allowed(value,goal=goal) else "Skip / unavailable"
@@ -182,7 +186,7 @@ def continuation_allowed(value, *, goal=False, manual=False):
     if value == "Unavailable" or goal and value == "No goal":
         return False
     if goal:
-        raw = {"Active":"active", "Paused":"paused", "Blocked":"blocked", "Usage limited":"usageLimited",
+        raw = {"Active":"active", "Paused":"paused", "Blocked":"blocked", "Usage limited":"usageLimited", "Stopped by quota":"usageLimited",
                "Budget limited":"budgetLimited", "Complete":"complete", "Error":"error"}.get(value,value)
         return goal_allowed(raw,manual=manual)
     raw = "active" if value in {"Active","Running"} or value.startswith("Waiting for") else value

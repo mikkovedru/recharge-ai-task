@@ -118,3 +118,15 @@ d.destroy();w.destroy()
 '''],capture_output=True,text=True,timeout=15)
     assert result.returncode==0,result.stdout+result.stderr
     assert 'CRITICAL' not in result.stderr,result.stderr
+
+
+@pytest.mark.parametrize('label', ['Stopped by quota', 'Usage limited'])
+def test_quota_stopped_goal_label_does_not_claim_current_account_exhaustion(label):
+    from recharge_ai_task.status_display import status_level, status_tooltip
+    tooltip = status_tooltip(label, goal=True)
+    assert status_level(label, goal=True) == 'warning'
+    assert 'not current account quota' in tooltip
+    assert 'even after quota becomes available' in tooltip
+    assert 'Automatic Goal: Continue' in tooltip and 'Send now Goal: Continue' in tooltip
+    rows = [row[0] for row in status_rows(goal=True)]
+    assert rows.count('Stopped by quota') == 1 and 'Usage limited' not in rows
