@@ -27,7 +27,7 @@ def prepare(symbol: Path, lockup: Path) -> None:
         framed.resize((size, size), Image.Resampling.LANCZOS).save(assets / f"icon-{size}.png", optimize=True)
     framed.save(assets / "recharge-ai-task.ico", sizes=[(s,s) for s in ICON_SIZES if s <= 256])
     with Image.open(lockup) as source:
-        for size, destination in ((128, assets / "logo-lockup.png"), (512, docs / "logo-lockup.png")):
+        for size, destination in ((512, assets / "logo-lockup.png"), (512, docs / "logo-lockup.png")):
             image = ImageOps.contain(source.convert("RGB"), (size, size), Image.Resampling.LANCZOS)
             image.save(destination, optimize=True)
 

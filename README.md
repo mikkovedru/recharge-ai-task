@@ -553,12 +553,19 @@ Code and shows their chats together. No provider selection in Settings is needed
 Use the **All / Codex / Claude / Muse** buttons above Search to filter chats.
 The **Recipients & actions** heading has a separate button group for its list. This changes visibility only: hidden recipients keep
 their selected actions, messages, allowances and monitoring. The Provider column
-identifies each row. The last filter is remembered; fresh installations start at All.
+appears first, before Project, in All and is hidden in individual provider views.
+Recipient filter buttons show each category's total count, including hidden rows.
+The last filter is remembered; fresh installations start at All.
 
 Select recipients from several providers at once. Desktop watch monitors their
 quotas independently, so one unavailable login does not block other providers.
-The dashboard displays each detected provider's quota and reuses its worker's
-observations while monitoring. **Settings → Default terminal AI** only chooses the
+The monitoring box has **All / Codex / Claude / Muse** tabs. Each provider tab
+shows its own plan, quota windows, check/reset timing, recovery forecast and action
+statistics, and reuses its worker's observations. Login and quota-read errors stay
+in that tab instead of repeating in the shared log. Main provider buttons show
+question/exclamation icons in parentheses only for warnings and errors. Healthy
+tabs have no status icon. **Check quota now** and the full recovery explanation
+sit below Monitoring; **Settings** sits below the logo. **Settings → Default terminal AI** only chooses the
 provider for a new wrapped terminal; optional executable paths and arguments are
 separate for every CLI. All paths are auto-detected by default.
 

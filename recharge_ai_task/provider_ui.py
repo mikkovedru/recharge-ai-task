@@ -1,7 +1,29 @@
 """Compact, keyboard-accessible provider buttons shared by dashboard sections."""
 from gi.repository import Gdk, GObject, Gtk
+from .status_display import status_colors
 
 PROVIDER_NAMES = {'all': 'All', 'codex': 'Codex', 'claude': 'Claude', 'muse': 'Muse'}
+
+
+class ProviderNotice(Gtk.Box):
+    """A real themed question/exclamation icon inside neutral round brackets."""
+    def __init__(self):
+        super().__init__(spacing=0)
+        self.icon = Gtk.Image()
+        self.icon.set_pixel_size(14)
+        for child in (Gtk.Label(label="("), self.icon, Gtk.Label(label=")")):
+            self.pack_start(child, False, False, 0)
+        self.show_all()
+        self.set_no_show_all(True)
+        self.hide()
+
+    def update(self, state):
+        visible = state in ("warning", "error")
+        if visible and getattr(self, 'notice_state', None) != state:
+            self.icon.set_from_icon_name("dialog-question-symbolic" if state == "warning" else "dialog-warning-symbolic", Gtk.IconSize.MENU)
+            self.icon.get_accessible().set_name("Warning" if state == "warning" else "Error")
+        self.notice_state = state
+        self.set_visible(visible)
 
 
 class ProviderButtons(Gtk.Box):
@@ -11,18 +33,79 @@ class ProviderButtons(Gtk.Box):
         super().__init__(spacing=0)
         self.get_style_context().add_class('linked')
         self.buttons = {}
+        self.purpose = purpose
+        self.palette = None
+        self.css = Gtk.CssProvider()
+        self.get_style_context().add_provider_for_screen(self.get_screen(), self.css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.connect('style-updated', self._colors)
+        self.connect('destroy', lambda *_: Gtk.StyleContext.remove_provider_for_screen(self.get_screen(), self.css))
         group = None
         for key, caption in PROVIDER_NAMES.items():
             button = Gtk.RadioButton.new_with_label_from_widget(group, caption)
             group = group or button
             button.set_mode(False)
-            button.set_tooltip_text(f'{caption}: {purpose} (Left / Right, Home / End)')
+            label = button.get_child()
+            button.caption = label
+            button.remove(label)
+            content = Gtk.Box(spacing=3)
+            button.status_image = Gtk.Image()
+            button.status_image.set_no_show_all(True)
+            button.status_image.set_pixel_size(14)
+            button.notice = ProviderNotice()
+            content.pack_start(button.status_image, False, False, 0)
+            content.pack_start(label, False, False, 0)
+            content.pack_start(button.notice, False, False, 0)
+            button.add(content)
+            button.set_tooltip_text(f'{caption}: {purpose} (Left / Right, Home / End)' if purpose else caption)
             button.get_accessible().set_name(f'{caption} providers')
             button.connect('toggled', self._changed)
             button.connect('key-press-event', self._keys, key)
             self.pack_start(button, False, False, 0)
             self.buttons[key] = button
         self.set_active_id(active)
+
+    def _colors(self, *_):
+        colors = status_colors(self)
+        palette = tuple(colors.values())
+        if palette == self.palette:
+            return
+        self.palette = palette
+        self.css.load_from_data((
+            f".provider-enabled image {{ color: {colors['success']}; }}"
+            f".provider-error image {{ color: {colors['error']}; }}"
+            f".provider-warning image {{ color: {colors['warning']}; }}"
+            ".provider-off image { opacity: .6; }").encode())
+
+    def set_status(self, provider, state, detail, *, installed=True):
+        button = self.buttons[provider]
+        if getattr(button, 'provider_state', None) != state:
+            context = button.get_style_context()
+            for value in ('enabled', 'off', 'warning', 'error'):
+                context.remove_class('provider-' + value)
+            context.add_class('provider-' + state)
+            button.status_image.set_from_icon_name('media-playback-start-symbolic' if state=='enabled' else 'media-playback-stop-symbolic', Gtk.IconSize.MENU)
+            button.status_image.hide()
+            button.notice.update(state)
+            button.provider_state = state
+        button.set_sensitive(installed)
+        if not installed and button.get_active():
+            self.set_active_id('all')
+        button.get_accessible().set_name(PROVIDER_NAMES[provider] + ": " + (state if installed else 'not installed'))
+        tooltip = PROVIDER_NAMES[provider] + ': ' + detail
+        if self.purpose:
+            tooltip += '\n' + self.purpose + ' (Left / Right, Home / End)'
+        if not installed:
+            tooltip += '\nNo installed executable or supported running app detected. Saved history may still be visible under All.'
+        if button.get_tooltip_text() != tooltip:
+            button.set_tooltip_text(tooltip)
+
+    def set_counts(self, providers):
+        """Count recipients independently of the currently visible category."""
+        providers = list(providers)
+        for key, button in self.buttons.items():
+            count = len(providers) if key == 'all' else providers.count(key)
+            button.caption.set_text(f'{PROVIDER_NAMES[key]} ({count})')
+            button.get_accessible().set_name(f'{PROVIDER_NAMES[key]}: {count} recipients')
 
     def _changed(self, button):
         if button.get_active():
@@ -32,7 +115,10 @@ class ProviderButtons(Gtk.Box):
         return next((key for key, button in self.buttons.items() if button.get_active()), 'all')
 
     def set_active_id(self, key):
-        self.buttons[key if key in self.buttons else 'all'].set_active(True)
+        selected = key if key in self.buttons else 'all'
+        if not self.buttons[selected].get_sensitive():
+            selected = 'all'
+        self.buttons[selected].set_active(True)
 
     def _keys(self, _button, event, key):
         keys = list(self.buttons)
@@ -42,6 +128,11 @@ class ProviderButtons(Gtk.Box):
             index = (keys.index(key) + (-1 if event.keyval in (Gdk.KEY_Left, Gdk.KEY_Up) else 1)) % len(keys)
         else:
             return False
+        direction = -1 if event.keyval in (Gdk.KEY_Left, Gdk.KEY_Up, Gdk.KEY_End) else 1
+        for _ in keys:
+            if self.buttons[keys[index]].get_sensitive():
+                break
+            index = (index + direction) % len(keys)
         self.buttons[keys[index]].set_active(True)
         self.buttons[keys[index]].grab_focus()
         return True

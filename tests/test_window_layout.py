@@ -139,6 +139,8 @@ try:
         assert pos(p.message_resize,p.editor_scroller)[1]+p.message_resize.get_allocated_height()<=p.editor_scroller.get_allocated_height()
         assert p.list_scroller.get_allocated_height()>=60
     if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
+        w.set_accept_focus(True);pump(w)
+        subprocess.run(['xdotool','windowactivate','--sync',str(w.get_window().get_xid())],check=True);pump(w)
         before=p.split.get_position();x,y=pos(p.split);x+=20;y+=before+3
         xid=str(w.get_window().get_xid())
         subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y),'mousedown','1'],check=True);pump(w)
@@ -146,7 +148,10 @@ try:
         subprocess.run(['xdotool','mouseup','1'],check=True);pump(w)
         assert p.split.get_position()<before-20
     saved=p.split.get_position();w.window_layout.close();w.destroy();w=make()
-    assert abs(w.recipient_panel.split.get_position()-saved)<=1
+    deadline=time.monotonic()+2
+    while (not w.window_layout.ready or abs(w.recipient_panel.split.get_position()-saved)>1) and time.monotonic()<deadline:
+        pump(w)
+    assert abs(w.recipient_panel.split.get_position()-saved)<=1,(saved,w.recipient_panel.split.get_position(),w.window_layout.ready)
 finally:
     w.destroy()
 '''],capture_output=True,text=True,timeout=15)

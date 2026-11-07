@@ -111,6 +111,8 @@ try:
         assert pos(w.recipient_frame)[1]+w.recipient_frame.get_allocated_height()==w.get_size().height-14
     # A native mouse drag adjusts the list/editor divider and saves its position.
     if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
+        w.set_accept_focus(True);pump(w)
+        subprocess.run(['xdotool','windowactivate','--sync',str(w.get_window().get_xid())],check=True);pump(w)
         before=p.split.get_position();x,y=pos(p.split);x+=20;y+=before+3
         xid=str(w.get_window().get_xid())
         subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y),'mousedown','1'],check=True);pump(w)

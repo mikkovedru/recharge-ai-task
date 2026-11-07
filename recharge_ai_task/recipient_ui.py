@@ -134,6 +134,7 @@ class RecipientPanel(Gtk.Box):
         self.selection_initialized = False
         self.ledger_error = ""
         self.ledger = None
+        self.last_usage = {}
         self.status_css = Gtk.CssProvider()
         self.status_palette = None
         self.get_style_context().add_provider_for_screen(self.get_screen(), self.status_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -275,6 +276,7 @@ class RecipientPanel(Gtk.Box):
             if self.ledger is None:
                 self.ledger = UsageLedger()
             usage = self.ledger.snapshot()
+            self.last_usage = usage
             self.ledger_error = ""
             return usage
         except Exception as exc:
@@ -286,6 +288,7 @@ class RecipientPanel(Gtk.Box):
 
     def render(self):
         config = AppConfig.load()
+        self.view_config = config
         usage = self._usage()
         self.updating = True
         try:
@@ -392,6 +395,7 @@ class RecipientPanel(Gtk.Box):
             if self.selected_key not in selected:
                 self.selected_key = None if self.selection_initialized else next(iter(selected), None)
             self.list.invalidate_filter()
+            self.provider_filter.set_counts(target.provider for target in selected.values())
             self.list.select_row(self.rows.get(self.selected_key))
             self.empty_label.set_visible(not self._visible_rows())
             self._load_editor(config)

@@ -142,22 +142,39 @@ border surrounds the whole Monitoring box; hover for details. It updates every
 two seconds. A stopping worker must finish before another starts. If the tray is absent, Start launches it.
 Closing the picker leaves the tray and active watch running.
 
-The overview has a compact **Monitoring** group and a two-column **Quota checks & recovery** group above the list.
-The quota heading and reset forecast share the top row. Both overview boxes and
-the smaller logo share Monitoring's compact height. Overview text stays on one
-line with the full value available on hover. The quota box retains its neutral
-border: only **No send scheduled**, **Updating…** and **Checking…** are yellow,
-**Desktop monitoring is off.** is red, and **Forecast** / **Next reset forecast** are green.
-The left quota column reports the next check. The right shows the expected send
-time, a live countdown and pending message/Goal counts. A forecast includes the
-configured grace period and can move earlier when quota recovers early; a
-confirmed send countdown starts from observed usable quota. Counts say “up to”
-because live statuses and allowances can skip actions. Stopping watch clears
-the send schedule. Counts respect the current remaining allowances. While
-monitoring with no pending recovery, the right column shows a reset forecast
-and selected counts rather than claiming a send is scheduled. Missing or stale
-worker updates and allowance errors are displayed explicitly. Grace comes from
-the running worker, so unapplied settings cannot alter its countdown.
+The overview has a compact **Monitoring** group and a framed provider notebook.
+**All** shows the earliest check/recovery forecast and combined maximum action
+counts, plus an overview of each provider's quota. This is a combined overview;
+providers recover independently and do not share a send schedule.
+
+The **Codex**, **Claude** and **Muse** tabs show their own plan, usage windows,
+reset times/countdowns, next quota check, recovery status, selected/pending
+message and Goal counts, and persisted usage statistics. Scroll within a tab for
+long notices or additional quota windows. A confirmed Send countdown is distinct
+from a Forecast that may change; usable quota and the running worker's grace
+period still govern delivery. An unmonitored provider says **Not monitored**.
+Unknown quota or statistics are marked unavailable rather than shown as zero.
+Stale observations and retained values after a failed refresh are labeled.
+
+Login, allowance/version, quota and provider-discovery errors appear in the
+individual provider tab and update on the next successful observation. Repeated
+polling does not append them to the shared Program log. Delivery outcomes remain
+logged with their provider. The tab labels and main-list provider buttons use
+status icons and theme-aware colors:
+
+- **No icon:** no warning or error is currently reported.
+- **Question mark / yellow, after the name in round brackets:** near-limit or blocked quota, stale data, uncertain counts, discovery
+  notices, or unavailable quota for an inactive provider.
+- **Exclamation mark / red, after the name in round brackets:** quota cannot be read for a provider with enabled actions.
+
+The pressed filter button indicates visibility, independently of these status
+icons. Hover or keyboard focus exposes its counts and monitoring state. A healthy
+tab does not promise that monitoring is running or that a task is ready to send.
+Installed providers with no enabled actions remain filterable. Providers without
+a detected executable or supported running app are greyed out and disabled;
+saved history alone does not count as an installation and remains visible in All. **Show technical columns** uses two lines
+to leave room for the buttons at smaller window sizes.
+
 Run-at-login controls and launch-origin details are in Settings.
 **Recipients & actions** sits beside it with the actual recipient plans. Monitoring reports the tray worker, independently of each chat's task
 status. Recipients counts the selected signal destinations. Next check uses the

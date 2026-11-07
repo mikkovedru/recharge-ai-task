@@ -65,6 +65,8 @@ def _log_status(message: str) -> None:
 
 def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int:
     stop = stop or StopEvent()
+    def status(message):
+        _log_status(f"[{config.provider.title()}] {message}")
     if config.provider == "all":
         return _run_provider_watches(config, stop)
     if config.provider not in ("codex", "claude", "muse"):
@@ -72,7 +74,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
     codex = None
     targets = tuple(t for t in config.desktop_targets if t.provider == config.provider and any(t.signal_actions(config.goal_mode)))
     if not targets:
-        _log_status("Choose signal targets first: recharge-ai-task-cli targets --gui")
+        status("Choose signal targets first: recharge-ai-task-cli targets --gui")
         return 1
     state = config.state if config.state is not None else WatchState()
     checked_at = None
@@ -136,7 +138,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         checkpoint()
         stop.wait(seconds)
 
-    _log_status(t("watch.started"))
+    status(t("watch.started"))
 
     while not stop.is_set():
         state.progress = observation("checking_quota")
@@ -154,7 +156,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         except Exception as exc:
             available = None
             quota_error = str(exc)
-            _log_status(t("cli.quota_fallback_failed", error=exc))
+            status(t("cli.quota_fallback_failed", error=exc))
             wait(interval, "quota_unavailable")
             continue
 
@@ -189,7 +191,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
             state.delivered.clear()
             state.completed_actions.clear()
             state.waiting_for_quota = True
-            _log_status("Quota recovered between polls near the limit; scheduling selected signals.")
+            status("Quota recovered between polls near the limit; scheduling selected signals.")
         if not state.pending:
             future = [w.resets_at for w in windows if w.resets_at > checked_at]
             state.expected_reset_at = min(future, default=None)
@@ -221,7 +223,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                 state.waiting_for_quota = True
                 state.recovered_at = None
                 state.wake_at = 0
-            _log_status("Quota is unavailable; polling for recovery, including early resets and added credits.")
+            status("Quota is unavailable; polling for recovery, including early resets and added credits.")
             wait(interval, "waiting_quota")
             continue
 
@@ -231,7 +233,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
             state.waiting_for_quota = False
             state.recovered_at = checked_at
             state.wake_at = checked_at + config.grace_seconds
-            _log_status("Quota is available now; the recovery grace period starts from this check.")
+            status("Quota is available now; the recovery grace period starts from this check.")
 
         if not state.startup_checked and not state.pending:
             state.startup_checked = True
@@ -240,16 +242,16 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                 candidates, errors = quota_stopped_targets(goal_targets, stop=stop)
                 state.startup_checked = not errors
                 for error in errors:
-                    _log_status(error)
+                    status(error)
                 if candidates:
                     state.delivered = {target.key for target in targets} - candidates
                     state.pending = True
                     state.recovered_at = checked_at
                     state.wake_at = checked_at + config.grace_seconds
-                    _log_status("Quota is available; recovering selected quota-stopped goals after the grace period.")
+                    status("Quota is available; recovering selected quota-stopped goals after the grace period.")
 
         if not state.pending:
-            _log_status(t("watch.polling", percent=used))
+            status(t("watch.polling", percent=used))
             wait(interval, "monitoring")
             continue
 
@@ -292,7 +294,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                 state.delivered.add(target.key)
             state.in_flight = None
             checkpoint()
-            _log_status(f"{target_label(target)} [{target.id}]: {result.detail}")
+            status(f"{target_label(target)} [{target.id}]: {result.detail}")
             state.progress = observation("delivering")
 
         state.pending = any(target.key not in state.delivered for target in targets)

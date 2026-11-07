@@ -30,14 +30,27 @@ def installed_providers(config=None):
 
 def discover_all_targets():
     available = installed_providers()
-    result = Inventory(providers=tuple(available))
+    installed = []
+    for provider, executable in available.items():
+        if executable:
+            installed.append(provider)
+        elif provider != "muse":
+            try:
+                if discover_windows(provider):
+                    installed.append(provider)
+            except Exception:
+                pass
+    result = Inventory(providers=tuple(available), installed_providers=tuple(installed))
     for provider in available:
         try:
             inventory = discover_targets(provider)
             result.targets.extend(inventory.targets)
             result.warnings.extend(inventory.warnings)
+            result.provider_warnings[provider] = list(inventory.warnings)
         except Exception as exc:
-            result.warnings.append(f"{provider.title()} discovery unavailable: {exc}")
+            problem = f"{provider.title()} discovery unavailable: {exc}"
+            result.warnings.append(problem)
+            result.provider_warnings[provider] = [problem]
     # Provider identity is part of each non-Codex key. Never deduplicate by title.
     result.targets = list({target.key: target for target in result.targets}.values())
     return result

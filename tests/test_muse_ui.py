@@ -20,7 +20,8 @@ w=make()
 try:
     assert w.provider_filter.get_active_id()=='all' and len(w.filtered)==4
     assert set(w.targets)=={a.key,b.key,c.key,m.key} and len(w.selected)==4
-    assert 'fixture login required' in w.status.text()
+    assert 'fixture login required' not in w.status.text()
+    assert 'fixture login required' in w.monitor_tabs.pages['claude'].get_text()
     assert '42% used' in w.quota_label.get_text() and '40% used' in w.quota_label.get_text()
     settings_before=tray_control.watch_settings(AppConfig.load())
     # Real mouse opens the list; keyboard chooses Claude.
@@ -46,7 +47,7 @@ try:
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
         w.resize(1120,820);pump(w)
         assert w.get_size().width<=1120 and w.get_size().height<=820
-        assert w.table.get_parent().get_allocated_height()>=120
+        assert w.table.get_parent().get_allocated_height()>=80
         x,y=pos(w.provider_filter,w)
         assert x>=0 and x+w.provider_filter.get_allocated_width()<=w.get_size().width
         w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))

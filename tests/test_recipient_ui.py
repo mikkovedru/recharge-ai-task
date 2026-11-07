@@ -58,9 +58,10 @@ assert not p.message.get_editable() and not p.message.get_cursor_visible()
 passive=p.message.get_style_context().get_background_color(Gtk.StateFlags.NORMAL)
 # Display labels allow row selection rather than accidental text selection.
 for row in p.rows.values():
-    for label in row.get_child().get_children()[0].get_children():
+    for label in (row.title,row.provider,row.plan,row.allowance):
         assert not label.get_selectable()
         assert 'private-chat-id' not in label.get_text()
+    assert row.preview.get_selectable()  # Expanded messages can be copied.
     assert 'private-chat-id' not in row.get_tooltip_text()
 # Duplicate titles are selected by stable profile/chat identity, even after sort.
 w.table_layout.sort('id', True)

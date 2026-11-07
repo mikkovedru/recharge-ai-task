@@ -12,7 +12,7 @@ and program code use these assets rather than the original input files.
 | Location | Purpose | Size |
 |----------|---------|------|
 | `docs/assets/logo-lockup.png` | Documentation logo with project name | 512 × 512 |
-| `recharge_ai_task/assets/logo-lockup.png` | Dashboard logo | 128 × 128 |
+| `recharge_ai_task/assets/logo-lockup.png` | Dashboard logo source | 512 × 512 |
 | `recharge_ai_task/assets/logo-symbol.png` | Tray source artwork | 512 × 512 |
 | `recharge_ai_task/assets/icon-*.png` | Window and desktop icons | 16, 24, 32, 48, 64, 128, 256 px |
 | `recharge_ai_task/assets/recharge-ai-task.ico` | Windows executable icon | 16–256 px in one ICO |
@@ -31,6 +31,10 @@ python scripts/prepare_branding.py --symbol /path/to/symbol.png --lockup /path/t
 
 Python packages and frozen executables include runtime assets automatically.
 The Windows build uses the ICO for the CLI and combined desktop executable shell icons.
+
+The dashboard scales the logo to the Settings button width, preserves its aspect
+ratio and uses device-scaled pixels for HiDPI displays. The logo does not force
+the Monitoring card to grow.
 
 Hover over the dashboard logo to see the installed program version. Click it to
 open the GitHub repository, or right-click and choose **Copy GitHub repository link**.

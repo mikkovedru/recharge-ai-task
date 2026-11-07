@@ -18,6 +18,8 @@ w=make();p=w.recipient_panel
 try:
     assert p.heading.get_parent() is p.provider_filter.get_parent()
     assert set(p.provider_filter.buttons)=={'all','codex','claude','muse'}
+    assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (4)','Codex (2)','Claude (1)','Muse (1)']
+    assert [column.get_title() for column in w.table.get_columns()[:2]]==['Provider','Project']
     stored=tray_control.watch_settings(AppConfig.load())
     main_filter=w.provider_filter.get_active_id()
     click(p.provider_filter.buttons['claude'],w)
@@ -35,13 +37,20 @@ try:
     assert p.provider_filter.get_active_id()=='muse' and p.selected_key==m.key
     click(w.provider_filter.buttons['codex'],w)
     assert len(w.filtered)==2 and p.provider_filter.get_active_id()=='muse'
+    assert not w.table_layout.columns['provider'][0].get_visible()
+    assert 'Filter visible chats only' not in w.provider_filter.buttons['codex'].get_tooltip_text()
+    click(w.provider_filter.buttons['all'],w)
+    assert w.table_layout.columns['provider'][0].get_visible()
     click(p.provider_filter.buttons['all'],w)
     assert len(p._visible_rows())==4 and len(w.selected)==4
+    w.update_recipient(replace(c,send_prompt=False,send_goal=False));pump(w)
+    assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (3)','Codex (2)','Claude (0)','Muse (1)']
     for dark in (False,True):
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
         w.resize(1120,820);pump(w)
         assert w.get_size().width<=1120 and w.get_size().height<=820
         assert p.provider_filter.get_allocated_width()+pos(p.provider_filter,p.heading_row)[0]<=p.heading_row.get_allocated_width()
+        assert pos(w.provider_filter,w.main_split)[1]>=0  # Controls must not be clipped above the pane.
         w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
         surface.write_to_png('/tmp/2026-11-07_provider-list-buttons-'+('dark' if dark else 'light')+'.png')
 finally:w.destroy()
@@ -58,6 +67,8 @@ w=make();p=w.recipient_panel
 try:
     p.list.select_row(p.rows[b.key]);pump(w);row=p.rows[b.key]
     assert row.preview_toggle.get_visible() and not row.preview.get_visible()
+    assert not row.preview_toggle.get_label() and row.preview_toggle.get_allocated_width()<=32
+    assert "Expand" in row.preview_toggle.get_accessible().get_name()
     stored=AppConfig.load().desktop_targets
     click(row.preview_toggle,w)
     assert row.expanded and row.preview.get_visible()

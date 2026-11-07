@@ -21,6 +21,8 @@ from .theme_ui import apply_color_theme
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
 from .provider_ui import ProviderButtons
+from .provider_monitor import provider_status
+from .provider_monitor_ui import ProviderMonitor, update_selectable_markup
 from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
 from .config import AppConfig, config_path, PROVIDER_LABELS
 from .quota import discover_codex, fetch_quota, quota_from_snapshot, quota_windows
@@ -46,8 +48,11 @@ class TargetPicker(Gtk.Window):
         self.config = AppConfig.load()
         self.set_title("Recharge AI-task")
         self.active_providers = ()
+        self.installed_providers = ()
         self.quotas = {}
         self.quota_errors = {}
+        self.quota_checked = {}
+        self.provider_notices = {}
         apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
         self.preferences = {t.key: t for t in self.config.all_targets()}
@@ -81,7 +86,6 @@ class TargetPicker(Gtk.Window):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         box.set_border_width(14)
         self.add(box)
-        dashboard = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.watch_label = Gtk.Label(label="Checking…", xalign=1)
         self.watch_label.get_accessible().set_name("Monitoring status")
         self.monitoring_heading = Gtk.Label(label="Monitoring", xalign=0)
@@ -90,7 +94,6 @@ class TargetPicker(Gtk.Window):
         monitoring_header.pack_end(self.watch_label, False, False, 0)
         self.quota_label = Gtk.Label(label="Quota: loading…", xalign=0, selectable=True)
         self.quota_label.set_line_wrap(True)
-        controls = Gtk.Box(spacing=8)
         self.watch_button = Gtk.Button(label="Start Desktop watch")
         self.watch_button.connect("clicked", self.toggle_watch)
         self.watch_button.set_sensitive(False)
@@ -99,6 +102,7 @@ class TargetPicker(Gtk.Window):
         self.watch_label.set_halign(Gtk.Align.START)
         watch_row.pack_start(self.watch_button, False, False, 0)
         overview = Gtk.Box(spacing=10)
+        self.monitoring_column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
 
         def card(title, content, *, expand=True):
             frame = Gtk.Frame()
@@ -111,6 +115,9 @@ class TargetPicker(Gtk.Window):
             return frame
 
         self.monitoring_card = card(monitoring_header, watch_row, expand=False)
+        overview.remove(self.monitoring_card)
+        self.monitoring_column.pack_start(self.monitoring_card, False, False, 0)
+        overview.pack_start(self.monitoring_column, False, False, 0)
         self.monitoring_css = Gtk.CssProvider()
         self.monitoring_palette = None
         self.monitoring_card.get_style_context().add_provider_for_screen(self.get_screen(), self.monitoring_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -130,7 +137,7 @@ class TargetPicker(Gtk.Window):
         for label in (self.send_time_label, self.send_countdown_label, self.send_actions_label):
             label.set_line_wrap(True)
             label.set_max_width_chars(30)
-        self.quota_heading = Gtk.Label(label="Quota checks & recovery", xalign=0)
+        self.quota_heading = Gtk.Label(label="All providers · earliest check", xalign=0)
         checks = Gtk.Grid(column_spacing=12, row_spacing=1)
         for row, (left, right) in enumerate(((self.quota_heading, self.send_time_label),
                                            (self.next_check_label, self.send_countdown_label),
@@ -144,46 +151,42 @@ class TargetPicker(Gtk.Window):
                 label.set_hexpand(True)
                 checks.attach(label, column, row, 1, 1)
         checks.attach(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL), 1, 0, 1, 3)
-        self.quota_card = card(None, checks)
+        checks.set_tooltip_text("All providers: earliest check/recovery forecast and combined maximum action counts. Provider tabs show independent schedules.")
+        summary = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=6)
+        summary.pack_start(checks, False, False, 0)
+        summary.pack_start(self.quota_label, False, False, 0)
+        self.monitor_tabs = ProviderMonitor(summary)
+        self.quota_scroller = self.monitor_tabs.get_nth_page(0)
+        self.quota_card = card(None, self.monitor_tabs)
         self.quota_card.set_valign(Gtk.Align.START)
-        dashboard.pack_start(overview, False, False, 0)
-        self.quota_scroller = Gtk.ScrolledWindow()
-        self.quota_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        self.quota_scroller.set_propagate_natural_height(True)
-        self.quota_scroller.set_max_content_height(90)
-        self.quota_scroller.set_min_content_height(20)
-        self.quota_scroller.set_tooltip_text("Quota for each detected provider. Scroll for additional windows and refresh details")
-        self.quota_scroller.add(self.quota_label)
-        dashboard.pack_start(self.quota_scroller, False, False, 0)
         self.quota_button = Gtk.Button(label="Check quota now")
         self.quota_button.connect("clicked", self.refresh_quota)
         self.settings_button = Gtk.Button(label="Settings…")
         self.settings_button.connect("clicked", self.settings)
-        for widget in (self.quota_button, self.settings_button):
-            controls.pack_start(widget, False, False, 0)
-        dashboard.pack_start(controls, False, False, 0)
+        self.quota_button.set_halign(Gtk.Align.START)
+        self.monitoring_column.pack_start(self.quota_button, False, False, 0)
         dashboard_row = Gtk.Box(spacing=12)
-        dashboard.remove(overview)
         dashboard_row.pack_start(overview, True, True, 0)
         self.logo = Gtk.Image.new_from_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(
             str(asset_path("logo-lockup.png")), 64, 64, True))
         self.logo.get_accessible().set_name("Recharge AI-task logo")
         self.logo_link = ProjectLogo(self.logo)
-        self.logo_link.set_halign(Gtk.Align.END)
         self.logo_link.set_valign(Gtk.Align.START)
         self.brand_area = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.brand_area.set_valign(Gtk.Align.START)
         self.brand_area.pack_start(self.logo_link, False, False, 0)
-        self.overview_height = Gtk.SizeGroup(mode=Gtk.SizeGroupMode.VERTICAL)
-        for widget in (self.monitoring_card, self.quota_card, self.logo_link):
-            self.overview_height.add_widget(widget)
+        self.brand_area.pack_start(self.settings_button, False, False, 0)
 
         dashboard_row.pack_end(self.brand_area, False, False, 0)
         box.pack_start(dashboard_row, False, False, 0)
         self.selection_help = Gtk.Label(xalign=0)
-        self.selection_help.set_markup("<b>Automatic quota recovery</b> · Choose Send message, Resume goal, or both for each recipient.\n"
+        self.selection_help.set_markup("<b>Automatic quota recovery</b> · Choose Send message, Resume goal, or both for each recipient. "
             "Choices and message text save automatically for future quota recovery. Editing them sends nothing now.")
         self.selection_help.set_line_wrap(True)
+        self.selection_help.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.selection_help.set_width_chars(1)
+        self.selection_help.set_max_width_chars(32)
+        self.monitoring_column.pack_start(self.selection_help, False, False, 0)
 
         self.search = Gtk.SearchEntry(placeholder_text="Search title, status, ID, project, process, or link…")
         self.search.connect("search-changed", lambda _: self.filtered.refilter())
@@ -191,7 +194,7 @@ class TargetPicker(Gtk.Window):
         filter_toolbar = Gtk.Box(spacing=10)
         search_row.pack_start(filter_toolbar, False, False, 0)
         self.provider_filter = ProviderButtons(active=self.config.chat_provider_filter,
-            purpose="Filter visible chats only; hidden recipients remain selected and monitored")
+            purpose="")
         filter_box = Gtk.Box(spacing=6, margin=4)
         filter_label = Gtk.Label.new_with_mnemonic("_Provider:")
         filter_label.set_mnemonic_widget(self.provider_filter.buttons[self.provider_filter.get_active_id()])
@@ -225,7 +228,7 @@ class TargetPicker(Gtk.Window):
         self.table.connect_after("draw", self._draw_recipient_divider)
         self.table.set_has_tooltip(True)
         self.table.connect("query-tooltip", self._tooltip)
-        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at", leading_column="project_name", selected_columns=(0, 12))
+        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at", leading_column="provider", selected_columns=(0, 12))
         for label, index, action in (("Send message", 0, "send_prompt"), ("Resume goal", 12, "send_goal")):
             checkbox = Gtk.CellRendererToggle()
             checkbox.connect("toggled", self._toggle, action)
@@ -281,9 +284,12 @@ class TargetPicker(Gtk.Window):
         for index,info in self.status_info.items():
             info.bind_column(self.table_layout.columns["goal_status" if index==11 else "task_status"][0])
         self.table_layout.restore()
+        if (self.config.table_layout or {}).get("leading_column") != "provider":
+            self.table.move_column_after(self.table_layout.columns["project_name"][0], self.table_layout.columns["provider"][0])
+        self._provider_column_visibility()
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroller.set_min_content_height(120)
+        scroller.set_min_content_height(80)
         scroller.add(self.table)
         box.pack_start(scroller, True, True, 0)
         self.inventory_status = Gtk.Label(label="Discovering targets…", xalign=0)
@@ -392,9 +398,9 @@ class TargetPicker(Gtk.Window):
         self.recipient_frame.get_accessible().set_name("Recipient actions and overrides")
         self.recipient_frame.add(self.recipient_panel)
         self.main_split = self.window_layout.pane("targets", self.list_area, self.message_area, position=.50)
+        self.main_split.child_set_property(self.list_area, "shrink", False)
+        self.main_split.child_set_property(self.message_area, "shrink", False)
         self.left_workspace = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        self.left_workspace.pack_start(dashboard, False, False, 0)
-        self.left_workspace.pack_start(self.selection_help, False, False, 0)
         self.left_workspace.pack_start(self.main_split, True, True, 0)
         self.right_workspace = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.right_workspace.pack_start(self.recipient_frame, True, True, 0)
@@ -402,6 +408,7 @@ class TargetPicker(Gtk.Window):
         box.pack_start(self.workspace_split, True, True, 0)
         self.default_editor.connect("resized", self._resize_default_message)
         self._install_shortcuts()
+        self.logo_link.match_width(self.settings_button, GdkPixbuf.Pixbuf.new_from_file(str(asset_path("logo-lockup.png"))))
         WrappingButton._label(self.send_button).set_max_width_chars(12)
         self.default_editor.set_valign(Gtk.Align.FILL)
         self.connect("delete-event", lambda *_: self.busy)
@@ -556,12 +563,16 @@ class TargetPicker(Gtk.Window):
 
     def _provider_filter_changed(self, *_):
         self.filtered.refilter()
+        self._provider_column_visibility()
         try:
             config = AppConfig.load()
             config.chat_provider_filter = self.provider_filter.get_active_id()
             config.save()
         except Exception as exc:
             self._message("Could not save chat filter: " + str(exc), "warning")
+
+    def _provider_column_visibility(self):
+        self.table_layout.columns["provider"][0].set_visible(self.provider_filter.get_active_id() == "all")
 
     @staticmethod
     def _goal_cell(_column, renderer, model, iterator, _data):
@@ -807,6 +818,29 @@ class TargetPicker(Gtk.Window):
             self._overview_label(label, text, level, bold=bold)
         self.send_actions_label.set_text(actions)
         self.send_actions_label.set_tooltip_text(actions)
+        self._render_provider_views()
+
+    def _render_provider_views(self):
+        if not hasattr(self, "monitor_tabs"):
+            return
+        panel = getattr(self, "recipient_panel", None)
+        usage = getattr(panel, "last_usage", {})
+        usage_error = getattr(panel, "ledger_error", "")
+        statuses = {provider: provider_status(provider, targets=list(self.selected.values()),
+            config=getattr(panel, "view_config", self.config), usage=usage, quota=self.quotas.get(provider),
+            error=self.quota_errors.get(provider, ""), notices=self.provider_notices.get(provider, ""),
+            checked_at=self.quota_checked.get(provider), runtime=self.runtime,
+            installed=provider in self.installed_providers, now=time.time(), usage_error=usage_error)
+            for provider in ("codex", "claude", "muse")}
+        self.monitor_tabs.update(statuses, self.quota_interval)
+        for provider, status in statuses.items():
+            detail = status["selection"] + "\n" + (status["error"] or status["notices"] or
+                ("Monitoring on" if status["monitored"] else "Monitoring off"))
+            self.provider_filter.set_status(provider, status["state"], detail, installed=provider in self.installed_providers)
+        states = [status["state"] for status in statuses.values()]
+        level = next((level for level in ("error", "warning", "enabled") if level in states), "off")
+        self.provider_filter.set_status("all", level, "All providers · " +
+            "; ".join(provider.title() + ": " + status["state"] for provider, status in statuses.items()))
 
     def clear_log(self, *_):
         self.log_cleared_at = time.time()
@@ -921,6 +955,7 @@ class TargetPicker(Gtk.Window):
                 try:
                     self.quotas[provider] = quota_from_snapshot(snapshot)
                     self.quota_updated = progress.get("checked_at") or time.time()
+                    self.quota_checked[provider] = progress.get("checked_at")
                 except (TypeError, ValueError, KeyError) as exc:
                     error = "Invalid monitoring quota snapshot: " + str(exc)
             self.quota_errors[provider] = error
@@ -929,9 +964,6 @@ class TargetPicker(Gtk.Window):
     def _sync_quota_display(self):
         self.quota = self.quotas.get("codex") or next(iter(self.quotas.values()), None)
         self.quota_error = "; ".join(f"{PROVIDER_LABELS.get(p, p)}: {e}" for p, e in self.quota_errors.items() if e)
-        if self.quota_error and self.quota_error != self._quota_notice:
-            self._message("Quota refresh failed: " + self.quota_error, "error")
-        self._quota_notice = self.quota_error
         self.render_quota()
 
     def refresh_quota(self, *_):
@@ -963,6 +995,7 @@ class TargetPicker(Gtk.Window):
                 if quota is not None:
                     self.quotas[provider] = quota
                     self.quota_updated = time.time()
+                    self.quota_checked[provider] = self.quota_updated
             self._sync_quota_display()
         def read_quota():
             from concurrent.futures import ThreadPoolExecutor
@@ -1011,13 +1044,12 @@ class TargetPicker(Gtk.Window):
             if quota is None:
                 lines.append(GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider) + ": quota unavailable"))
                 continue
-            lines.append("<b>" + GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider)) + "</b> · " +
+            lines.append("<b>" + GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider)) + "</b>" + (" · last known quota" if self.quota_errors.get(provider) else "") + " · " +
                          " · ".join(window_text(w) for w in quota_windows(quota)))
             if quota.has_credits or quota.unlimited_credits:
                 lines.append("Additional credits are available" + (" · backend still reports a limit" if quota.rate_limit_reached or quota.spend_control_reached else " · usable without waiting for the included window reset"))
-        age = max(0, int(time.time() - (self.quota_updated or time.time())))
-        lines.append(f"Quota refreshed {age}s ago · automatic refresh every {self.quota_interval}s" + (" · Latest refresh failed — see messages below" if self.quota_error else ""))
-        self.quota_label.set_markup("\n".join(lines))
+        lines.append(f"Quota checked per provider · automatic refresh every {self.quota_interval}s" + (" · Latest refresh failed · see provider tabs" if self.quota_error else ""))
+        update_selectable_markup(self.quota_label, "\n".join(lines))
         return True
 
     def _apply_provider_config(self, config):
@@ -1065,6 +1097,8 @@ class TargetPicker(Gtk.Window):
 
     def _apply_inventory(self, inventory):
         providers = tuple(dict.fromkeys((*inventory.providers, *(t.provider for t in inventory.targets), *(t.provider for t in self.selected.values()))))
+        self.installed_providers = (inventory.installed_providers if inventory.installed_providers is not None else
+            inventory.providers or tuple({target.provider for target in inventory.targets}))
         if providers != self.active_providers:
             self.active_providers = providers
             self.refresh_quota()
@@ -1096,12 +1130,14 @@ class TargetPicker(Gtk.Window):
             else:
                 self.store.set(iterator, list(range(len(values))), values)
         self.filtered.refilter()
-        warnings = "\n".join(inventory.warnings)
+        self.provider_notices = {p: "\n".join(rows) for p, rows in inventory.provider_warnings.items()}
+        scoped_warnings = {warning for rows in inventory.provider_warnings.values() for warning in rows}
+        warnings = "\n".join(w for w in inventory.warnings if w not in scoped_warnings)
         if warnings and warnings != self._inventory_notice:
             self._message(warnings, "warning")
         self._inventory_notice = warnings
         self.inventory_status.set_text(f"{len(inventory.targets)} targets · Status refreshed {time.strftime('%H:%M:%S')} · Every 15 seconds"
-            + (f" · {len(inventory.warnings)} warning(s); see messages below" if inventory.warnings else ""))
+            + (f" · {len(inventory.warnings)} warning(s); see provider tabs or program log" if inventory.warnings else ""))
         self._summary()
 
     def refresh(self, *_, automatic=False):

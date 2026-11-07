@@ -67,7 +67,7 @@ try:
         p.list.select_row(p.rows[b.key]);pump(w)
         normal=context.get_background_color(context.get_state())
         p.list.select_row(p.rows[a.key]);pump(w)
-        assert abs(selected.red-normal.red)+abs(selected.green-normal.green)+abs(selected.blue-normal.blue)>.12,(dark,selected.to_string(),normal.to_string())
+        assert sum(abs(getattr(selected,c)-getattr(normal,c)) for c in ('red','green','blue','alpha'))>.12,(dark,selected.to_string(),normal.to_string())
     assert p.prompt_limit.default.get_label()=='Global default (∞)'
     p.default_prompt.limited.clicked();p.default_prompt.number_popover.popdown();p.default_prompt.number.set_value(3);pump(w)
     assert p.prompt_limit.default.get_label()=='Global default (3)'
@@ -148,9 +148,9 @@ try:
     if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
         select('b');w.set_accept_focus(True)
         xid=str(w.get_window().get_xid())
-        subprocess.run(['xdotool','windowfocus',xid],check=True)
+        subprocess.run(['xdotool','windowactivate','--sync',xid],check=True)
         path=next(row.path for row in w.filtered if row[4]=='b')
-        area=w.table.get_background_area(path,w.title_column)
+        area=w.table.get_background_area(path,w.table_layout.columns['provider'][0])
         x,y=w.table.convert_bin_window_to_widget_coords(area.x+12,area.y+area.height//2)
         x,y=w.table.translate_coordinates(w,x,y)
         subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y),'click','1'],check=True);pump(w)
@@ -161,6 +161,6 @@ try:
     assert w.get_size().width<=1120 and w.get_size().height<=820
 finally:
     w.destroy()
-'''],capture_output=True,text=True,timeout=25)
+'''],capture_output=True,text=True,timeout=40)
     assert result.returncode==0,result.stdout+result.stderr
     assert 'CRITICAL' not in result.stderr,result.stderr

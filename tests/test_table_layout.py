@@ -41,9 +41,17 @@ window.add(table)
 window.show_all()
 def events():
     import time
-    deadline = time.monotonic() + .15
+    earliest = time.monotonic() + .15
+    deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
         while Gtk.events_pending(): Gtk.main_iteration_do(False)
+        settled = not layout.geometry_pending and layout.geometry_timer is None
+        for col, _index in layout.columns.values():
+            for renderer in col.get_cells():
+                if isinstance(renderer, Gtk.CellRendererText):
+                    settled = settled and renderer.get_property("wrap-width") == max(1, col.get_width() - 6)
+        if time.monotonic() >= earliest and settled:
+            return
         time.sleep(.002)
 events()
 assert table.get_columns()[0].get_widget().get_allocation().height < 80

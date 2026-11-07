@@ -40,10 +40,10 @@ def run_gui(source):
 
 
 @pytest.mark.skipif(os.environ.get('RECHARGE_AI_TASK_GUI_TESTS')!='1',reason='Requires GTK')
-def test_project_moves_first_and_keeps_saved_widths():
+def test_provider_and_project_move_first_and_keep_saved_widths():
     run_gui(r'''
 w=make()
-assert w.table.get_columns()[0].get_title()=='Project'
+assert [c.get_title() for c in w.table.get_columns()[:2]]==['Provider','Project']
 assert w.title_column.get_fixed_width()==177
 w.table.move_column_after(w.title_column,None)
 w.table_layout.close();w.destroy()
@@ -52,7 +52,7 @@ assert w.table.get_columns()[0].get_title()=='Title'
 assert w.title_column.get_fixed_width()==177
 w.destroy()
 config=AppConfig.load();config.table_layout=None;config.save()
-w=make();assert w.table.get_columns()[0].get_title()=='Project';w.destroy()
+w=make();assert [c.get_title() for c in w.table.get_columns()[:2]]==['Provider','Project'];w.destroy()
 ''')
 
 

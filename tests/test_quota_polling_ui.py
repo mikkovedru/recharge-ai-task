@@ -44,6 +44,7 @@ try:
     progress.update(phase='quota_unavailable',quota_error='offline')
     w.poll_runtime();pump(w)
     assert w.quota==observed and 'Latest refresh failed' in w.quota_label.get_text()
-    assert 'offline' in w.status.text() and len(calls)==before
+    assert 'offline' not in w.status.text() and len(calls)==before
+    assert 'offline' in w.monitor_tabs.pages['codex'].get_text()
 finally:w.destroy()
 ''')

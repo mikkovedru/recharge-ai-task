@@ -75,8 +75,9 @@ try:
         for width,height in ((1440,980),(1120,820)):
             w.resize(width,height);pump(w)
             heights=[widget.get_allocated_height() for widget in (w.monitoring_card,w.quota_card,w.logo_link)]
-            assert max(heights)-min(heights)<=1 and max(heights)<100,heights
-            assert w.logo.get_pixbuf().get_width()==64
+            assert heights[0]<110 and heights[2]==w.settings_button.get_allocated_width(),heights
+            assert heights[1]<250 and w.monitor_tabs.get_n_pages()==4,heights
+            assert w.logo.get_allocated_width()==w.settings_button.get_allocated_width()
             assert pos(w.quota_heading,w)[1]==pos(w.send_time_label,w)[1]
             assert w.send_time_label.get_tooltip_text()==w.send_time_label.get_text()
             assert not w.send_time_label.get_line_wrap()
@@ -86,7 +87,9 @@ try:
         surface.write_to_png('/tmp/2026-11-06_compact-overview-'+('dark' if dark else 'light')+'.png')
     if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
         Gtk.Settings.get_default().set_property('gtk-tooltip-timeout',100)
-        xid=str(w.get_window().get_xid());x,y=pos(w.send_button,w)
+        w.set_accept_focus(True);pump(w)
+        xid=str(w.get_window().get_xid());subprocess.run(['xdotool','windowactivate','--sync',xid],check=True);pump(w)
+        x,y=pos(w.send_button,w)
         subprocess.run(['xdotool','mousemove','--window',xid,str(x+10),str(y+10)],check=True);pump(w,1)
         assert any(t.get_visible() and t.get_type_hint()==Gdk.WindowTypeHint.TOOLTIP for t in Gtk.Window.list_toplevels())
 finally:w.destroy()

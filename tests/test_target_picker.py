@@ -71,7 +71,7 @@ def check():
         assert not window.selected
         window.table_layout.sort("id")
         assert window.get_title() == "Recharge AI-task"
-        assert window.logo.get_pixbuf().get_width() == 64
+        assert window.logo.get_allocated_width() == window.settings_button.get_allocated_width()
         assert {icon.get_width() for icon in window.get_icon_list()} == {16,24,32,48,64,128,256}
         assert not any(isinstance(child, Gtk.Label) and "Choose chats by ID" in child.get_text() for child in window.get_child().get_children())
         assert not hasattr(window, "save_state")
@@ -82,7 +82,7 @@ def check():
         assert window.next_check_label.get_text() == "—"
         assert "monitoring is off" in window.next_check_detail.get_text()
         visible_titles = lambda: [c.get_title() for c in window.table.get_columns() if c.get_visible()]
-        assert visible_titles() == ["Project", "Send message", "Resume goal", "Provider", "Title", "Last active", "Task status", "Goal status"]
+        assert visible_titles() == ["Provider", "Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status"]
         assert "Editing them sends nothing now" in window.selection_help.get_text()
         assert "monitoring off" in window.send_button.get_tooltip_text()
         assert not window.send_button.get_sensitive()
@@ -261,7 +261,7 @@ def check():
         assert window.send_button.get_label() == "Send now to 1 recipient"
         assert window.send_button.get_sensitive()
         assert not window.dirty() and not hasattr(window, "save_state")
-        assert [c.get_title() for c in window.table.get_columns()][:10] == ["Project", "Send message", "Resume goal", "Provider", "Title", "Last active", "Task status", "Goal status", "Project path", "Kind"]
+        assert [c.get_title() for c in window.table.get_columns()][:10] == ["Provider", "Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project path", "Kind"]
         window.table.get_selection().select_path("0")
         target_ui.discover_targets = lambda: Inventory([alpha, replace(beta, task_status="Waiting for input", goal_status="Blocked")])
         window.refresh_statuses()
@@ -432,7 +432,8 @@ def check():
         idle()
         assert "42%" in window.quota_label.get_text()
         assert "Latest refresh failed" in window.quota_label.get_text()
-        assert "offline" in window.status.latest_text and window.status.latest_level == "error"
+        assert "offline" not in window.status.text()
+        assert "offline" in window.monitor_tabs.pages["codex"].get_text()
     except Exception as exc:
         import traceback
         errors.append(traceback.format_exc())

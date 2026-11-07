@@ -29,9 +29,24 @@ complete resize/redraw. Narrowing and widening must settle with no pending
 geometry work, correct row heights, and unchanged recipient selection. Column
 width and order persistence is separate from drawing geometry.
 
-Project moves to the first position for fresh layouts and older saved layouts.
-A saved leading-column policy marks that migration, so a later deliberate user
-reorder remains effective.
+As of 2026-11-07, Provider moves before Project for fresh and older saved layouts;
+individual provider views hide Provider. A saved leading-column policy marks the
+migration, so a later deliberate user reorder remains effective.
+
+## Pane restoration after startup allocation
+
+Three timed restore passes could finish before GTK's nested pane allocations
+settled. A native reopen at the same 1120×820 size reproduced a saved divider
+moving from 194 to 198 pixels, shrinking the editor by four pixels while the total
+pane height stayed unchanged. Waiting longer in the test did not correct it.
+
+`WindowLayout` now reapplies saved positions until actual pane and child geometry
+stays stable across consecutive allocation passes. The startup window is bounded
+to eight 30ms retries; later user drags remain authoritative. Restoring saved
+positions waits at least six passes before accepting stable geometry, so a short
+early quiet period does not miss the following style allocation. First-run
+default placement can finish earlier. A native regression
+retains the exact saved-position assertion after real dragging and reopening.
 
 ## Hover popovers
 

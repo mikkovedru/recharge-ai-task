@@ -52,9 +52,17 @@ class WindowLayout:
     def _mapped(self, *_):
         if self.ready:
             return
+        previous_geometry = None
+        stable_passes = 0
         def restore(step=0):
+            nonlocal previous_geometry, stable_passes
             if self.closed:
                 return False
+            geometry = tuple((key, pane.get_position(), pane.get_allocated_width(), pane.get_allocated_height(),
+                              pane.get_child1().get_allocated_height(), pane.get_child2().get_allocated_height())
+                             for key, (pane, _default) in self.panes.items())
+            stable_passes = stable_passes + 1 if geometry == previous_geometry else 0
+            previous_geometry = geometry
             positions = self.saved.get("panes", {})
             for key, (pane, default) in reversed(list(self.panes.items())):
                 value = positions.get(key, default) if isinstance(positions, dict) else default
@@ -67,12 +75,15 @@ class WindowLayout:
                 if type(value) is float and 0<value<1:
                     value=int(extent*value)
                 pane.set_position(value if type(value) is int and 0 <= value <= 10000 else 200)
-            if step == 2:
+            minimum_passes = 6 if positions else 2
+            if (step >= minimum_passes and stable_passes >= 2) or step >= 8:
                 self.ready = True
                 self.initial = self.snapshot()
             else:
-                # Outer panes allocate their children on the next GTK layout
-                # pass. Reapply inner positions afterwards to avoid drift.
+                # GTK may adjust a non-resizing child after the first restore
+                # passes. Finish only after geometry settles, with a bounded
+                # startup window so later user drags remain authoritative.
+                # Saved positions need the later style/layout passes as well.
                 GLib.timeout_add(30, lambda: restore(step + 1))
             return False
         GLib.idle_add(restore)

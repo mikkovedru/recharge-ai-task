@@ -48,8 +48,11 @@ def close_color(actual,expected):
     return max(abs(getattr(actual,k)-getattr(expected,k)) for k in ('red','green','blue'))<.035
 def pos(widget,root):return widget.translate_coordinates(root,0,0)
 def click(widget,w):
-    xid=str(w.get_window().get_xid());x,y=pos(widget,w)
-    subprocess.run(['xdotool','mousemove','--window',xid,str(x+widget.get_allocated_width()-10),str(y+widget.get_allocated_height()//2),'click','1'],check=True)
+    w.set_accept_focus(True);w.set_focus_on_map(True);pump(w)
+    xid=str(w.get_window().get_xid())
+    subprocess.run(['xdotool','windowactivate','--sync',xid],check=True,timeout=5)
+    pump(w);x,y=pos(widget,w)
+    subprocess.run(['xdotool','mousemove','--window',xid,str(x+(widget.get_allocated_width()-10 if isinstance(widget,Gtk.SpinButton) else widget.get_allocated_width()//2)),str(y+widget.get_allocated_height()//2),'click','1'],check=True)
     pump(w)
 '''
 
@@ -115,7 +118,11 @@ try:
         assert row.details.get_visible() and 'Message ready' in row.explanation.get_text()
         row.details.popdown();pump(w)
     w.resize(1120,820);pump(w)
-    assert w.get_size().width<=1120 and w.get_size().height<=820
+    # Popover transitions and native configure events finish asynchronously.
+    deadline=time.monotonic()+2
+    while (w.get_size().width>1120 or w.get_size().height>820) and time.monotonic()<deadline:
+        pump(w,.1)
+    assert w.get_size().width<=1120 and w.get_size().height<=820,(w.get_size(),w.get_preferred_width(),p.get_preferred_width(),w.left_workspace.get_preferred_width())
     assert pos(p.once,p.custom_row)[0]+p.once.get_allocated_width()<=p.custom_row.get_allocated_width()
 finally:w.destroy()
 ''')
@@ -130,6 +137,12 @@ try:
     assert w.monitoring_card.get_allocated_height()<110
     assert w.monitoring_card.get_allocated_height()<=w.watch_button.get_allocated_height()+w.monitoring_heading.get_allocated_height()+32
     assert pos(w.watch_label,w)[0]>pos(w.monitoring_heading,w)[0]
+    assert w.settings_button.get_parent() is w.brand_area
+    assert pos(w.settings_button,w)[1]>=pos(w.logo_link,w)[1]+w.logo_link.get_allocated_height()
+    assert w.quota_button.get_parent() is w.monitoring_column
+    assert pos(w.quota_button,w)[1]>=pos(w.monitoring_card,w)[1]+w.monitoring_card.get_allocated_height()
+    assert w.selection_help.get_parent() is w.monitoring_column
+    assert w.left_workspace.get_children()==[w.main_split]
     for dark in (False,True):
         Gtk.Settings.get_default().set_property('gtk-theme-name','Adwaita')
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w)
@@ -187,6 +200,11 @@ try:
     w.resize(1120,820);pump(w)
     assert w.get_size().width<=1120 and w.get_size().height<=820
     assert pos(w.quota_heading,w)[1]==pos(w.send_time_label,w)[1]
+    label=w.selection_help
+    assert not label.get_layout().is_ellipsized()
+    assert label.get_layout().get_pixel_size()[1]<=label.get_allocated_height()
+    assert pos(label,w)[1]+label.get_allocated_height()<=pos(w.main_split,w)[1]
+    assert w.list_area.get_allocated_height()>=200
 finally:w.destroy()
 ''')
 

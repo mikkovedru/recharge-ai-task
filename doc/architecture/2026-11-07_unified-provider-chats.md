@@ -66,3 +66,41 @@ MSP server. These limits are described in the [user guide](../../README.md#anthr
 Native contracts: [Claude session management](https://code.claude.com/docs/en/sessions),
 [Muse audit logs](https://dev.meta.ai/docs/cookbook/audit-agent-sessions), and
 [Muse session streams](https://meta-models.github.io/muse-code-sdk/next/guides/msp-concepts/sessions-and-turns/).
+
+
+## Provider-specific dashboard presentation
+
+The list button groups filter their own views without mutating recipients.
+Question/exclamation icons in parentheses represent warnings and errors only;
+healthy tabs have no status icon. The pressed button represents the independent
+visibility choice. Recipient filter captions include total category counts.
+All starts with Provider before Project; individual provider views hide Provider. Recipient rows
+carry their own provider badge and disclose overflowing custom messages with
+icon-only view controls. Expansion does not alter message text or delivery state.
+
+`provider_monitor` scopes worker observations and usage-ledger statistics by
+provider before formatting any schedule. The All tab labels its earliest schedule
+and combined maximum counts explicitly. Separate tabs retain each provider's plan,
+usage windows, observation timestamp and failure. A failed refresh may retain old
+quota values, marked as last known, without asserting current availability.
+Missing data never becomes a zero or another provider's forecast. These views
+perform no quota fetch or delivery; existing workers and standalone refreshes
+supply observations. Recipient ledger snapshots supply statistics without adding
+per-frame database reads. Monitoring tab headers own their tooltip, so the text,
+icon and parentheses inherit the same explanation. Page changes clear GTK's
+automatic label selection while leaving text available for deliberate copying.
+Polling leaves unchanged tooltip text, notice icons and colors intact so refreshes
+do not repeatedly replace the hovered tab's presentation.
+
+Inventory warnings retain their provider at discovery. Quota and discovery notices
+are rendered in that provider's tab and replaced by current state, avoiding repeated
+shared-log messages. Delivery history adds an additive provider column with an
+empty default for legacy records; unknown historical attribution is explicit.
+Program-wide messages and provider-specific outcomes remain distinguishable in
+both the displayed log and exports. Concurrent quota workers also label their
+file/stderr status with their provider.
+
+Installation identity is separate from local-history availability. Main filter
+buttons are insensitive when no executable or supported running app is detected;
+local histories can remain in All. Warning/error adornments are real themed
+question/exclamation Gtk images after the caption in neutral round brackets.

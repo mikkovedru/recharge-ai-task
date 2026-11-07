@@ -71,6 +71,8 @@ class Inventory:
     targets: list[Target] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     providers: tuple[str, ...] = ()
+    provider_warnings: dict[str, list[str]] = field(default_factory=dict)
+    installed_providers: tuple[str, ...] | None = None
 
 
 def codex_home():
