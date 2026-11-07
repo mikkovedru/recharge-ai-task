@@ -129,3 +129,74 @@ binary, not from a documented OpenAI repair procedure.
 The [daemon metadata reset investigation](2026-11-07_codex-daemon-metadata-reset.md)
 documents a separate, confirmed protocol-selection bug that does not require
 restarting Codex or deleting sockets.
+
+
+## Registration confirmed after the accessibility-enabled relaunch
+
+Following the user's full relaunch with the flag, a 2026-11-07 read-only probe
+confirmed that the current desktop IPC process was registered on the
+accessibility bus. Its command line contained `--force-renderer-accessibility`.
+The earlier registration blocker was therefore cleared in that session.
+The next failure concerned foreground ownership and absent ACTIVE frame state,
+not a missing accessibility connection. See the
+[exact-chat navigation findings](2026-11-04_exact-chat-goal-navigation.md#foreground-acquisition-and-missing-active-frame-state).
+This confirms successful registration in this run; it does not establish why
+earlier launches lacked it or prove a live Goal was resumed.
+
+
+## Slow requests are distinct from unavailable accessibility
+
+The user's 19:38:47 failure was `G_IO_ERROR_TIMED_OUT` (24) after navigation
+reached the selected chat. The adapter used a fixed 1,500 ms deadline for every
+request and treated a timeout or D-Bus NO_REPLY as a broken transport: it closed
+the connection and suggested session repair. That diagnosis was too broad. The
+historical log did not include the method or object path, so its exact slow
+request cannot be recovered.
+
+Native Goal calls now use 30,000 ms (20 times longer), while other users of the
+scoped adapter retain their existing default. Control polling budgets increase
+from 3 to 15 seconds, navigation from 10 to 60 seconds, and activation
+confirmation from 5 to 30 seconds. The isolated helper has 240 seconds overall,
+plus up to 45 seconds for cleanup after termination, rather than 45 and 12.
+These are bounded waits; an in-flight request can outlast a polling phase's
+budget. Longer waits do not make absent controls available.
+
+A new timeout error names the interface, method, object path and request limit,
+and explicitly avoids claiming accessibility is disabled. A slow connection is
+kept open. A timed-out request is not replayed, especially DoAction or editing
+calls. Native navigation propagates that error immediately; an invocation of
+Resume whose acknowledgement times out stays uncertain and cannot be repeated
+automatically. Closed/missing transports retain their separate repair guidance.
+
+A private D-Bus fixture with 2.2-second replies demonstrates the old deadline
+failing and the 30-second deadline succeeding on the same still-open connection.
+Its timed-out action counter stays at one. Tests also cover the helper/cleanup
+budgets, controls appearing after the former three-second wait, timeout details,
+focus guards and post-Resume uncertainty.
+
+A live Goal-only test then used the selected recipient's saved allowances and
+normal delivery path. It succeeded: native and desktop Goal state became active,
+the desktop task was active, and objective/creation identity/token budget were
+unchanged. No prompt was sent. This verifies actual activation and an active
+turn in that session; it does not establish that every historical failure had
+the same cause or guarantee an indefinitely healthy accessibility service.
+
+## Accessibility existed in the original working implementation
+
+The native control implementation introduced on 2026-10-10 in `b3a86c2` already
+used pyatspi. Access to the native Resume button has always required exposed
+accessibility controls. The explicit launch flag is one way to force exposure,
+not an inherent requirement when the application activates accessibility itself.
+Chromium documents its
+[on-demand activation and force flag](https://chromium.googlesource.com/chromium/src.git/+/HEAD/docs/accessibility/overview.md#command-line-options).
+That explains how the feature can work without a flag; it does not reconstruct
+the previous Codex process's activation state.
+
+The later scoped adapter avoids global caches because the old libatspi discovery
+path could trigger a confirmed Cinnamon crash. This changes discovery/cache
+behavior, rather than introducing accessibility as a new dependency. Do not
+claim the old library simply had a longer normal deadline: upstream AT-SPI 2.52
+[documents an 800 ms normal timeout and 15-second startup allowance](https://github.com/GNOME/at-spi2-core/blob/AT_SPI2_CORE_2_52_0/atspi/atspi-misc.c#L1783-L1804).
+The exact historical contribution of startup allowance, cache availability and
+application behavior remains unknown. Restoring unsafe global cache enumeration
+is not needed for the verified activation above.

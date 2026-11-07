@@ -16,8 +16,13 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi, Gdk, Gtk
-from .scoped_accessibility import ApplicationBus, AccessibilityUnavailable
+from .scoped_accessibility import ApplicationBus, AccessibilityUnavailable, AccessibilityTimeout
 from Xlib import display
+
+ACCESSIBILITY_TIMEOUT_MS = 30_000
+CONTROL_WAIT_SECONDS = 15
+NAVIGATION_SECONDS = 60
+ACTIVATION_CONFIRMATION_SECONDS = 30
 
 
 class ClipboardSnapshot:
@@ -79,17 +84,59 @@ def nodes(node, depth=0):
             yield from nodes(child, depth+1)
 
 
+class FocusChanged(RuntimeError):
+    """Stop native navigation if its verified desktop loses focus."""
+
+
 def active_window(pid):
     with closing(display.Display()) as connection:
         value = connection.screen().root.get_full_property(connection.intern_atom("_NET_ACTIVE_WINDOW"), 0)
         if value is None or not value.value[0]:
-            raise RuntimeError("Codex is not the active window; no Goal action sent")
+            raise FocusChanged("Codex is not the active window; no Goal action sent")
         xid = int(value.value[0])
         window = connection.create_resource_object("window", xid)
         owner = window.get_full_property(connection.intern_atom("_NET_WM_PID"), 0)
         if owner is None or int(owner.value[0]) != pid:
-            raise RuntimeError("Another application has focus; no Goal action sent")
+            raise FocusChanged("Another application has focus; no Goal action sent")
         return xid
+
+
+def focus_codex(pid):
+    """Acquire focus once; subsequent focus loss must never trigger a retry."""
+    try:
+        return active_window(pid)
+    except FocusChanged:
+        pass
+    with closing(display.Display()) as connection:
+        root = connection.screen().root
+        clients = root.get_full_property(connection.intern_atom("_NET_CLIENT_LIST"), 0)
+        normal = connection.intern_atom("_NET_WM_WINDOW_TYPE_NORMAL")
+        candidates = []
+        for xid in clients.value if clients is not None else []:
+            window = connection.create_resource_object("window", int(xid))
+            owner = window.get_full_property(connection.intern_atom("_NET_WM_PID"), 0)
+            if owner is None or int(owner.value[0]) != pid:
+                continue
+            kind = window.get_full_property(connection.intern_atom("_NET_WM_WINDOW_TYPE"), 0)
+            if kind is not None and normal not in kind.value:
+                continue
+            candidates.append(int(xid))
+        if len(candidates) != 1:
+            raise RuntimeError("Could not identify one Codex window to activate. "
+                               "Bring the intended Codex window to the foreground and retry; no Goal action sent")
+        xid = candidates[0]
+    subprocess.run(["xdotool", "windowactivate", "--sync", str(xid)], check=True, timeout=5)
+    if active_window(pid) != xid:
+        raise FocusChanged("The Codex window changed during activation; no Goal action sent")
+    return xid
+
+
+def window_bounds(xid):
+    with closing(display.Display()) as connection:
+        window = connection.create_resource_object("window", xid)
+        size = window.get_geometry()
+        position = connection.screen().root.translate_coords(window, 0, 0)
+        return (position.x, position.y, size.width, size.height)
 
 
 _application_bus = None
@@ -98,7 +145,7 @@ _application_bus = None
 def accessibility_bus():
     global _application_bus
     if _application_bus is None:
-        _application_bus = ApplicationBus()
+        _application_bus = ApplicationBus(timeout_ms=ACCESSIBILITY_TIMEOUT_MS)
     return _application_bus
 
 
@@ -120,10 +167,24 @@ def preflight_accessibility(pid):
 def visible_frame(pid):
     global _application_bus
     for attempt in range(2):
-        active_window(pid)
+        xid = active_window(pid)
         try:
             app = accessibility_bus().application(pid)
-            frames = [frame for frame in app if frame.getState().contains(Atspi.StateType.ACTIVE)]
+            children = list(app)
+            frames = [frame for frame in children if frame.getState().contains(Atspi.StateType.ACTIVE)]
+            if not frames:
+                # Some Chromium releases omit ACTIVE on every frame. Match the
+                # verified X11 client exactly, never an arbitrary visible frame.
+                bounds = window_bounds(xid)
+                frames = []
+                for frame in children:
+                    if frame.getRoleName() != "frame" or not frame.getState().contains(Atspi.StateType.SHOWING):
+                        continue
+                    extent = frame.queryComponent().getExtents(Atspi.CoordType.SCREEN)
+                    if (extent.x, extent.y, extent.width, extent.height) == bounds:
+                        frames.append(frame)
+                if active_window(pid) != xid:
+                    raise FocusChanged("The Codex window changed during discovery; no Goal action sent")
             if len(frames) != 1:
                 raise RuntimeError("Could not identify the active Codex window; no Goal action sent")
             return frames[0]
@@ -136,14 +197,14 @@ def visible_frame(pid):
             time.sleep(.1)
 
 
-def wait_for(check, timeout=3):
+def wait_for(check, timeout=CONTROL_WAIT_SECONDS, *, control="native control"):
     deadline = time.monotonic()+timeout
     while time.monotonic() < deadline:
         result = check()
         if result:
             return result
         time.sleep(.05)
-    raise RuntimeError("Codex's native control was not available; no Goal action sent")
+    raise RuntimeError(f"Codex's {control} was not available; no Goal action sent")
 
 
 def sidebar_rows(frame):
@@ -166,30 +227,34 @@ def row_chat_id(pid, row):
     if not row.getState().contains(Atspi.StateType.SHOWING):
         if not component.scrollTo(Atspi.ScrollType.ANYWHERE):
             raise RuntimeError("Could not scroll the selected chat into view; no Goal action sent")
-        wait_for(lambda: row.getState().contains(Atspi.StateType.SHOWING))
+        wait_for(lambda: row.getState().contains(Atspi.StateType.SHOWING), control="visible sidebar row")
     bounds = component.getExtents(Atspi.CoordType.SCREEN)
     if bounds.width <= 0 or bounds.height <= 0:
         raise RuntimeError("The selected Codex chat is not visible in its sidebar")
-    subprocess.run(["xdotool", "mousemove", str(bounds.x+bounds.width-12), str(bounds.y+bounds.height//2)], check=True, timeout=5)
     def named(parent, role, name):
         matches = [node for node in nodes(parent) if node.getRoleName() == role and node.name == name
                    and node.getState().contains(Atspi.StateType.SHOWING)]
         return matches[0] if len(matches) == 1 else None
     action = None
     try:
-        action = wait_for(lambda: named(row.parent, "push button", "Chat actions"))
+        action = named(row.parent, "push button", "Chat actions")
+        if action is None:
+            active_window(pid)
+            subprocess.run(["xdotool", "mousemove", str(bounds.x+bounds.width-12), str(bounds.y+bounds.height//2)], check=True, timeout=5)
+            action = wait_for(lambda: named(row.parent, "push button", "Chat actions"), control="sidebar Chat actions button")
         active_window(pid)
         if not action.queryAction().doAction(0):
             raise RuntimeError("Could not open the selected chat's actions")
-        menu = wait_for(lambda: named(frame, "menu", "Chat actions"))
+        menu = wait_for(lambda: named(frame, "menu", "Chat actions"), control="Chat actions menu")
         copy = named(menu, "menu item", "Copy")
         if copy is None or "haspopup:menu" not in copy.getAttributes():
             raise RuntimeError("Codex does not expose its native Copy submenu")
-        # Hover a verified submenu; never activate Copy or Copy as Markdown.
-        bounds = copy.queryComponent().getExtents(Atspi.CoordType.SCREEN)
+        # This is the verified submenu trigger, not a copy-content action.
+        # Native activation avoids depending on the pointer staying over it.
         active_window(pid)
-        subprocess.run(["xdotool", "mousemove", str(bounds.x+bounds.width//2), str(bounds.y+bounds.height//2)], check=True, timeout=5)
-        submenu = wait_for(lambda: named(frame, "menu", "Copy"))
+        if not copy.queryAction().doAction(0):
+            raise RuntimeError("Codex did not open its native Copy submenu; no Goal action sent")
+        submenu = wait_for(lambda: named(frame, "menu", "Copy"), control="Copy submenu")
         link = named(submenu, "menu item", "Copy deeplink")
         if link is None:
             raise RuntimeError("Codex does not expose its Copy deeplink action")
@@ -201,7 +266,7 @@ def row_chat_id(pid, row):
         def identity():
             parsed = urlparse(clipboard.wait_for_text() or "")
             return unquote(parsed.path.lstrip("/")) if parsed.scheme == "codex" and parsed.netloc == "threads" else None
-        return wait_for(identity)
+        return wait_for(identity, control="copied canonical chat ID")
     finally:
         try:
             active_window(pid)
@@ -244,11 +309,12 @@ def _expand_project(frame, target, pid):
 def show_chat(target, pid):
     """Wait for canonical-ID navigation, retaining exact-ID sidebar fallback."""
     preflight_accessibility(pid)  # Verify registration before opening a chat.
+    focus_codex(pid)
     link = "codex://threads/" + quote(target.id, safe="")
     subprocess.run(["xdg-open", link], check=True, capture_output=True, timeout=8)
     # xdg-open acknowledges dispatch, not completed navigation. Re-read the
     # active frame and sidebar after loading/project expansion on every pass.
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + NAVIGATION_SECONDS
     last_error = "the selected chat has not appeared in the desktop"
     while time.monotonic() < deadline:
         try:
@@ -256,7 +322,7 @@ def show_chat(target, pid):
             try:
                 if current_chat_id(pid) == target.id:
                     return visible_frame(pid)
-            except (InterruptedError, AccessibilityUnavailable):
+            except (InterruptedError, AccessibilityUnavailable, AccessibilityTimeout, FocusChanged):
                 raise
             except Exception as exc:
                 last_error = str(exc)
@@ -269,7 +335,7 @@ def show_chat(target, pid):
                     break
                 try:
                     identity = row_chat_id(pid, row)
-                except (InterruptedError, AccessibilityUnavailable):
+                except (InterruptedError, AccessibilityUnavailable, AccessibilityTimeout, FocusChanged):
                     raise
                 except Exception as exc:
                     last_error = str(exc)
@@ -284,7 +350,7 @@ def show_chat(target, pid):
                 # canonical selection; its label alone never authorizes a Goal.
                 time.sleep(.1)
                 break
-        except (InterruptedError, AccessibilityUnavailable):
+        except (InterruptedError, AccessibilityUnavailable, AccessibilityTimeout, FocusChanged):
             raise
         except Exception as exc:
             last_error = str(exc)
@@ -316,10 +382,11 @@ def resume_goal(target, expected, pid):
             raise RuntimeError("The selected chat has no unique native Resume goal button; no Goal action sent")
         if current_chat_id(pid) != target.id:
             raise RuntimeError("The visible Codex chat changed; no Goal action sent")
+        active_window(pid)
         clicked = True
         if not buttons[0].queryAction().doAction(0):
             raise RuntimeError("Codex did not acknowledge its native Goal control")
-        deadline = time.monotonic()+5
+        deadline = time.monotonic()+ACTIVATION_CONFIRMATION_SECONDS
         while time.monotonic() < deadline:
             frame = visible_frame(pid)
             if any(node.getRoleName() == "push button" and node.name == "Pause goal"

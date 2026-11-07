@@ -17,7 +17,7 @@ TARGET = Target("thread", "chosen", "Duplicate title", instance="/fixture")
 @pytest.fixture(autouse=True)
 def isolated_accessibility_transport(monkeypatch):
     monkeypatch.setattr(ui, "_application_bus", None)
-    monkeypatch.setattr(ui, "ApplicationBus", lambda: SimpleNamespace(application=lambda _: None))
+    monkeypatch.setattr(ui, "ApplicationBus", lambda **kwargs: SimpleNamespace(application=lambda _: None))
 
 
 class Node:
@@ -54,6 +54,7 @@ def fixture(monkeypatch):
     monkeypatch.setattr(ui, "ClipboardSnapshot", Clipboard)
     monkeypatch.setattr(ui, "visible_frame", lambda pid: frame)
     monkeypatch.setattr(ui, "current_chat_id", lambda pid: state["id"])
+    monkeypatch.setattr(ui, "active_window", lambda pid: 1)
     def show(target, pid):
         if state["id"] != target.id:
             raise RuntimeError("Wrong visible chat ID")
@@ -155,14 +156,15 @@ def test_sidebar_fallback_verifies_duplicate_titles_before_opening(monkeypatch, 
 
 
 @pytest.mark.parametrize('menu_stays_open', [False, True])
-def test_copy_identity_never_sends_escape_to_active_goal(monkeypatch, menu_stays_open):
-    state = {'menu': False, 'clipboard': '', 'trigger_clicks': 0, 'pointer': []}
+@pytest.mark.parametrize('failure', [None, 'not-submenu', 'rejected', 'not-expanded', 'missing-link'])
+def test_copy_identity_never_sends_escape_to_active_goal(monkeypatch, menu_stays_open, failure):
+    state = {'menu': False, 'submenu': False, 'clipboard': '', 'trigger_clicks': 0, 'pointer': [], 'copied': False}
     class Accessible(Node):
         def __init__(self, *args, showing=lambda: True, expanded=lambda: False, **kwargs):
             super().__init__(*args, **kwargs)
             self.showing, self.expanded = showing, expanded
         def getAttributes(self):
-            return ['haspopup:menu'] if self.name == 'Copy' and self.role == 'menu item' else []
+            return ['haspopup:menu'] if self.name == 'Copy' and self.role == 'menu item' and failure != 'not-submenu' else []
         def getState(self):
             return SimpleNamespace(contains=lambda flag: self.showing() if flag == ui.Atspi.StateType.SHOWING else self.expanded() if flag == ui.Atspi.StateType.EXPANDED else True)
         def queryComponent(self):
@@ -172,15 +174,20 @@ def test_copy_identity_never_sends_escape_to_active_goal(monkeypatch, menu_stays
         state['trigger_clicks'] += 1
         return True
     def copy_link(_):
+        state['copied'] = True
         state['clipboard'] = 'codex://threads/chosen'
         state['menu'] = menu_stays_open
         return True
     row = Accessible('Chosen')
     trigger = Accessible('Chat actions', action=toggle, expanded=lambda: state['menu'])
     group = Accessible('Group', 'group', [row,trigger]);row.parent=group
-    link = Accessible('Copy deeplink', 'menu item', action=copy_link, showing=lambda: state['menu'])
-    submenu = Accessible('Copy', 'menu', [link], showing=lambda: state['menu'])
-    copy = Accessible('Copy', 'menu item', showing=lambda: state['menu'])
+    link = Accessible('Copy deeplink', 'menu item', action=copy_link, showing=lambda: state['menu'] and failure != 'missing-link')
+    submenu = Accessible('Copy', 'menu', [link], showing=lambda: state['menu'] and state['submenu'])
+    def open_submenu(_):
+        assert failure != 'not-submenu', 'Activated an ordinary copy-content action'
+        state['submenu'] = failure != 'not-expanded'
+        return failure != 'rejected'
+    copy = Accessible('Copy', 'menu item', action=open_submenu, showing=lambda: state['menu'])
     menu = Accessible('Chat actions', 'menu', [copy,submenu], showing=lambda: state['menu'])
     frame = Accessible('Frame', 'frame', [group,menu])
     clipboard = SimpleNamespace(set_text=lambda text,*_: state.update(clipboard=text), wait_for_text=lambda: state['clipboard'])
@@ -191,9 +198,21 @@ def test_copy_identity_never_sends_escape_to_active_goal(monkeypatch, menu_stays
         assert args[:2] == ['xdotool','mousemove'], 'Keyboard cleanup could cancel the goal'
         state['pointer'].append(args)
     monkeypatch.setattr(ui.subprocess, 'run', pointer)
-    assert ui.row_chat_id(123,row) == 'chosen'
+    clock = [0]
+    def now():
+        clock[0] += .5
+        return clock[0]
+    monkeypatch.setattr(ui, 'time', SimpleNamespace(monotonic=now, sleep=lambda _: None))
+    if failure:
+        expected = {'not-submenu': 'Copy submenu', 'rejected': 'Copy submenu',
+                    'not-expanded': 'Copy submenu was not available', 'missing-link': 'Copy deeplink'}[failure]
+        with pytest.raises(RuntimeError, match=expected): ui.row_chat_id(123, row)
+        assert not state['copied']
+    else:
+        assert ui.row_chat_id(123,row) == 'chosen' and state['copied']
     assert not state['menu']
-    assert state['trigger_clicks'] == (2 if menu_stays_open else 1)
+    assert state['trigger_clicks'] == (2 if failure or menu_stays_open else 1)
+    assert not state['pointer'], 'Native submenu navigation must not depend on pointer hover'
 
 
 @pytest.mark.parametrize("status", ["error", "systemError", "future"])
@@ -279,7 +298,7 @@ def test_identity_check_failure_after_click_does_not_claim_no_goal_sent(monkeypa
 
 
 def test_missing_accessibility_bus_fails_before_clipboard_or_navigation(monkeypatch):
-    def broken():raise ui.AccessibilityUnavailable('Advertised socket is missing; no Goal action sent')
+    def broken(**kwargs):raise ui.AccessibilityUnavailable('Advertised socket is missing; no Goal action sent')
     monkeypatch.setattr(ui,'ApplicationBus',broken)
     monkeypatch.setattr(ui,'ClipboardSnapshot',lambda:pytest.fail('Clipboard touched while transport was unavailable'))
     monkeypatch.setattr(ui.subprocess,'run',lambda *a,**k:pytest.fail('Opened a chat while transport was unavailable'))
@@ -308,7 +327,7 @@ def test_frame_reconnection_rechecks_the_same_active_pid(monkeypatch):
     first=SimpleNamespace(application=failed,close=lambda:closed.append(True))
     second=SimpleNamespace(application=lambda pid:scoped.append(pid) or [frame])
     monkeypatch.setattr(ui,'_application_bus',first)
-    monkeypatch.setattr(ui,'ApplicationBus',lambda:second)
+    monkeypatch.setattr(ui,'ApplicationBus',lambda **kwargs:second)
     monkeypatch.setattr(ui,'active_window',lambda pid:active.append(pid))
     monkeypatch.setattr(ui.time,'sleep',lambda _:None)
     assert ui.visible_frame(123) is frame
@@ -319,7 +338,7 @@ def test_focus_change_during_bus_retry_prevents_further_queries(monkeypatch):
     count=[0]
     first=SimpleNamespace(application=lambda _:(_ for _ in ()).throw(ui.AccessibilityUnavailable('closed')),close=lambda:None)
     monkeypatch.setattr(ui,'_application_bus',first)
-    monkeypatch.setattr(ui,'ApplicationBus',lambda:pytest.fail('Connected after another app gained focus'))
+    monkeypatch.setattr(ui,'ApplicationBus',lambda **kwargs:pytest.fail('Connected after another app gained focus'))
     def active(_):
         count[0]+=1
         if count[0]>1:raise RuntimeError('Another application has focus')
@@ -328,11 +347,12 @@ def test_focus_change_during_bus_retry_prevents_further_queries(monkeypatch):
     with pytest.raises(RuntimeError,match='Another application'):ui.visible_frame(123)
 
 
-def test_bus_failure_after_resume_stays_uncertain_and_is_not_replayed(monkeypatch):
+@pytest.mark.parametrize('failure', [ui.AccessibilityUnavailable, ui.AccessibilityTimeout])
+def test_bus_failure_after_resume_stays_uncertain_and_is_not_replayed(monkeypatch, failure):
     state,button,frame=fixture(monkeypatch)
     def clicked(_):
         state['clicked']+=1
-        raise ui.AccessibilityUnavailable('connection closed; no Goal action sent')
+        raise failure('request failed; no Goal action sent')
     button.action=clicked
     with pytest.raises(RuntimeError,match='goal may already be running') as error:ui.resume_goal(TARGET,GOAL,123)
     assert state['clicked']==1 and error.value.goal_clicked
@@ -345,7 +365,7 @@ def test_unregistered_codex_fails_before_clipboard_or_navigation(monkeypatch,ent
     def application(pid):
         pids.append(pid)
         raise ui.AccessibilityUnavailable('Codex is not registered; fully quit and reopen Codex; no Goal action sent')
-    monkeypatch.setattr(ui,'ApplicationBus',lambda:SimpleNamespace(application=application,close=lambda:None))
+    monkeypatch.setattr(ui,'ApplicationBus',lambda **kwargs:SimpleNamespace(application=application,close=lambda:None))
     monkeypatch.setattr(ui,'ClipboardSnapshot',lambda:pytest.fail('Clipboard touched before registration'))
     monkeypatch.setattr(ui.subprocess,'run',lambda *a,**k:pytest.fail('Opened chat before registration'))
     with pytest.raises(ui.AccessibilityUnavailable,match='reopen Codex') as error:
@@ -374,7 +394,52 @@ def test_registration_preflight_reconnects_a_failed_transport_before_side_effect
     app=object()
     second=SimpleNamespace(application=lambda pid:calls.append(('new',pid)) or app)
     monkeypatch.setattr(ui,'_application_bus',first)
-    monkeypatch.setattr(ui,'ApplicationBus',lambda:second)
+    monkeypatch.setattr(ui,'ApplicationBus',lambda **kwargs:second)
     monkeypatch.setattr(ui.time,'sleep',lambda _:None)
     assert ui.preflight_accessibility(123) is app
     assert calls==[('old',123),('new',123)] and closed==['old']
+
+
+def test_focus_loss_after_chat_identity_check_never_presses_resume(monkeypatch):
+    state, _, _ = fixture(monkeypatch)
+    def lost(_): raise ui.FocusChanged('Another application has focus; no Goal action sent')
+    monkeypatch.setattr(ui, 'active_window', lost)
+    with pytest.raises(ui.FocusChanged) as error: ui.resume_goal(TARGET, GOAL, 123)
+    assert state['clicked'] == 0 and state['restored'] == 1
+    assert not error.value.goal_clicked
+
+
+@pytest.mark.parametrize('control', ['visible sidebar row', 'sidebar Chat actions button',
+    'Chat actions menu', 'Copy submenu', 'copied canonical chat ID'])
+def test_native_wait_error_identifies_the_failed_control(monkeypatch, control):
+    clock = iter([0, 1, 16])
+    monkeypatch.setattr(ui, 'time', SimpleNamespace(monotonic=lambda: next(clock), sleep=lambda _: None))
+    with pytest.raises(RuntimeError, match=control + ' was not available'):
+        ui.wait_for(lambda: None, control=control)
+
+
+def test_native_transport_uses_the_longer_request_deadline(monkeypatch):
+    captured = []
+    transport = object()
+    monkeypatch.setattr(ui, 'ApplicationBus', lambda **kwargs: captured.append(kwargs) or transport)
+    assert ui.accessibility_bus() is transport
+    assert captured == [{'timeout_ms': 30000}]
+
+
+def test_slow_control_can_appear_after_the_previous_three_second_wait(monkeypatch):
+    clock = [0]
+    monkeypatch.setattr(ui, 'time', SimpleNamespace(monotonic=lambda: clock[0], sleep=lambda delay: clock.__setitem__(0, clock[0] + delay)))
+    assert ui.wait_for(lambda: 'ready' if clock[0] >= 8 else None) == 'ready'
+    assert 8 <= clock[0] < 15
+
+
+def test_request_timeout_is_not_reconnected_or_retried_as_navigation(monkeypatch):
+    navigation_clock(monkeypatch)
+    calls = []
+    def slow(_):
+        calls.append(True)
+        raise ui.AccessibilityTimeout('GetChildren timed out; no Goal action sent')
+    monkeypatch.setattr(ui, 'visible_frame', slow)
+    with pytest.raises(ui.AccessibilityTimeout, match='GetChildren'):
+        ui.show_chat(TARGET, 123)
+    assert calls == [True]

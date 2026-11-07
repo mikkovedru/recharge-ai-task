@@ -632,6 +632,15 @@ A definite failure before pressing Resume goal stays a failed, retryable attempt
 and releases its Goal allowance. An accepted activation whose state cannot be
 verified remains uncertain, keeps its allowance reserved and is not automatically
 replayed. An attempted UI operation alone is not evidence that a Goal was sent.
+
+After accessibility preflight, native recovery brings the verified Codex process's
+one normal X11 window forward. If several windows qualify, bring the intended
+one forward before retrying. When ACTIVE is missing from its accessibility
+frames, the helper requires one visible frame matching the active X11 client's
+exact screen bounds. Once focus is acquired, losing it aborts the attempt; the
+helper does not repeatedly take focus back. It also checks focus immediately
+before pressing Resume.
+
 See [exact-chat navigation](../doc/investigations/2026-11-04_exact-chat-goal-navigation.md)
 for the asynchronous navigation constraints.
 
@@ -668,6 +677,18 @@ leave it running. On installations using the `chatgpt` launcher, a next-start
 diagnostic is `chatgpt --force-renderer-accessibility`. The installed executable
 may also be shown in the error. This workaround needs live registration verification
 after restart; it is not an acknowledgement that Goal activation succeeded.
+Native Goal recovery allows 30 seconds per accessibility request, 15 seconds for
+control polling, 60 seconds for navigation and 30 seconds to confirm activation.
+The helper has a four-minute overall budget, with up to 45 seconds for cleanup.
+A slow request reports its method/path and deadline; a timeout alone does not
+mean accessibility is disabled or require logging out. Requests are never replayed
+after an acknowledgement timeout. A timed-out Resume may already have arrived,
+so it remains unconfirmed until checked instead of being sent again automatically.
+
+The native Resume implementation has always used accessibility. A special launch
+flag is not required when Codex exposes those controls automatically; the flag
+suggestion above concerns missing registration, not ordinary slow replies.
+
 The dashboard never restarts Codex or shared desktop services automatically. See the
 [missing-bus investigation](../doc/investigations/2026-11-07_missing-accessibility-bus.md).
 

@@ -231,3 +231,98 @@ def test_unknown_process_has_no_guessed_launch_command(monkeypatch):
     def missing(_):raise FileNotFoundError()
     monkeypatch.setattr(api.os,'readlink',missing)
     assert api.accessibility_launch_hint(123)==''
+
+
+@pytest.mark.parametrize('domain,code', [('io', 'TIMED_OUT'), ('dbus', 'NO_REPLY'), ('dbus', 'TIMED_OUT')])
+@pytest.mark.parametrize('method', ['GetChildren', 'DoAction', 'SetTextContents'])
+def test_request_timeout_keeps_transport_and_never_replays(domain, code, method):
+    from recharge_ai_task import scoped_accessibility as api
+    calls, closed = [], []
+    error_domain = api.Gio.io_error_quark() if domain == 'io' else api.Gio.dbus_error_quark()
+    error_code = getattr(api.Gio.IOErrorEnum if domain == 'io' else api.Gio.DBusError, code)
+    def call(*args):
+        calls.append(args)
+        raise api.GLib.Error.new_literal(error_domain, 'Timeout was reached', error_code)
+    bus = api.ApplicationBus.__new__(api.ApplicationBus)
+    bus.timeout_ms = 30000
+    bus.address = 'unix:path=/still-present/bus'
+    bus.connection = SimpleNamespace(call_sync=call, is_closed=lambda: False, close_sync=lambda *_: closed.append(True))
+    with pytest.raises(api.AccessibilityTimeout) as error:
+        bus.call(':1.codex', '/control', api.ACCESSIBLE, method)
+    assert len(calls) == 1 and calls[0][7] == 30000
+    assert not closed
+    assert method in str(error.value) and '/control' in str(error.value) and 'after 30s' in str(error.value)
+    assert 'does not mean accessibility is disabled' in str(error.value)
+    assert 'log out' not in str(error.value) and not isinstance(error.value, api.AccessibilityUnavailable)
+
+
+def test_slow_address_reply_is_not_misreported_as_a_missing_bus(monkeypatch):
+    from recharge_ai_task import scoped_accessibility as api
+    calls = []
+    def slow(*args):
+        calls.append(args)
+        raise api.GLib.Error.new_literal(api.Gio.io_error_quark(), 'slow address', api.Gio.IOErrorEnum.TIMED_OUT)
+    monkeypatch.setattr(api.Gio, 'bus_get_sync', lambda *_: SimpleNamespace(call_sync=slow))
+    with pytest.raises(api.AccessibilityTimeout, match='GetAddress'):
+        api.ApplicationBus(timeout_ms=30000)
+    assert len(calls) == 1 and calls[0][7] == 30000
+
+
+def test_real_delayed_reply_succeeds_with_long_deadline_and_timed_out_action_is_not_replayed(tmp_path):
+    """A private D-Bus peer replies after the former 1.5-second deadline."""
+    source = r'''
+import os, subprocess, sys, time
+from recharge_ai_task.scoped_accessibility import ApplicationBus, AccessibilityTimeout, ACCESSIBLE
+from gi.repository import Gio
+service = r"""
+import gi
+gi.require_version('Gio', '2.0')
+from gi.repository import Gio, GLib
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+info = Gio.DBusNodeInfo.new_for_xml('<node><interface name="org.a11y.atspi.Accessible"><method name="GetRole"><arg type="u" direction="out"/></method><method name="GetCounts"><arg type="au" direction="out"/></method></interface><interface name="org.a11y.atspi.Action"><method name="DoAction"><arg type="i" direction="in"/><arg type="b" direction="out"/></method></interface></node>')
+counts = [0, 0]
+def handle(connection, sender, path, interface, method, params, invocation):
+    if method == 'GetCounts':
+        invocation.return_value(GLib.Variant('(au)', (counts,)))
+        return
+    counts[method == 'DoAction'] += 1
+    value = GLib.Variant('(b)', (True,)) if method == 'DoAction' else GLib.Variant('(u)', (123,))
+    GLib.timeout_add(2200, lambda: invocation.return_value(value) or False)
+for interface in info.interfaces:
+    bus.register_object('/fixture', interface, handle, None, None)
+print(bus.get_unique_name(), flush=True)
+GLib.MainLoop().run()
+"""
+p = subprocess.Popen([sys.executable, '-c', service], stdout=subprocess.PIPE, text=True)
+try:
+    owner = p.stdout.readline().strip()
+    assert owner.startswith(':'), owner
+    bus = ApplicationBus.__new__(ApplicationBus)
+    bus.address = os.environ['DBUS_SESSION_BUS_ADDRESS']
+    bus.connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    bus.timeout_ms = 1500
+    try:
+        bus.call(owner, '/fixture', ACCESSIBLE, 'GetRole')
+        raise AssertionError('Former deadline unexpectedly accepted a delayed reply')
+    except AccessibilityTimeout:
+        assert not bus.connection.is_closed()
+    bus.timeout_ms = 30000
+    start = time.monotonic()
+    assert bus.call(owner, '/fixture', ACCESSIBLE, 'GetRole') == (123,)
+    assert time.monotonic() - start >= 2
+    bus.timeout_ms = 1500
+    try:
+        bus.call(owner, '/fixture', 'org.a11y.atspi.Action', 'DoAction', '(i)', (0,))
+        raise AssertionError('Expected action acknowledgement timeout')
+    except AccessibilityTimeout:
+        pass
+    bus.timeout_ms = 30000
+    assert bus.call(owner, '/fixture', ACCESSIBLE, 'GetCounts') == ([2, 1],)
+finally:
+    p.terminate()
+    p.wait(timeout=5)
+    p.stdout.close()
+'''
+    result = subprocess.run(['dbus-run-session', '--', sys.executable, '-c', source],
+        env=dict(os.environ, XDG_RUNTIME_DIR=str(tmp_path)), capture_output=True, text=True, timeout=25)
+    assert result.returncode == 0, result.stdout + result.stderr

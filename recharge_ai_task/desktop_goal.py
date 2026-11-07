@@ -14,6 +14,9 @@ import sys
 
 from .codex_ipc import DeliveryUncertain
 
+HELPER_TIMEOUT_SECONDS = 240
+HELPER_CLEANUP_SECONDS = 45
+
 @contextmanager
 def ui_lock():
     # Serialize native controls across tray, CLI, and separate configurations.
@@ -44,11 +47,11 @@ def activate(target, expected, desktop):
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, text=True)
         try:
-            output, _errors = process.communicate(json.dumps(payload), timeout=45)
+            output, _errors = process.communicate(json.dumps(payload), timeout=HELPER_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired as exc:
             process.terminate()  # The helper restores the clipboard in finally.
             try:
-                process.communicate(timeout=12)
+                process.communicate(timeout=HELPER_CLEANUP_SECONDS)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.communicate()

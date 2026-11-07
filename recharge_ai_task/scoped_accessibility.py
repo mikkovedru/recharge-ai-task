@@ -26,6 +26,22 @@ class AccessibilityUnavailable(RuntimeError):
     """Unavailable native accessibility, rather than an unverified chat identity."""
 
 
+class AccessibilityTimeout(RuntimeError):
+    """A slow request, without evidence that the connection is unavailable."""
+
+
+def request_timeout(exc, interface, method, path, timeout_ms):
+    return AccessibilityTimeout(
+        f"Desktop accessibility request timed out after {timeout_ms / 1000:g}s: "
+        f"{interface}.{method} ({path}). A timeout does not mean accessibility "
+        f"is disabled. {exc}; no Goal action sent")
+
+
+def timeout_error(exc):
+    return exc.matches(Gio.io_error_quark(), Gio.IOErrorEnum.TIMED_OUT) or any(
+        exc.matches(Gio.dbus_error_quark(), code) for code in (Gio.DBusError.NO_REPLY, Gio.DBusError.TIMED_OUT))
+
+
 def accessibility_launch_hint(pid):
     """Suggest a next-start diagnostic without launching or stopping the app."""
     try:
@@ -55,12 +71,14 @@ def connection_error(exc, address=""):
 def transport_error(exc):
     return any(exc.matches(Gio.io_error_quark(), code) for code in (
         Gio.IOErrorEnum.CLOSED, Gio.IOErrorEnum.BROKEN_PIPE, Gio.IOErrorEnum.CONNECTION_REFUSED,
-        Gio.IOErrorEnum.NOT_FOUND, Gio.IOErrorEnum.TIMED_OUT)) or any(
-        exc.matches(Gio.dbus_error_quark(), code) for code in (Gio.DBusError.DISCONNECTED, Gio.DBusError.NO_REPLY))
+        Gio.IOErrorEnum.NOT_FOUND)) or exc.matches(Gio.dbus_error_quark(), Gio.DBusError.DISCONNECTED)
 
 
 class ApplicationBus:
-    def __init__(self):
+    timeout_ms = 1500
+
+    def __init__(self, *, timeout_ms=1500):
+        self.timeout_ms = timeout_ms
         self.owner = None
         self.root = ROOT
         self.connection = None
@@ -71,12 +89,14 @@ class ApplicationBus:
             try:
                 session = Gio.bus_get_sync(Gio.BusType.SESSION, None)
                 self.address = session.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress",
-                    None, GLib.VariantType.new("(s)"), Gio.DBusCallFlags.NONE, 1500, None).unpack()[0]
+                    None, GLib.VariantType.new("(s)"), Gio.DBusCallFlags.NONE, self.timeout_ms, None).unpack()[0]
                 self.connection = Gio.DBusConnection.new_for_address_sync(self.address,
                     Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
                     None, None)
                 return
             except GLib.Error as exc:
+                if timeout_error(exc):
+                    raise request_timeout(exc, "org.a11y.Bus", "GetAddress", "/org/a11y/bus", self.timeout_ms) from exc
                 if attempt:
                     raise connection_error(exc, self.address) from exc
                 time.sleep(.1)
@@ -92,8 +112,12 @@ class ApplicationBus:
         try:
             return self.connection.call_sync(destination, path, interface, method,
                 GLib.Variant(signature, args) if signature else None, None,
-                Gio.DBusCallFlags.NONE, 1500, None).unpack()
+                Gio.DBusCallFlags.NONE, self.timeout_ms, None).unpack()
         except GLib.Error as exc:
+            if timeout_error(exc):
+                # Keep a slow but connected transport. Never repeat this call:
+                # an action can have arrived even though its reply was late.
+                raise request_timeout(exc, interface, method, path, self.timeout_ms) from exc
             if not transport_error(exc):
                 raise
             self.close()

@@ -21,12 +21,15 @@ GOAL = {"threadId": "chosen", "status": "paused"}
 
 
 def helper(monkeypatch, *, response=None, returncode=0, timeout=False):
-    calls = []
+    class Calls(list): pass
+    calls = Calls()
+    calls.timeouts = []
     class Process:
         def __init__(self, command, **kwargs):
             self.returncode = returncode
             calls.append((command, kwargs))
         def communicate(self, data=None, timeout=None):
+            calls.timeouts.append(timeout)
             if data is not None:
                 calls.append(json.loads(data))
                 if timeout_expired: raise subprocess.TimeoutExpired("fixture", timeout)
@@ -44,6 +47,7 @@ def test_helper_uses_socket_peer_pid_and_contains_no_prompt(monkeypatch):
     control.activate(TARGET, GOAL, desktop)
     assert calls[0][0][-2:] == ["-m", "recharge_ai_task.desktop_goal_ui"]
     assert calls[1] == {"target": TARGET.to_dict(), "goal": GOAL, "pid": 123}
+    assert calls.timeouts == [240]
 
 
 @pytest.mark.parametrize("response", ['invalid', '{}', '[]', '{"success": "yes"}', '{"success":false,"uncertain":true,"detail":"Unconfirmed"}'])
@@ -58,6 +62,7 @@ def test_timeout_requests_helper_cleanup_and_remains_uncertain(monkeypatch):
     with pytest.raises(DeliveryUncertain, match="timed out"):
         control.activate(TARGET, GOAL, desktop)
     assert calls[-1] == "terminate"
+    assert calls.timeouts == [240, 45]
 
 
 def test_confirmed_helper_failure_is_visible(monkeypatch):
