@@ -3,6 +3,7 @@ from dataclasses import replace
 from uuid import uuid4
 from gi.repository import GLib, Gtk, Pango
 
+from .provider_ui import ProviderButtons, PROVIDER_NAMES
 from .config import AppConfig
 from .resizable_editor import ResizableEditor
 from .delivery_policy import Usage, UsageLedger, effective_limit, effective_message
@@ -154,9 +155,15 @@ class RecipientPanel(Gtk.Box):
             button.recipient-info:focus { box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
         """)
         self.get_style_context().add_provider_for_screen(self.get_screen(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        heading = wrapped()
-        heading.set_markup("<b>Recipients &amp; actions</b>")
-        self.pack_start(heading, False, False, 0)
+        self.heading_row = Gtk.Box(spacing=8)
+        self.heading = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END, hexpand=True)
+        self.heading.set_markup("<b>Recipients &amp; actions</b>")
+        self.heading.set_tooltip_text("Recipients & actions")
+        self.provider_filter = ProviderButtons(purpose="Filter this recipient list only; hidden actions remain enabled")
+        self.provider_filter.connect("changed", self._filter_changed)
+        self.heading_row.pack_start(self.heading, True, True, 0)
+        self.heading_row.pack_end(self.provider_filter, False, False, 0)
+        self.pack_start(self.heading_row, False, False, 0)
         self.default_prompt = LimitControl(self._defaults_changed)
         self.default_goal = LimitControl(self._defaults_changed)
         self.default_controls = Gtk.Grid(column_spacing=6, row_spacing=4)
@@ -172,6 +179,7 @@ class RecipientPanel(Gtk.Box):
         self.reset_all.connect("clicked", self._reset_all)
         self.default_controls.set_tooltip_text("Manual and automatic sends share each recipient's allowance. Counts survive restarts. Zero stops an action; use the reset buttons to renew allowances.")
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+        self.list.set_filter_func(lambda row: self.provider_filter.get_active_id() in ("all", row.provider_id))
         self.list.connect("row-selected", self._row_selected)
         self.list.connect("row-activated", self._row_activated)
         self.list.set_tooltip_text("Choose a recipient to edit it and reveal the matching chat in the main list (Up / Down)")
@@ -179,7 +187,12 @@ class RecipientPanel(Gtk.Box):
         self.list_scroller.set_shadow_type(Gtk.ShadowType.IN)
         self.list_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.list_scroller.set_size_request(250, 60)
-        self.list_scroller.add(self.list)
+        self.list_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.empty_label = Gtk.Label(label="No recipients for this provider", margin=12, wrap=True)
+        self.empty_label.set_no_show_all(True)
+        self.list_container.pack_start(self.list, True, True, 0)
+        self.list_container.pack_start(self.empty_label, False, False, 0)
+        self.list_scroller.add(self.list_container)
         self.editor = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         actions = Gtk.Box(spacing=8)
         self.reset = Gtk.Button(label="Reset current recipient's counts")
@@ -287,16 +300,37 @@ class RecipientPanel(Gtk.Box):
                 if row is None:
                     row = Gtk.ListBoxRow()
                     row.key = key
+                    row.provider_id = target.provider
+                    row.expanded = False
+                    row.preview_pending = False
+                    row.custom_message = ""
                     row.get_style_context().add_class("recipient-row")
-                    body = Gtk.Box(spacing=6, margin=8)
-                    text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, hexpand=True)
+                    body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin=8)
+                    header = Gtk.Box(spacing=6)
                     row.title, row.plan, row.allowance, row.preview = [wrapped() for _ in range(4)]
                     row.allowance.set_line_wrap(False)
                     row.allowance.set_ellipsize(Pango.EllipsizeMode.END)
                     row.title.set_line_wrap(False)
                     row.title.set_ellipsize(Pango.EllipsizeMode.END)
-                    for label in (row.title, row.plan, row.allowance, row.preview):
-                        text.pack_start(label, False, False, 0)
+                    row.provider = Gtk.Label(label=PROVIDER_NAMES[target.provider], valign=Gtk.Align.START)
+                    row.provider.set_tooltip_text("Provider: " + PROVIDER_NAMES[target.provider])
+                    row.title.set_hexpand(True)
+                    header.pack_start(row.title, True, True, 0)
+                    header.pack_start(row.provider, False, False, 0)
+                    row.allowance_box = Gtk.Box(spacing=6)
+                    row.allowance.set_hexpand(True)
+                    row.allowance_box.pack_start(row.allowance, True, True, 0)
+                    row.preview_toggle = Gtk.Button(valign=Gtk.Align.START)
+                    row.preview_toggle.set_relief(Gtk.ReliefStyle.NONE)
+                    row.preview_toggle.set_image(Gtk.Image.new_from_icon_name("pan-down-symbolic", Gtk.IconSize.MENU))
+                    row.preview_toggle.set_no_show_all(True)
+                    row.preview_toggle.connect("clicked", self._toggle_preview, row)
+                    row.allowance_box.pack_end(row.preview_toggle, False, False, 0)
+                    row.allowance_box.connect("size-allocate", self._queue_preview, row)
+                    row.preview.set_selectable(True)
+                    row.preview.set_max_width_chars(-1)
+                    row.preview.set_width_chars(1)
+                    row.preview.set_no_show_all(True)
                     for label, name in ((row.title, "title"), (row.preview, "preview")):
                         label.get_style_context().add_class("recipient-" + name)
                     row.indicator = Gtk.Button(relief=Gtk.ReliefStyle.NONE, valign=Gtk.Align.START)
@@ -310,8 +344,9 @@ class RecipientPanel(Gtk.Box):
                     row.explanation.set_margin_bottom(10)
                     row.details.add(row.explanation)
                     row.indicator.connect("clicked", lambda _button, current=row: self._show_details(current))
-                    body.pack_start(text, True, True, 0)
-                    body.pack_start(row.indicator, False, False, 0)
+                    header.pack_start(row.indicator, False, False, 0)
+                    for widget in (header, row.plan, row.allowance_box, row.preview):
+                        body.pack_start(widget, False, False, 0)
                     row.add(body)
                     self.list.add(row)
                     self.rows[key] = row
@@ -349,16 +384,66 @@ class RecipientPanel(Gtk.Box):
                         details.append(caption)
                 row.allowance.set_markup("\n".join(allowances))
                 row.allowance.set_tooltip_text("\n".join(details))
-                row.preview.set_text("")
-                row.preview.set_no_show_all(True)
-                row.preview.set_visible(False)
-                row.preview.set_tooltip_text("")
+                row.custom_message = message if prompt and target.custom_prompt is not None else ""
+                if not row.custom_message:
+                    row.expanded = False
+                row.preview.set_text(row.custom_message)
+                self._queue_preview(row.allowance_box, None, row)
             if self.selected_key not in selected:
                 self.selected_key = None if self.selection_initialized else next(iter(selected), None)
+            self.list.invalidate_filter()
             self.list.select_row(self.rows.get(self.selected_key))
+            self.empty_label.set_visible(not self._visible_rows())
             self._load_editor(config)
         finally:
             self.updating = False
+
+    def _visible_rows(self):
+        provider = self.provider_filter.get_active_id()
+        return [row for row in self.rows.values() if provider in ("all", row.provider_id)]
+
+    def _filter_changed(self, *_):
+        if not hasattr(self, "list"):
+            return
+        self.updating = True
+        try:
+            self.list.invalidate_filter()
+            rows = self._visible_rows()
+            current = self.rows.get(self.selected_key)
+            current = current if current in rows else next(iter(rows), None)
+            self.selected_key = current.key if current else None
+            self.list.select_row(current)
+            self.empty_label.set_visible(not rows)
+            self._load_editor(AppConfig.load())
+        finally:
+            self.updating = False
+
+    def _queue_preview(self, _widget, _allocation, row):
+        if row.preview_pending:
+            return
+        row.preview_pending = True
+        def update():
+            row.preview_pending = False
+            if row.get_parent() is None:
+                return False
+            layout = row.allowance.get_layout().copy()
+            layout.set_width(-1)
+            layout.set_ellipsize(Pango.EllipsizeMode.NONE)
+            overflow = layout.get_pixel_size()[0] > row.allowance_box.get_allocated_width()
+            row.preview.set_visible(bool(row.custom_message and row.expanded))
+            row.preview_toggle.set_visible(bool(row.custom_message and (row.expanded or overflow)))
+            caption = "Shorten custom message" if row.expanded else "Expand custom message"
+            icon = "pan-up-symbolic" if row.expanded else "pan-down-symbolic"
+            if row.preview_toggle.get_image().get_icon_name()[0] != icon:
+                row.preview_toggle.get_image().set_from_icon_name(icon, Gtk.IconSize.MENU)
+            row.preview_toggle.get_accessible().set_name(caption)
+            row.preview_toggle.set_tooltip_text(("Hide the full custom message" if row.expanded else "Show the full custom message") + " (Enter / Space)")
+            return False
+        GLib.idle_add(update)
+
+    def _toggle_preview(self, _button, row):
+        row.expanded = not row.expanded
+        self._queue_preview(row.allowance_box, None, row)
 
     @staticmethod
     def _show_details(row):

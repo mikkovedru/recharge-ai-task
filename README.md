@@ -550,8 +550,8 @@ See [status help and keyboard controls](docs/target-selection.md#status-help-and
 
 The main list automatically discovers locally installed Codex, Claude Code and Muse
 Code and shows their chats together. No provider selection in Settings is needed.
-Use the **Provider** filter beside Search to show **All chats**, **Codex**,
-**Claude** or **Muse Code**. This changes visibility only: hidden recipients keep
+Use the **All / Codex / Claude / Muse** buttons above Search to filter chats.
+The **Recipients & actions** heading has a separate button group for its list. This changes visibility only: hidden recipients keep
 their selected actions, messages, allowances and monitoring. The Provider column
 identifies each row. The last filter is remembered; fresh installations start at All.
 

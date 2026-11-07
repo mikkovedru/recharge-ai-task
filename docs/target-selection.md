@@ -11,7 +11,7 @@ identities: two chats can have the same name, and several chats can use the same
 window. Selection is explicit, supports several recipients, and survives restart.
 
 The main list discovers installed providers automatically and starts at **All
-chats**. The **Provider** filter beside Search selects All, Codex, Claude or Muse
+chats**. The **Provider** buttons above Search select All, Codex, Claude or Muse
 Code without changing recipients or monitoring. The Provider column keeps equal
 titles and IDs distinguishable. Hidden selected recipients remain active in the
 recipient panel. Settings' default terminal provider only controls new wrapped
@@ -649,3 +649,18 @@ may also be shown in the error. This workaround needs live registration verifica
 after restart; it is not an acknowledgement that Goal activation succeeded.
 The dashboard never restarts Codex or shared desktop services automatically. See the
 [missing-bus investigation](../doc/investigations/2026-11-07_missing-accessibility-bus.md).
+
+
+## Provider filters and custom-message disclosure
+
+Both the main chat list and the **Recipients & actions** heading have linked
+**All / Codex / Claude / Muse** buttons. Each filters its own list without changing
+saved actions, counts or monitoring. Use Left/Right or Home/End to switch a
+focused button group. Empty recipient filters show an explicit empty state.
+Every recipient row labels its provider immediately left of the information icon.
+
+Custom messages retain their compact inline preview. The down-arrow **Expand** icon appears only
+when the full inline content does not fit; it reveals the original multiline
+message within the scrolling recipient list. The up-arrow **Shorten** icon restores the preview.
+Editing, refreshing or filtering does not send a message, and expansion is a
+view preference rather than a change to the saved message.

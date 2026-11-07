@@ -20,6 +20,7 @@ from .window_layout import WindowLayout
 from .theme_ui import apply_color_theme
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
+from .provider_ui import ProviderButtons
 from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
 from .config import AppConfig, config_path, PROVIDER_LABELS
 from .quota import discover_codex, fetch_quota, quota_from_snapshot, quota_windows
@@ -186,26 +187,25 @@ class TargetPicker(Gtk.Window):
 
         self.search = Gtk.SearchEntry(placeholder_text="Search title, status, ID, project, process, or link…")
         self.search.connect("search-changed", lambda _: self.filtered.refilter())
-        search_row = Gtk.Box(spacing=10)
-        self.provider_filter = Gtk.ComboBoxText()
-        for key, label in (("all", "All chats"), ("codex", "Codex"), ("claude", "Claude"), ("muse", "Muse Code")):
-            self.provider_filter.append(key, label)
-        self.provider_filter.set_active_id(self.config.chat_provider_filter)
-        self.provider_filter.set_tooltip_text("Filter visible chats only. Hidden recipients remain selected and monitored (Alt+P)")
+        search_row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        filter_toolbar = Gtk.Box(spacing=10)
+        search_row.pack_start(filter_toolbar, False, False, 0)
+        self.provider_filter = ProviderButtons(active=self.config.chat_provider_filter,
+            purpose="Filter visible chats only; hidden recipients remain selected and monitored")
         filter_box = Gtk.Box(spacing=6, margin=4)
         filter_label = Gtk.Label.new_with_mnemonic("_Provider:")
-        filter_label.set_mnemonic_widget(self.provider_filter)
+        filter_label.set_mnemonic_widget(self.provider_filter.buttons[self.provider_filter.get_active_id()])
         filter_box.pack_start(filter_label, False, False, 0)
         filter_box.pack_start(self.provider_filter, False, False, 0)
         filter_frame = Gtk.Frame()
         filter_frame.add(filter_box)
-        search_row.pack_start(filter_frame, False, False, 0)
+        filter_toolbar.pack_start(filter_frame, False, False, 0)
         search_row.pack_start(self.search, True, True, 0)
-        self.technical_toggle = Gtk.CheckButton(label="Show technical columns")
+        self.technical_toggle = Gtk.CheckButton(label="Show technical\ncolumns")
         self.technical_toggle.set_tooltip_text("Show paths, recipient kind, availability, IDs, process and routing details. Search includes these fields in either view.")
         self.technical_toggle.set_active(self.config.show_technical_columns)
         self.technical_toggle.connect("toggled", self.toggle_technical_columns)
-        search_row.pack_start(self.technical_toggle, False, False, 0)
+        filter_toolbar.pack_end(self.technical_toggle, False, False, 0)
         box.pack_start(search_row, False, False, 0)
         self.store = Gtk.ListStore(bool, str, str, str, str, str, str, str, str, str, str, str, bool, str, str, float, str, str)
         self.filtered = self.store.filter_new()
