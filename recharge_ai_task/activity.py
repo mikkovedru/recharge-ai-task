@@ -18,6 +18,12 @@ class ActivityLog:
                 status TEXT NOT NULL, detail TEXT NOT NULL, message TEXT NOT NULL,
                 project_name TEXT NOT NULL DEFAULT '')""")
             columns = {row[1] for row in db.execute("PRAGMA table_info(activity)")}
+            if "provider" not in columns:
+                try:
+                    db.execute("ALTER TABLE activity ADD COLUMN provider TEXT NOT NULL DEFAULT ''")
+                except sqlite3.OperationalError:
+                    if "provider" not in {row[1] for row in db.execute("PRAGMA table_info(activity)")}:
+                        raise
             if "project_name" not in columns:
                 try:
                     db.execute("ALTER TABLE activity ADD COLUMN project_name TEXT NOT NULL DEFAULT ''")
@@ -27,8 +33,8 @@ class ActivityLog:
 
     def record(self, target, source, action, status, detail="", message=""):
         with sqlite3.connect(self.path, timeout=2) as db:
-            db.execute("INSERT INTO activity(created,title,source,action,status,detail,message,project_name) VALUES (?,?,?,?,?,?,?,?)",
-                       (time.time(), target.title, source, action, status, detail[:4000], message[:16000], target.project_name or ""))
+            db.execute("INSERT INTO activity(created,title,source,action,status,detail,message,project_name,provider) VALUES (?,?,?,?,?,?,?,?,?)",
+                       (time.time(), target.title, source, action, status, detail[:4000], message[:16000], target.project_name or "", target.provider))
             db.execute("DELETE FROM activity WHERE id <= (SELECT MAX(id)-1000 FROM activity)")
 
     def read(self, after=0, limit=200):
@@ -58,7 +64,8 @@ def display_event(event):
     action = {"prompt": "Message", "goal": "Goal", "signals": "Signals"}.get(event["action"], event["action"])
     status = event["status"]
     project = event.get("project_name") or "not available"
-    text = f"{event['source'].title()} · {event['title']} [Project: {project}] · {action}: {status}"
+    provider = {"codex": "Codex", "claude": "Claude", "muse": "Muse"}.get(event.get("provider"), "Provider unknown")
+    text = f"[{provider}] {event['source'].title()} · {event['title']} [Project: {project}] · {action}: {status}"
     if event["detail"]:
         text += " — " + event["detail"]
     if event["message"]:

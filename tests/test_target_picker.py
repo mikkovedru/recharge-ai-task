@@ -194,7 +194,7 @@ def check():
                 assert window.status.buffer.get_tag_table().lookup(level).get_property("foreground-set") == (level != "normal")
             window._message("First line\nSecond line", "warning")
         log_text = window.status.buffer.get_text(window.status.buffer.get_start_iter(), window.status.buffer.get_end_iter(), True)
-        assert log_text.endswith("\n".join("[2026-10-10 14:23:45] Message " + level for level in ("normal", "warning", "error", "success")) + "\n[2026-10-10 14:23:45] First line\nSecond line")
+        assert log_text.endswith("\n".join("[2026-10-10 14:23:45] [Program] Message " + level for level in ("normal", "warning", "error", "success")) + "\n[2026-10-10 14:23:45] [Program] First line\nSecond line")
         window._message("")
         assert window.status.buffer.get_text(window.status.buffer.get_start_iter(), window.status.buffer.get_end_iter(), True) == log_text
         window._message("\n".join("Long diagnostic line " + str(i) for i in range(60)), "error")

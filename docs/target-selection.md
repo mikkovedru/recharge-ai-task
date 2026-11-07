@@ -664,3 +664,9 @@ when the full inline content does not fit; it reveals the original multiline
 message within the scrolling recipient list. The up-arrow **Shorten** icon restores the preview.
 Editing, refreshing or filtering does not send a message, and expansion is a
 view preference rather than a change to the saved message.
+
+Delivery-history entries retain their provider across restarts. The program log
+labels provider events **Codex**, **Claude** or **Muse**, and labels shared
+application events **Program**. Older records without stored provider identity
+show **Provider unknown** rather than guessing from their title. Export retains
+the same attribution.

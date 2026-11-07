@@ -508,8 +508,8 @@ class TargetPicker(Gtk.Window):
             renderer.set_property("foreground", colors[level])
         renderer.set_property("markup", markup)
 
-    def _message(self, text, level="normal"):
-        self.status.write(text, level)
+    def _message(self, text, level="normal", *, provider=None):
+        self.status.write(text, level, provider=provider)
 
     def toggle_technical_columns(self, *_):
         visible = self.technical_toggle.get_active()
@@ -726,7 +726,7 @@ class TargetPicker(Gtk.Window):
                 if event["created"] <= self.log_cleared_at:
                     continue
                 text, level = display_event(event)
-                self.status.write(text, level, timestamp=event["created"])
+                self.status.write(text, level, timestamp=event["created"], attributed=True)
         self._background(lambda: ActivityLog().read(self.activity_cursor), show)
 
     def _render_runtime(self):
@@ -1046,7 +1046,7 @@ class TargetPicker(Gtk.Window):
         self.recipient_panel.default_controls.set_sensitive(not active)
         self._render_runtime()
 
-    def _work(self, job, done):
+    def _work(self, job, done, *, provider=None):
         self._busy(True)
         def worker():
             try:
@@ -1056,7 +1056,7 @@ class TargetPicker(Gtk.Window):
             def finish():
                 self._busy(False)
                 if error:
-                    self._message(error, "error")
+                    self._message(error, "error", provider=provider)
                 else:
                     done(result)
                 return False
@@ -1185,7 +1185,7 @@ class TargetPicker(Gtk.Window):
     def open_row(self, *_):
         try:
             target = self._row_target()
-            self._work(lambda: open_target(target), lambda _: self._message(f"Chat opened with {PROVIDER_LABELS.get(target.provider, target.provider)}. Refresh to update the list."))
+            self._work(lambda: open_target(target), lambda _: self._message("Chat opened. Refresh to update the list.", provider=target.provider), provider=target.provider)
         except Exception as exc:
             self._message(str(exc), "error")
 
@@ -1193,7 +1193,7 @@ class TargetPicker(Gtk.Window):
         try:
             target = self._row_target()
             Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(target.deeplink or target.id, -1)
-            self._message("Copied.")
+            self._message("Copied.", provider=target.provider)
         except Exception as exc:
             self._message(str(exc), "error")
 
@@ -1305,8 +1305,8 @@ class TargetPicker(Gtk.Window):
             failed = sum(not r.success for r in results)
             detail = "\n".join(f"{r.target.title} [{r.target.id}]: {r.detail}" for r in results)
             for result in results:
-                self._message(f"{target_label(result.target)} [{result.target.id}]: {result.detail}",
-                              "error" if not result.success else "warning" if result.skipped else "success")
+                self._message(f"{result.target.title} [{result.target.id}]: {result.detail}",
+                              "error" if not result.success else "warning" if result.skipped else "success", provider=result.target.provider)
             self._message(f"Signals: {accepted} accepted, {skipped} skipped, {failed} failed.",
                           "error" if failed else "warning" if skipped else "success")
             self.poll_activity()
