@@ -17,7 +17,7 @@ from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
 from .wrapping_button import WrappingButton
 from .window_layout import WindowLayout
-from .theme_ui import apply_color_theme
+from .theme_ui import apply_color_theme, install_readability
 from .resizable_editor import ResizableEditor
 from .recipient_ui import RecipientPanel
 from .provider_ui import ProviderButtons
@@ -44,6 +44,7 @@ class TargetPicker(Gtk.Window):
         self.quit_on_close = quit_on_close
         super().__init__(title="Recharge AI-task")
         set_window_icon(self)
+        install_readability(self)
         self.set_default_size(1440, 980)
         self.config = AppConfig.load()
         self.set_title("Recharge AI-task")

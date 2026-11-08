@@ -8,13 +8,14 @@ from .autostart import is_autostart_enabled, set_autostart
 from .config import AppConfig, PROVIDER_LABELS
 from .branding import set_window_icon
 from .window_layout import WindowLayout
-from .theme_ui import apply_color_theme
+from .theme_ui import apply_color_theme, install_readability
 
 
 class SettingsDialog(Gtk.Dialog):
     def __init__(self, parent):
         super().__init__(title="Recharge AI-task — Settings", transient_for=parent, modal=True)
         set_window_icon(self)
+        install_readability(self)
         self.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Save settings", Gtk.ResponseType.OK)
         self.set_default_response(Gtk.ResponseType.OK)
         save_button=self.get_widget_for_response(Gtk.ResponseType.OK)

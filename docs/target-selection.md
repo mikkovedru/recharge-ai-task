@@ -474,7 +474,10 @@ same line as its message allowance, separated by **|** and labeled
 message available on hover.
 
 Each recipient has a single project-first title line and an obvious filled
-selection highlight. The full title is available on hover. Rows with no eligible
+selection highlight. The full title is available on hover. Theme colors keep text
+and control borders readable in light and dark mode, including when the window
+is inactive. The custom-message expansion arrow has an outlined button, a
+contrasting icon, hover help and a visible keyboard focus indicator. Rows with no eligible
 automatic action have muted titles and previews, but remain
 selectable and editable. Each unavailable action has a highlighted explanation;
 reached limits are highlighted beside their counts. A row with an eligible

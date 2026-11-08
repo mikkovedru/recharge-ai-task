@@ -144,11 +144,12 @@ class RecipientPanel(Gtk.Box):
         self._recolor_status()
         css = Gtk.CssProvider()
         css.load_from_data(b"""
-            .recipient-passive .recipient-title, .recipient-passive .recipient-identity,
-            .recipient-passive .recipient-preview { opacity: .62; }
+            .recipient-passive { background-color: mix(@theme_base_color, @theme_bg_color, .55); }
+            .recipient-passive .recipient-title, .recipient-passive .recipient-preview {
+                color: mix(@theme_text_color, @theme_base_color, .20); opacity: 1; }
             .recipient-row:selected { background-color: mix(@theme_base_color, @theme_selected_bg_color, .24);
                 color: @theme_text_color; box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
-            .recipient-row:selected .recipient-title { opacity: 1; }
+            .recipient-row:selected .recipient-title { color: @theme_text_color; opacity: 1; }
             .recipient-row button { padding: 3px; }
             button.recipient-info { background-image: none; background-color: @theme_base_color;
                 border: 1px solid alpha(@theme_text_color, .5); border-radius: 4px; }
@@ -331,6 +332,7 @@ class RecipientPanel(Gtk.Box):
                     row.allowance_box.pack_start(row.allowance, True, True, 0)
                     row.preview_toggle = Gtk.Button(valign=Gtk.Align.START)
                     row.preview_toggle.set_relief(Gtk.ReliefStyle.NONE)
+                    row.preview_toggle.get_style_context().add_class("recipient-info")
                     row.preview_toggle.set_image(Gtk.Image.new_from_icon_name("pan-down-symbolic", Gtk.IconSize.MENU))
                     row.preview_toggle.set_no_show_all(True)
                     row.preview_toggle.connect("clicked", self._toggle_preview, row)
@@ -354,6 +356,7 @@ class RecipientPanel(Gtk.Box):
                     row.details.add(row.explanation)
                     row.indicator.connect("clicked", lambda _button, current=row: self._show_details(current))
                     row.remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
+                    row.remove.get_style_context().add_class("recipient-info")
                     row.remove.get_accessible().set_name("Remove recipient")
                     row.remove.set_tooltip_text("Remove this recipient from Recipients & actions and turn off both Goal and Message. Custom text and limits are retained. You can also double-click the row (Enter / Space)")
                     row.remove.connect("clicked", lambda _button, key=key: self.picker.remove_recipient(key))
