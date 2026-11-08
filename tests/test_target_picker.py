@@ -68,7 +68,8 @@ def check():
         window._toggle(None, "0", "send_goal")
         beta_path = next(str(i) for i, row in enumerate(window.filtered) if row[4] == "beta")
         window._toggle(None, beta_path)
-        assert not window.selected
+        assert not any(any(t.signal_actions()) for t in window.selected.values())
+        window.remove_recipient(beta.key)
         window.table_layout.sort("id")
         assert window.get_title() == "Recharge AI-task"
         assert window.logo.get_allocated_width() == window.settings_button.get_allocated_width()
@@ -119,7 +120,7 @@ def check():
         assert siblings[siblings.index(toolbar)-2] is window.table.get_parent()
         assert "Save selection" not in [button.get_label() for button in window.buttons]
         assert window.send_row.get_children() == [window.summary]
-        assert window.send_button.get_parent() is window.prompt_actions
+        assert window.send_button.get_parent().get_parent() is window.recipient_panel.reset_all.get_parent().get_parent()
         assert window.compose_group.get_children() == [window.default_group.get_parent(), window.send_row]
         assert window.recipient_panel.default_controls.get_parent() is window.default_group.get_parent()
         assert window.main_split.get_child1() is window.list_area
@@ -258,7 +259,7 @@ def check():
         idle()
         assert list(window.selected.values()) == [replace(beta, send_prompt=True, send_goal=False)]
         assert not hasattr(window,"recipient_label")
-        assert window.send_button.get_label() == "Send now to 1 recipient"
+        assert window.send_button.get_label() == "Send now\n(0 goals, 1 messages)"
         assert window.send_button.get_sensitive()
         assert not window.dirty() and not hasattr(window, "save_state")
         assert [c.get_title() for c in window.table.get_columns()][:10] == ["Provider", "Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project path", "Kind"]
@@ -311,7 +312,7 @@ def check():
             deliveries.append(([(t.id, t.send_prompt, t.send_goal) for t in targets], text, manual))
             return [DeliveryResult(t, True, "Selected signals accepted") for t in targets]
         target_ui.send_signals = send_signals
-        assert window.send_button.get_label() == "Send now to 2 recipients"
+        assert window.send_button.get_label() == "Send now\n(0 goals, 2 messages)"
         assert not hasattr(window, "goal")
         window._toggle(None, path_for("beta"), "send_goal")  # beta: both
         assert {t.id: t.signal_actions() for t in AppConfig.load().targets()}["beta"] == (True, True)

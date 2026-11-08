@@ -130,6 +130,7 @@ class RecipientPanel(Gtk.Box):
         self.picker = picker
         self.updating = False
         self.rows = {}
+        self.selected_keys = set()
         self.selected_key = None
         self.selection_initialized = False
         self.ledger_error = ""
@@ -179,11 +180,12 @@ class RecipientPanel(Gtk.Box):
         self.reset_all.set_hexpand(False)
         self.reset_all.connect("clicked", self._reset_all)
         self.default_controls.set_tooltip_text("Manual and automatic sends share each recipient's allowance. Counts survive restarts. Zero stops an action; use the reset buttons to renew allowances.")
-        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.MULTIPLE)
         self.list.set_filter_func(lambda row: self.provider_filter.get_active_id() in ("all", row.provider_id))
-        self.list.connect("row-selected", self._row_selected)
+        self.list.set_activate_on_single_click(False)
+        self.list.connect("selected-rows-changed", self._row_selected)
         self.list.connect("row-activated", self._row_activated)
-        self.list.set_tooltip_text("Choose a recipient to edit it and reveal the matching chat in the main list (Up / Down)")
+        self.list.set_tooltip_text("Choose a recipient to edit it. Ctrl+click toggles selection; Shift+click selects a range. Double-click or Enter removes a recipient and turns both actions off (Up / Down)")
         self.list_scroller = Gtk.ScrolledWindow()
         self.list_scroller.set_shadow_type(Gtk.ShadowType.IN)
         self.list_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -195,12 +197,16 @@ class RecipientPanel(Gtk.Box):
         self.list_container.pack_start(self.empty_label, False, False, 0)
         self.list_scroller.add(self.list_container)
         self.editor = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        actions = Gtk.Box(spacing=8)
+        actions = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, column_spacing=8, row_spacing=4)
+        self.actions = actions
+        actions.set_max_children_per_line(3)
+        actions.set_min_children_per_line(1)
+        actions.set_homogeneous(False)
         self.reset = Gtk.Button(label="Reset current recipient's counts")
         self.reset.set_tooltip_text("Reset both used allowances for this recipient. This never sends anything.")
         self.reset.connect("clicked", self._reset)
-        actions.pack_end(self.reset, False, False, 0)
-        actions.pack_end(self.reset_all, False, False, 0)
+        for button in (picker.send_button, self.reset_all, self.reset):
+            actions.add(button)
         self.editor.pack_start(actions, False, False, 0)
         overrides = Gtk.Grid(column_spacing=6, row_spacing=4)
         self.prompt_limit = LimitControl(self._editor_changed, inherit=True, off=True)
@@ -347,9 +353,20 @@ class RecipientPanel(Gtk.Box):
                     row.explanation.set_margin_bottom(10)
                     row.details.add(row.explanation)
                     row.indicator.connect("clicked", lambda _button, current=row: self._show_details(current))
-                    header.pack_start(row.indicator, False, False, 0)
+                    row.remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
+                    row.remove.get_accessible().set_name("Remove recipient")
+                    row.remove.set_tooltip_text("Remove this recipient from Recipients & actions and turn off both Goal and Message. Custom text and limits are retained. You can also double-click the row (Enter / Space)")
+                    row.remove.connect("clicked", lambda _button, key=key: self.picker.remove_recipient(key))
+                    icons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.START)
+                    icons.pack_start(row.indicator, False, False, 0)
+                    icons.pack_start(row.remove, False, False, 0)
+                    content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, hexpand=True)
+                    outer = Gtk.Box(spacing=6)
+                    outer.pack_start(content, True, True, 0)
+                    outer.pack_start(icons, False, False, 0)
                     for widget in (header, row.plan, row.allowance_box, row.preview):
-                        body.pack_start(widget, False, False, 0)
+                        content.pack_start(widget, False, False, 0)
+                    body.pack_start(outer, False, False, 0)
                     row.add(body)
                     self.list.add(row)
                     self.rows[key] = row
@@ -374,15 +391,16 @@ class RecipientPanel(Gtk.Box):
                         caption += " (override)" if override is not None else " (default)"
                         if used.uncertain:
                             caption += f" · {used.uncertain} unconfirmed"
-                        text = GLib.markup_escape_text(caption).replace("∞", "<span size='x-large'>∞</span>")
+                        text = GLib.markup_escape_text(caption).replace(action + ":", "<b>" + action + "</b>:", 1).replace("∞", "<span size='x-large'>∞</span>")
                         if limit is not None and used.used >= limit:
                             text = f"<span foreground='{colors['error']}' weight='bold'>⚠ {text}</span>"
                         elif used.uncertain:
                             text = f"<span foreground='{colors['warning']}'>⚠ {text}</span>"
                         if action == "Message" and target.custom_prompt is not None:
                             preview = " ".join(message.splitlines()) or "(empty)"
-                            text += "    |    Custom message: " + GLib.markup_escape_text(preview)
-                            caption += "    |    Custom message: " + message
+                            once = " (<b>once</b>)" if target.custom_prompt_once else ""
+                            text += "    |    Custom message" + once + ": " + GLib.markup_escape_text(preview)
+                            caption += "    |    Custom message" + (" (once)" if once else "") + ": " + message
                         allowances.append(text)
                         details.append(caption)
                 row.allowance.set_markup("\n".join(allowances))
@@ -396,9 +414,15 @@ class RecipientPanel(Gtk.Box):
                 self.selected_key = None if self.selection_initialized else next(iter(selected), None)
             self.list.invalidate_filter()
             self.provider_filter.set_counts(target.provider for target in selected.values())
-            self.list.select_row(self.rows.get(self.selected_key))
+            self.selected_keys.intersection_update(selected)
+            if self.selected_key is not None and not self.selected_keys:
+                self.selected_keys.add(self.selected_key)
+            self.list.unselect_all()
+            for key in self.selected_keys:
+                self.list.select_row(self.rows[key])
             self.empty_label.set_visible(not self._visible_rows())
             self._load_editor(config)
+            self._update_reset_help()
         finally:
             self.updating = False
 
@@ -416,9 +440,12 @@ class RecipientPanel(Gtk.Box):
             current = self.rows.get(self.selected_key)
             current = current if current in rows else next(iter(rows), None)
             self.selected_key = current.key if current else None
+            self.list.unselect_all()
+            self.selected_keys = {current.key} if current else set()
             self.list.select_row(current)
             self.empty_label.set_visible(not rows)
             self._load_editor(AppConfig.load())
+            self._update_reset_help()
         finally:
             self.updating = False
 
@@ -510,24 +537,31 @@ class RecipientPanel(Gtk.Box):
         row.plan.set_tooltip_text(explanation)
         row.indicator.set_tooltip_text(explanation + "\nShow details (Enter / Space)")
 
-    def _row_selected(self, _list, row):
+    def _row_selected(self, _list):
         if self.updating:
             return
-        self.selected_key = row.key if row is not None else None
+        keys = {row.key for row in self.list.get_selected_rows()}
+        added = keys - self.selected_keys
+        self.selected_keys = keys
+        if added:
+            self.selected_key = next(row.key for row in self.list.get_selected_rows() if row.key in added)
+        elif self.selected_key not in keys:
+            self.selected_key = next((row.key for row in self.list.get_selected_rows()), None)
         self.selection_initialized = True
         self.updating = True
         try:
-            if row is not None:
-                self.picker.highlight_recipient(row.key)
+            if self.selected_key is not None:
+                self.picker.highlight_recipient(self.selected_key)
             self._load_editor(AppConfig.load())
+            self._update_reset_help()
         finally:
             self.updating = False
 
     def _row_activated(self, _list, row):
         if not self.updating:
-            self.picker.highlight_recipient(row.key)
+            self.picker.remove_recipient(row.key)
 
-    def select_recipient(self, key):
+    def select_recipient(self, key, *, preserve_selection=False):
         if self.updating:
             return
         self.updating = True
@@ -535,20 +569,26 @@ class RecipientPanel(Gtk.Box):
         try:
             self.selected_key = key if key in self.rows else None
             row = self.rows.get(self.selected_key)
-            self.list.select_row(row)
+            if not preserve_selection or self.selected_key not in self.selected_keys:
+                self.list.unselect_all()
+                self.selected_keys = {self.selected_key} if row else set()
+                self.list.select_row(row)
             if row is not None:
+                if not preserve_selection:
+                    self.picker.highlight_recipient(row.key)
                 y = row.translate_coordinates(self.list, 0, 0)[1]
                 self.list_scroller.get_vadjustment().clamp_page(y, y + row.get_allocated_height())
             self._load_editor(AppConfig.load())
+            self._update_reset_help()
         finally:
             self.updating = False
 
     def _load_editor(self, config):
         target = self.picker.selected.get(self.selected_key)
         for child in self.editor.get_children():
-            if child is not self.reset.get_parent():
+            if child is not self.actions:
                 child.set_sensitive(target is not None)
-        self.reset.set_sensitive(target is not None)
+        self.reset.set_sensitive(bool(self.selected_keys))
         state, detail = self.picker.custom_message_status(target)
         icon = {"saved": "emblem-ok-symbolic", "pending": "emblem-synchronizing-symbolic",
                 "error": "dialog-error-symbolic", "unknown": "dialog-warning-symbolic", "default": "dialog-information-symbolic", "paused": "media-playback-pause-symbolic"}[state]
@@ -653,12 +693,47 @@ class RecipientPanel(Gtk.Box):
             self.picker.update_recipient(replace(target, custom_prompt=self.message_buffer.get_text(*self.message_buffer.get_bounds(), True),
                 custom_prompt_once=str(uuid4()) if self.once.get_active() else ""))
 
+    def _update_reset_help(self):
+        count = len(self.selected_keys)
+        self.reset.set_label(f"Reset current recipients' ({count}) counts" if count > 1 else "Reset current recipient's counts")
+        for button, all_recipients in ((self.reset, False), (self.reset_all, True)):
+            button.set_tooltip_text(self._reset_help(all_recipients))
+            if not getattr(button, "reset_help_connected", False):
+                button.connect("query-tooltip", self._reset_tooltip, all_recipients)
+                button.reset_help_connected = True
+
+    def _reset_tooltip(self, _button, _x, _y, _keyboard, tooltip, all_recipients):
+        tooltip.set_text(self._reset_help(all_recipients))
+        return True
+
+    def _reset_help(self, all_recipients):
+        usage = self._usage()
+        if self.ledger_error:
+            return self.ledger_error + " Counts cannot be previewed or reset safely until the ledger is readable."
+        keys = ({key for key, _action in usage} | set(self.picker.selected)) if all_recipients else set(self.selected_keys)
+        scope = "all stored recipients (including hidden and removed recipients with counts)" if all_recipients else "the selected recipients only"
+        lines = [f"Reset Goal and Message counts for {len(keys)} recipient(s): {scope}."]
+        config = AppConfig.load()
+        for key in sorted(keys):
+            target = self.picker.preferences.get(key)
+            name = " · ".join(part for part in (target.project_name, target.title, target.instance) if part) if target else key
+            lines.append(name + (f" (ID: {target.id})" if target else ""))
+            for action, label in (("goal", "Goal"), ("prompt", "Message")):
+                old = usage.get((key, action), Usage())
+                detail = f"  {label}: used {old.used} → 0; unconfirmed {old.uncertain} → 0."
+                if target:
+                    limit = effective_limit(target, action, config)
+                    detail += " Allowance remains unlimited." if limit is None else f" Remaining {max(0, limit-old.used)} → {limit} of {limit}."
+                lines.append(detail)
+        lines.append("Limits, action choices and custom messages stay unchanged. Completed one-use messages are not rearmed. Nothing is sent. Live deliveries must finish first. (Enter / Space)")
+        return "\n".join(lines)
+
     def _reset(self, *_):
-        if self.selected_key is None:
+        if not self.selected_keys:
             return
         try:
-            (self.ledger or UsageLedger()).reset([self.selected_key])
-            self.picker._message("Recipient counts reset. No signals sent.")
+            (self.ledger or UsageLedger()).reset(self.selected_keys)
+            self.picker._message(f"Counts reset for {len(self.selected_keys)} recipient(s). No signals sent.")
             self.render()
         except Exception as exc:
             self.picker._message(str(exc), "error")

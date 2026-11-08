@@ -56,7 +56,7 @@ class TargetPicker(Gtk.Window):
         apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
         self.preferences = {t.key: t for t in self.config.all_targets()}
-        self.selected = {t.key: t for t in self.config.targets()}
+        self.selected = {t.key: t for t in self.config.recipients()}
         self.targets = dict(self.selected)
         self.busy = False
         self.closed = False
@@ -218,6 +218,7 @@ class TargetPicker(Gtk.Window):
         self._selection_pending = False
         self.table.get_selection().connect("changed", self._queue_selection_sync)
         self.table.connect("cursor-changed", self._queue_selection_sync)
+        self.table.connect("row-activated", self._add_recipient)
         density_css = Gtk.CssProvider()
         density_css.load_from_data(b"""
             .recipient-table { -GtkTreeView-horizontal-separator: 2; -GtkTreeView-vertical-separator: 2; }
@@ -348,7 +349,6 @@ class TargetPicker(Gtk.Window):
         self.send_button = WrappingButton(label="Send now", valign=Gtk.Align.END)
         self.send_button.set_tooltip_text("Send now acts immediately, even with monitoring off, and may resume paused goals. If both actions are selected, Goal activation is verified before sending the message.")
         self.send_button.connect("clicked", self.send)
-        self.prompt_actions.pack_end(self.send_button, False, False, 0)
         self.buttons.append(self.send_button)
         box.pack_start(self.send_row, False, False, 0)
         self.status = StatusLog()
@@ -409,7 +409,7 @@ class TargetPicker(Gtk.Window):
         self.default_editor.connect("resized", self._resize_default_message)
         self._install_shortcuts()
         self.logo_link.match_width(self.settings_button, GdkPixbuf.Pixbuf.new_from_file(str(asset_path("logo-lockup.png"))))
-        WrappingButton._label(self.send_button).set_max_width_chars(12)
+        WrappingButton._label(self.send_button).set_max_width_chars(24)
         self.default_editor.set_valign(Gtk.Align.FILL)
         self.connect("delete-event", lambda *_: self.busy)
         self.connect("destroy", self._destroy)
@@ -497,7 +497,7 @@ class TargetPicker(Gtk.Window):
                 tooltip.set_text(status_tooltip(row[index],goal=index == 11))
             table.set_tooltip_cell(tooltip, path, column, None)
             return True
-        tooltip.set_text(f"{row[1]}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}")
+        tooltip.set_text(f"{row[1]}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}\nDouble-click or Enter to add this item to Recipients & actions. Action checkboxes stay unchanged.")
         table.set_tooltip_row(tooltip, path)
         return True
 
@@ -593,15 +593,26 @@ class TargetPicker(Gtk.Window):
             send_prompt=not prompt if action == "send_prompt" else prompt,
             send_goal=not goal if action == "send_goal" else goal))
 
-    def update_recipient(self, target):
-        first_recipient = not self.selected
+    def _add_recipient(self, _table, path, _column):
+        if not self.busy:
+            row = self.filtered[path]
+            target = self.targets[row[17]]
+            self.update_recipient(replace(target, send_prompt=row[0], send_goal=row[12]))
+            self.recipient_panel.select_recipient(target.key)
+
+    def remove_recipient(self, key):
+        if self.busy or key not in self.selected:
+            return
+        target = replace(self.selected.pop(key), send_prompt=False, send_goal=False)
+        self.update_recipient(target, include=False)
+
+    def update_recipient(self, target, *, include=True):
+        first_recipient = not any(any(t.signal_actions()) for t in self.selected.values())
         self.preferences[target.key] = target
         self.targets[target.key] = target
-        if any(target.signal_actions()):
+        if include:
             self.selected[target.key] = target
-        else:
-            self.selected.pop(target.key, None)
-        if first_recipient and self.selected:
+        if first_recipient and any(target.signal_actions()):
             self._auto_start_pending = True
         elif not self.selected:
             self._auto_start_pending = False
@@ -643,15 +654,15 @@ class TargetPicker(Gtk.Window):
                 if identity in self.targets:
                     self.targets[identity] = self.targets[identity].with_preferences(normalized)
         if consumed_settings is not None:
-            self.saved_signature = self._signature(consumed_settings.targets(), consumed_settings.continue_prompt)
+            self.saved_signature = self._signature(consumed_settings.recipients(), consumed_settings.continue_prompt)
         prompts = sum(t.signal_actions()[0] for t in self.selected.values())
         goals = sum(t.signal_actions()[1] for t in self.selected.values())
         count = len(self.selected)
         recipients = f"{count} " + ("recipient" if count == 1 else "recipients")
         self.summary.set_text(f"{recipients} · Send message: {prompts} · Resume goal: {goals}.")
-        self.send_button.set_label(f"Send now to {recipients}" if count else "Send now")
+        self.send_button.set_label(f"Send now\n({goals} goals, {prompts} messages)")
         self._wrap_button_label(self.send_button)
-        WrappingButton._label(self.send_button).set_max_width_chars(12)
+        WrappingButton._label(self.send_button).set_max_width_chars(24)
         self.summary.set_line_wrap(True)
         message = ("Could not save automatically — retrying: " + self.autosave_error if self.autosave_error else
                    "Changes differ from saved settings. Edits save automatically." if self.dirty() else "")
@@ -711,7 +722,7 @@ class TargetPicker(Gtk.Window):
                         value.get("watch_settings") == tray_control.watch_settings(saved)):
                     self.apply_error = ""
                     self._apply_notice = ""
-                self.saved_signature = self._signature(saved.targets(), saved.continue_prompt) if config_path().exists() else None
+                self.saved_signature = self._signature(saved.recipients(), saved.continue_prompt) if config_path().exists() else None
                 self._summary()
             except Exception as exc:
                 self._message(f"Could not read settings: {exc}", "error")
@@ -775,7 +786,7 @@ class TargetPicker(Gtk.Window):
         self.watch_button.set_always_show_image(True)
         self.watch_button.set_sensitive(not self.busy and not self.runtime_busy and (not stopping or restarting) and not runtime.get("cli_running", False))
         self.watch_button.set_tooltip_text("Monitor each selected recipient using its own provider's quota; the list filter does not change recipients")
-        self.send_button.set_sensitive(not self.busy and bool(self.selected))
+        self.send_button.set_sensitive(not self.busy and any(any(t.signal_actions()) for t in self.selected.values()))
         notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or ""
         if notice and notice != self._runtime_notice and hasattr(self, "status"):
             self._message(notice, "error" if runtime.get("watch_error") else "warning" if runtime.get("watch_pause_reason") else "normal")
@@ -869,6 +880,7 @@ class TargetPicker(Gtk.Window):
             chooser.destroy()
 
     def toggle_watch(self, *_, ensure_started=False, wait_for_block=False):
+        active_recipients = [t for t in self.selected.values() if any(t.signal_actions())]
         if ensure_started and self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested") or self.runtime.get("restarting")):
             return
         if self.runtime and (self.runtime.get("desktop_watch") or self.runtime.get("watch_requested")):
@@ -876,7 +888,7 @@ class TargetPicker(Gtk.Window):
         else:
             if self.dirty() and not self.save():
                 return
-            if not self.selected:
+            if not active_recipients:
                 self._message("Enable Send message or Resume goal for at least one recipient before starting Desktop watch.", "warning")
                 return
             if not self._messages_ready():
@@ -904,13 +916,13 @@ class TargetPicker(Gtk.Window):
                 raise RuntimeError("Restart the tray to safely start monitoring when adding a quota-blocked recipient.")
             if starting and live.get("per_target_signals") is not True:
                 raise RuntimeError("Restart the tray to use per-recipient Prompt / Goal signals; the running tray is an older version.")
-            if starting and any(t.provider != "codex" for t in self.selected.values()) and not live.get("unified_providers"):
+            if starting and any(t.provider != "codex" for t in active_recipients) and not live.get("unified_providers"):
                 raise RuntimeError("Restart the tray to monitor recipients from multiple providers.")
             uses_policies = self.config.prompt_limit is not None or self.config.goal_limit is not None or any(
-                t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in self.selected.values())
+                t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in active_recipients)
             if starting and uses_policies and not live.get("recipient_policies"):
                 raise RuntimeError("Restart the tray to enforce recipient messages and continuation limits.")
-            if starting and any(t.custom_prompt_once for t in self.selected.values()) and not live.get("one_use_messages"):
+            if starting and any(t.custom_prompt_once for t in active_recipients) and not live.get("one_use_messages"):
                 raise RuntimeError("Restart the tray to use Send only once custom messages.")
             if ensure_started and (live.get("desktop_watch") or live.get("watch_requested") or live.get("restarting")):
                 return live
@@ -1188,7 +1200,7 @@ class TargetPicker(Gtk.Window):
             target = self._row_target()
         except ValueError:
             return
-        self.recipient_panel.select_recipient(target.key if target.key in self.selected else None)
+        self.recipient_panel.select_recipient(target.key if target.key in self.selected else None, preserve_selection=True)
 
     def highlight_recipient(self, key):
         """Reveal the same stable recipient identity without changing its actions."""
@@ -1244,6 +1256,7 @@ class TargetPicker(Gtk.Window):
             config = AppConfig.load()
             self.preferences.update(self.selected)
             config.desktop_targets = [t.to_dict() for t in self.preferences.values()]
+            config.recipient_keys = list(self.selected)
             config.continue_prompt = self._prompt_text()
             config.mode = "desktop"
             config.save()
@@ -1265,14 +1278,14 @@ class TargetPicker(Gtk.Window):
     def _can_auto_start_watch(self):
         """Only known, current exhaustion can opt a newly added recipient in."""
         now = time.time()
-        for provider in {target.provider for target in self.selected.values()}:
+        for provider in {target.provider for target in self.selected.values() if any(target.signal_actions())}:
             quota = self.quotas.get(provider)
             checked = self.quota_checked.get(provider)
             if (quota is None or self.quota_errors.get(provider) or checked is None
                     or not 0 <= now - checked <= max(10, self.config.poll_seconds * 2)
                     or not quota_blocked(quota)):
                 return False
-        return bool(self.selected)
+        return any(any(t.signal_actions()) for t in self.selected.values())
 
     def _reload_saved_settings(self):
         self.apply_error = ""
@@ -1343,10 +1356,10 @@ class TargetPicker(Gtk.Window):
         return True
 
     def send(self, *_):
-        if not self.selected:
-            self._message("Select at least one target before sending.", "warning")
+        if not any(any(t.signal_actions()) for t in self.selected.values()):
+            self._message("Enable at least one recipient action before sending.", "warning")
             return
-        selected = list(self.selected.values())
+        selected = [t for t in self.selected.values() if any(t.signal_actions())]
         text = self._prompt_text()
         if not self._messages_ready():
             return

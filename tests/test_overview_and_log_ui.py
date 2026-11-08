@@ -31,7 +31,7 @@ try:
     assert p.default_prompt.unlimited.get_label()=='∞' and p.prompt_limit.unlimited.get_label()=='∞'
     assert p.default_prompt.unlimited.get_accessible().get_name()=='Unlimited'
     assert 'unlimited' in p.default_prompt.unlimited.get_tooltip_text()
-    p.list.select_row(p.rows[b.key]);pump(w)
+    p.select_recipient(b.key);pump(w)
     assert p.prompt_limit.default.get_label()=='Global default (∞)'
     assert '∞' in p.rows[b.key].allowance.get_text() and 'unlimited' not in p.rows[b.key].allowance.get_text()
     def set_runtime(**flags):

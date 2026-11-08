@@ -92,15 +92,16 @@ the tray menu, including **Exit** to quit.
 Search by title, ID, project, PID or deep link. Enable **Send message**, **Resume goal**, or both
 for each recipient and edit the multiline message. Newlines are preserved
 when saving and sending. These changes save automatically for quota-reset
-delivery; editing them does not send a manual signal. Adding the first recipient
-to an empty list starts Desktop watch after saving only while fresh quota data
+delivery; editing them does not send a manual signal. Enabling the first active
+recipient starts Desktop watch after saving only while fresh quota data
 shows its provider is blocked. Available credits, unknown or stale quota, and
 failed refreshes leave it off. Automatic startup must observe a current block
 before scheduling recovery, so a startup race cannot resume old work. Loading saved
-recipients, adding further recipients and editing existing ones do not start a
-stopped watch. **Send now to N recipients**
+recipients, adding passive recipients and editing message/limit settings do not start a
+stopped watch. **Send now (X goals, Y messages)**
 uses the current choices immediately, even when monitoring is off. The button
-shows the recipient count and is disabled when none are selected. Manual sends
+shows Goal and Message totals on its second line and is disabled when all actions
+are off. Manual sends
 may resume paused goals; automatic recovery continues to respect intentional pauses.
 Send message sends only the message. Resume goal resumes natively and starts
 continuation without a prompt. Both activates the goal first, then sends the
@@ -130,7 +131,7 @@ its natural height; dragging their divider changes that balance. Smaller windows
 retain scrolling when the editor cannot fit. This layout update resets old divider
 positions once, while keeping saved window dimensions and message editor sizes.
 Global limits sit to the right of the default message editor.
-The shorter default editor remains resizable. The Send now button sits below the Default message label, aligned with the editor’s bottom. Recipient text is display-only; click an item or use
+The shorter default editor remains resizable. The Send now button is the first control in the recipient action toolbar, before both reset buttons. Recipient text is display-only; click an item or use
 Up/Down to select it and highlight the same chat in the main list. Selecting a
 chosen chat in the main list also highlights its recipient and loads its editor,
 without moving keyboard focus. An unchosen chat has no recipient counterpart. A search that
@@ -204,8 +205,8 @@ the last refresh time spans its own line. Below it, **Refresh** appears on the
 left, with **Copy link / ID** and **Open selected row** beside each other on the
 right. Those button labels wrap onto multiple lines when space is limited. Their
 height follows the displayed lines, so one-line captions keep a compact toolbar. Below the multiline
-message, the recipient summary shares a row with **Send now to N recipients** at the far
-right. Search also matches both status columns and the project name.
+message, the recipient summary shows the configured action totals. **Send now (X goals, Y messages)**
+is first in the recipient action toolbar. Search also matches both status columns and the project name.
 
 **Project** and **Project path** sit between **Goal status** and **Kind**. Project
 names come from read-only, schema-checked Codex project metadata, combining
@@ -453,14 +454,23 @@ No test signal is sent to existing user chats.
 
 **Recipients & actions** lists the chosen chats/windows, automatic and
 manual action previews, used/remaining allowances and effective messages. Choose
-an entry to edit its actions, message and limits. Hover over its preview for the
+an entry to edit its actions, message and limits. Ctrl+click toggles row selection;
+Shift+click selects a range. Resetting counts applies to every selected row; message
+and limit edits apply only to the current row. Selection survives status refreshes.
+
+Double-click a main-list row to add it without changing its action checkboxes.
+Recipients with both actions off stay in the panel, visibly passive, across restarts.
+Double-click a recipient row (or press Enter), or use the trash button below its
+info icon, to remove it and turn both actions off. Custom text and limits are kept
+for reuse. Removal does not reset counts. The send button shows the configured
+Goal and Message totals; live eligibility and allowances are checked at delivery. Hover over its preview for the
 full custom message; the action preview’s tooltip explains current status checks. The preview
 uses the latest refresh; the sender verifies live Goal state and allowances.
 
 Allowances read **used N / limit**, using a larger **∞** for an unlimited
 allowance. Default message previews are hidden. A custom message appears on the
 same line as its message allowance, separated by **|** and labeled
-**Custom message:**. Long text is ellipsized with the full multiline custom
+**Custom message:**, or **Custom message (once):** when Send only once is enabled. Long text is ellipsized with the full multiline custom
 message available on hover.
 
 Each recipient has a single project-first title line and an obvious filled
@@ -548,7 +558,13 @@ A successful Goal action remains counted if its later message fails.
 When both actions are selected, a reached Goal limit withholds the message too.
 Untick Resume goal to send a message independently. A reached Message limit still
 allows Goal-only activation. **Reset current recipient's counts** renews both allowances for the
-chosen recipient; **Reset counts for all** renews all stored allowances.
+chosen recipient. With multiple rows selected, the button reads
+**Reset current recipients' (Z) counts** and resets all Z selected recipients.
+**Reset counts for all** renews all stored allowances, including hidden and removed
+recipients with stored counts. Hover help previews the scope, identities, current
+used/unconfirmed counts and their new zero values, plus remaining allowance before
+and after reset. Neither reset changes limits or action choices, sends anything,
+or rearms completed one-use messages. In-progress deliveries must finish first.
 Neither reset sends anything or replays an earlier quota recovery. Resets refuse
 to run while a sender still has a delivery in progress. Check the chat before
 resetting unconfirmed deliveries. Counts live in `delivery.sqlite` beside the

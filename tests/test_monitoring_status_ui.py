@@ -75,7 +75,7 @@ try:
     assert pos(p.once,w)[1]==pos(p.custom,w)[1]
     assert pos(p.default_goal,w)[1]<pos(p.default_prompt,w)[1]
     assert pos(p.goal_limit,w)[1]<pos(p.prompt_limit,w)[1]
-    p.list.select_row(p.rows[a.key]);pump(w)
+    p.select_recipient(a.key);pump(w)
     assert p.save_status.get_icon_name()[0]=='media-playback-pause-symbolic'
     assert 'Off' in p.save_status.get_tooltip_text()
     p.prompt_limit.default.clicked();pump(w)
@@ -86,7 +86,7 @@ try:
     for dark in (False,True):
         Gtk.Settings.get_default().set_property('gtk-theme-name','Adwaita')
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w)
-        p.list.select_row(p.rows[a.key]);pump(w)
+        p.select_recipient(a.key);pump(w)
         colors=status_colors(p)
         assert close_color(p.save_status.get_style_context().get_color(p.save_status.get_state_flags()),rgba(colors['success']))
         for bracket in (p.save_status_open,p.save_status_close):
@@ -103,7 +103,7 @@ try:
         assert close_color(p.save_status.get_style_context().get_color(p.save_status.get_state_flags()),rgba(colors['warning']))
         runtime.pop("restarting");w.runtime=dict(runtime);w._summary();pump(w)
         for key in (a.key,b.key):
-            p.list.select_row(p.rows[key]);p.rows[key].indicator.grab_focus();pump(w)
+            p.select_recipient(key);p.rows[key].indicator.grab_focus();pump(w)
             row=p.rows[key];assert row.indicator.get_visible()
             fg=row.indicator.get_image().get_style_context().get_color(row.indicator.get_image().get_state_flags())
             bg=row.indicator.get_style_context().get_background_color(row.indicator.get_state_flags())
@@ -180,7 +180,7 @@ try:
             click(dialog.grace,dialog);click(dialog.poll,dialog)
         else:
             dialog.grace.spin(Gtk.SpinType.STEP_FORWARD,10);dialog.poll.spin(Gtk.SpinType.STEP_FORWARD,5)
-        assert dialog.grace.get_value_as_int()==47 and dialog.poll.get_value_as_int()==14
+        assert dialog.grace.get_value_as_int()==47 and dialog.poll.get_value_as_int()==14, (dialog.grace.get_value_as_int(),dialog.poll.get_value_as_int())
         dialog.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*dialog.get_size());dialog.draw(cairo.Context(surface))
         surface.write_to_png('/tmp/2026-11-06_monitoring-settings.png')
         dialog.autostart.set_active(True)
@@ -230,7 +230,7 @@ try:
     w.update_recipient(replace(w.selected[b.key],custom_prompt='Another edit'));pump(w)
     assert commands.count('start-watch-blocked')==1
     toggle('a','send_goal');toggle('b','send_prompt')
-    assert not w.selected
+    assert len(w.selected)==2 and not AppConfig.load().targets()
     # Do not start until the first selection has actually been saved.
     original=AppConfig.save;AppConfig.save=lambda *_:(_ for _ in ()).throw(OSError('disk full'))
     path=next(row.path for row in w.filtered if row[4]=='b')
@@ -248,7 +248,7 @@ try:
     toggle('b','send_prompt')
     w.signal_buffer.set_text('');pump(w)
     toggle('b','send_prompt')
-    assert commands.count('start-watch-blocked')==2 and 'Enter a message' in w.status.latest_text
+    assert commands.count('start-watch-blocked')==2 and 'Enter a message' in w.status.text(), (commands,w.status.text(), [(t.id,t.signal_actions()) for t in w.selected.values()])
 finally:w.destroy()
 ''')
 

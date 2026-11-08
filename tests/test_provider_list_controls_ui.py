@@ -44,7 +44,7 @@ try:
     click(p.provider_filter.buttons['all'],w)
     assert len(p._visible_rows())==4 and len(w.selected)==4
     w.update_recipient(replace(c,send_prompt=False,send_goal=False));pump(w)
-    assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (3)','Codex (2)','Claude (0)','Muse (1)']
+    assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (4)','Codex (2)','Claude (1)','Muse (1)']
     for dark in (False,True):
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
         w.resize(1120,820);pump(w)
@@ -65,7 +65,7 @@ config=AppConfig.load();config.desktop_targets=[a.to_dict(),b.to_dict()];config.
 target_ui.discover_targets=lambda:Inventory([a,b])
 w=make();p=w.recipient_panel
 try:
-    p.list.select_row(p.rows[b.key]);pump(w);row=p.rows[b.key]
+    p.select_recipient(b.key);pump(w);row=p.rows[b.key]
     assert row.preview_toggle.get_visible() and not row.preview.get_visible()
     assert not row.preview_toggle.get_label() and row.preview_toggle.get_allocated_width()<=32
     assert "Expand" in row.preview_toggle.get_accessible().get_name()

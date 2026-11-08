@@ -47,13 +47,13 @@ try:
     assert w._keyboard(w,SimpleNamespace(keyval=Gdk.KEY_F1,state=0)) is False
     w.table_layout.sort('id')
     select('b')
-    assert p.selected_key==b.key and p.list.get_selected_row() is p.rows[b.key]
+    assert p.selected_key==b.key and p.list.get_selected_rows()==[p.rows[b.key]]
     assert p.message_buffer.get_text(*p.message_buffer.get_bounds(),True)=='B draft'
     select('a');assert p.selected_key==a.key
-    p.list.select_row(p.rows[b.key]);pump(w)
+    p.select_recipient(b.key);pump(w)
     assert w._row_target().id=='b'
     select('c')
-    assert p.list.get_selected_row() is None and not p.custom.is_sensitive()
+    assert not p.list.get_selected_rows() and not p.custom.is_sensitive()
     select('a')
     assert not p.rows[a.key].plan.get_visible() and p.rows[a.key].indicator.get_visible()
     assert p.rows[a.key].title.get_text()=='Work · Same title'
@@ -64,9 +64,9 @@ try:
         pump(w)
         context=p.rows[a.key].get_style_context()
         selected=context.get_background_color(context.get_state())
-        p.list.select_row(p.rows[b.key]);pump(w)
+        p.select_recipient(b.key);pump(w)
         normal=context.get_background_color(context.get_state())
-        p.list.select_row(p.rows[a.key]);pump(w)
+        p.select_recipient(a.key);pump(w)
         assert sum(abs(getattr(selected,c)-getattr(normal,c)) for c in ('red','green','blue','alpha'))>.12,(dark,selected.to_string(),normal.to_string())
     assert p.prompt_limit.default.get_label()=='Global default (∞)'
     p.default_prompt.limited.clicked();p.default_prompt.number_popover.popdown();p.default_prompt.number.set_value(3);pump(w)

@@ -70,9 +70,11 @@ try:
     for width in (1400,1120):
         w.resize(width,820);pump(w)
         assert pos(p.default_controls)[0] >= pos(editor)[0]+editor.get_allocated_width()
-        assert pos(w.send_button)[0] == pos(w.prompt_actions)[0]
-        assert pos(w.send_button)[1]+w.send_button.get_allocated_height() == pos(editor)[1]+editor.get_allocated_height()
-        assert pos(p.reset_all)[0]+p.reset_all.get_allocated_width() <= pos(p.reset)[0]
+        assert pos(w.send_button)[0] < pos(p.reset_all)[0]
+        assert [child.get_child() for child in p.actions.get_children()] == [w.send_button,p.reset_all,p.reset]
+        for button in (w.send_button,p.reset_all,p.reset):
+            x,y=button.translate_coordinates(p.editor_scroller,0,0)
+            assert x>=0 and x+button.get_allocated_width()<=p.editor_scroller.get_allocated_width()
     p.default_prompt.limited.clicked();pump(w)
     assert p.default_prompt.limited.get_active() and not p.default_prompt.unlimited.get_active()
     p.default_prompt.number.set_value(4)

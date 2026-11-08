@@ -42,6 +42,7 @@ class AppConfig:
     desktop_window_titles: list[str] | None = None
     poll_seconds: int = 30
     desktop_targets: list[dict] | None = None
+    recipient_keys: list[str] | None = None
     show_technical_columns: bool = False
     table_layout: dict | None = None
     ui_layout: dict | None = None
@@ -75,6 +76,7 @@ class AppConfig:
             desktop_window_titles=data.get("desktop_window_titles"),
             poll_seconds=int(data.get("poll_seconds", 30)),
             desktop_targets=data.get("desktop_targets"),
+            recipient_keys=data.get("recipient_keys") if isinstance(data.get("recipient_keys"), list) else None,
             show_technical_columns=bool(data.get("show_technical_columns", False)),
             table_layout=data.get("table_layout") if isinstance(data.get("table_layout"), dict) else None,
             ui_layout=data.get("ui_layout") if isinstance(data.get("ui_layout"), dict) else None,
@@ -119,3 +121,14 @@ class AppConfig:
 
     def targets(self, provider=None):
         return [t for t in self.all_targets() if (provider is None or t.provider == provider) and any(t.signal_actions())]
+
+    def recipients(self):
+        """Saved panel membership, independent of the enabled delivery actions.
+
+        Older settings contain disabled preferences for removed recipients, so
+        only enabled targets are migrated into the panel on the first save.
+        """
+        if self.recipient_keys is None:
+            return self.targets()
+        keys = set(self.recipient_keys)
+        return [t for t in self.all_targets() if t.key in keys or any(t.signal_actions())]

@@ -41,7 +41,8 @@ try:
     w.search.set_text('does not exist');pump(w);assert len(w.filtered)==0
     w.search.set_text('shared');pump(w);assert len(w.filtered)==1
     w.search.set_text('');w.provider_filter.set_active_id('all');pump(w)
-    assert len(w.filtered)==4 and len(w.selected)==3
+    assert len(w.filtered)==4 and len(w.selected)==4
+    assert not any(w.selected[c.key].signal_actions()) and len(AppConfig.load().targets())==3
     for dark in (False,True):
         Gtk.Settings.get_default().set_property('gtk-theme-name','Adwaita')
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
@@ -57,7 +58,8 @@ finally:w.destroy()
 w=make()
 try:
     assert w.provider_filter.get_active_id()=='muse' and len(w.filtered)==1
-    assert set(w.selected)=={a.key,b.key,m.key}
+    assert set(w.selected)=={a.key,b.key,c.key,m.key}
+    assert not any(w.selected[c.key].signal_actions())
     assert AppConfig.load().provider=='codex'
 finally:w.destroy()
 ''')

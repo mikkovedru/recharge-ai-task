@@ -517,14 +517,14 @@ color themes, with live preview and a saved preference.
 Use **Start/Stop Desktop watch** and **Settings…** directly from this window.
 Each row has independent **Send message** and **Resume goal** checkboxes.
 Choices and message text save automatically for future quota recovery; editing
-them does not send a manual signal. Adding the first recipient to an empty list
+them does not send a manual signal. Enabling the first active recipient
 starts Desktop watch after saving only when fresh quota data shows that its
 provider is blocked. Available credits, unknown quota, stale data or a failed
 refresh leave Watch off. The automatically started worker must observe exhaustion
 before it can schedule recovery, even if credits return during startup. Loading
-saved recipients or editing existing ones does not start a stopped watch. **Send now to N recipients** applies those
-choices immediately, even with monitoring off. Its label shows the recipient
-count, and the button is disabled when no recipients are selected:
+saved recipients or editing message/limit settings does not start a stopped watch. **Send now (X goals, Y messages)** applies those
+choices immediately, even with monitoring off. Its second line shows the Goal
+and Message totals; the button is disabled when every recipient action is off:
 
 - **Send message** sends only the configured message.
 - **Resume goal** verifies native activation and continues the goal without a user prompt.
@@ -547,7 +547,7 @@ logo match its height; the quota box keeps a neutral border with selected status
 text colors. **Refresh** sits directly
 below the list; **Copy link / ID** and **Open selected row** are on its right.
 The recipient summary sits directly below the multiline message in the same
-group; **Send now to N recipients** is beside the message, below its label. **Project** shows the name assigned in Codex;
+group; **Send now (X goals, Y messages)** sits first in the recipient action toolbar, before the reset buttons. **Project** shows the name assigned in Codex;
 **Project path** retains the chat's working path. Both precede **Kind**.
 Old selections migrate to Prompt, or Prompt + Goal when old goal recovery was enabled.
 Settings' **Quota polling (seconds)** controls all regular quota reads and retry

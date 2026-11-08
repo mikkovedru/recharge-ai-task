@@ -61,12 +61,12 @@ try:
         assert rb.details.get_visible() and 'intentional pauses' in rb.explanation.get_text()
         rb.details.popdown();pump(w,.4)
         # Passive rows still select their editor. Counts reset makes the row ready.
-        p.list.select_row(ra);assert p.selected_key==a.key and p.editor.get_sensitive()
+        p.select_recipient(a.key);assert p.selected_key==a.key and p.editor.get_sensitive()
         p.reset.clicked();pump(w)
         assert not context(ra).has_class('recipient-passive') and ra.automatic.ready
         attempt=ledger.reserve(a.key,'prompt',1);ledger.finish(attempt,'sent');p.render()
         # Changing a custom message to empty updates the actual blocker.
-        p.list.select_row(rc);p.custom.set_active(True);p.message_buffer.set_text(' ');pump(w)
+        p.select_recipient(c.key);p.custom.set_active(True);p.message_buffer.set_text(' ');pump(w)
         assert context(rc).has_class('recipient-passive') and 'Message is empty' in rc.indicator.get_tooltip_text()
         p.message_buffer.set_text('Continue');pump(w)
         assert not context(rc).has_class('recipient-passive')
@@ -80,17 +80,19 @@ try:
         assert not any(row.details.get_visible() for row in p.rows.values())
     if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
         # A native key press opens focused help, and a real hover shows its tooltip.
-        p.list.select_row(ra);pump(w)
-        w.set_accept_focus(True)
+        p.select_recipient(a.key);pump(w)
+        # Keep help and tooltip windows clear of the display edge.
+        w.set_accept_focus(True);w.move(40,40);pump(w)
         xid=str(w.get_window().get_xid())
-        subprocess.run(['xdotool','windowfocus',xid],check=True)
-        ra.indicator.grab_focus()
-        subprocess.run(['xdotool','key','--window',xid,'Return'],check=True);pump(w,.4)
+        subprocess.run(['xdotool','windowactivate','--sync',xid],check=True);pump(w)
+        ra.indicator.grab_focus();pump(w)
+        subprocess.run(['xdotool','key','Return'],check=True);pump(w,.4)
         assert ra.details.get_visible()
         ra.details.popdown();pump(w,.4)
         Gtk.Settings.get_default().set_property('gtk-tooltip-timeout',100)
+        subprocess.run(['xdotool','mousemove','--window',xid,'10','10'],check=True);pump(w)
         x,y=pos(ra.indicator);x+=10;y+=10
-        subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y)],check=True);pump(w,1)
+        subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y)],check=True);pump(w,2)
         assert any(t.get_visible() and t.get_type_hint()==Gdk.WindowTypeHint.TOOLTIP for t in Gtk.Window.list_toplevels())
         subprocess.run(['xdotool','mousemove','--window',xid,'10','10'],check=True);pump(w)
     # Space above the panel is used only by the logo.

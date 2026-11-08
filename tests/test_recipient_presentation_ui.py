@@ -11,13 +11,14 @@ def test_usage_custom_preview_large_infinity_and_reset_labels():
 from recharge_ai_task.delivery_policy import UsageLedger
 w=make();p=w.recipient_panel
 try:
-    p.list.select_row(p.rows[b.key]);pump(w)
+    p.select_recipient(b.key);pump(w)
     row=p.rows[b.key]
     assert row.allowance.get_text()=='Message: used 0 / ∞ (default)'
     assert not row.preview.get_visible() and 'Default:' not in row.allowance.get_text()
     assert p.reset.get_label()=="Reset current recipient's counts"
     assert p.reset_all.get_label()=='Reset counts for all'
-    assert pos(p.reset_all,w)[0]<pos(p.reset,w)[0]
+    assert [child.get_child() for child in p.reset.get_parent().get_parent().get_children()] == [w.send_button, p.reset_all, p.reset]
+    assert pos(w.send_button,w)[0]<pos(p.reset_all,w)[0]
     normal=Gtk.Label(label='∞')
     plain_height=normal.get_layout().get_pixel_extents()[0].height
     scaled_height=p.prompt_limit.unlimited.get_child().get_layout().get_pixel_extents()[0].height

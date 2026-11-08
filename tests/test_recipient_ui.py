@@ -65,24 +65,22 @@ for row in p.rows.values():
     assert 'private-chat-id' not in row.get_tooltip_text()
 # Duplicate titles are selected by stable profile/chat identity, even after sort.
 w.table_layout.sort('id', True)
-p.list.select_row(p.rows[b.key])
+p.select_recipient(b.key)
 assert w._row_target().key == b.key
 # Main-list selection also loads and highlights the same recipient.
 for target in (a,b):
     path=next(row.path for row in w.filtered if row[4]==target.id and row[6]==target.instance)
     w.table.set_cursor(path,w.title_column);pump(w)
-    assert p.selected_key==target.key and p.list.get_selected_row() is p.rows[target.key]
+    assert p.selected_key==target.key and p.list.get_selected_rows() == [p.rows[target.key]]
 w.search.set_text('no matching chat');w.filtered.refilter()
 assert len(w.filtered)==0
-p.list.select_row(p.rows[a.key])
+p.select_recipient(a.key)
 assert w.search.get_text()=='' and w._row_target().key==a.key
 assert not hasattr(p,'editor_title')
-# Activating an already selected item re-highlights it without sending anything.
-w.table.get_selection().unselect_all()
-p.list.emit('row-activated',p.rows[a.key])
-assert w._row_target().key==a.key and sent==[]
+# Removal is covered separately; selecting never sends.
+assert sent==[]
 
-p.list.select_row(p.rows[a.key])
+p.select_recipient(a.key)
 p.default_prompt.limited.clicked()
 p.default_prompt.number_popover.popdown()
 p.default_prompt.number.set_value(3)
@@ -109,7 +107,8 @@ w._apply_inventory(Inventory([replace(a,title='Renamed'),b]))
 assert w.selected[a.key].custom_prompt=='Specific\nmessage' and w.selected[a.key].prompt_limit==1
 # Deselecting retains overrides for later reuse.
 w.update_recipient(replace(w.selected[a.key],send_prompt=False))
-assert a.key not in w.selected and a.key not in p.rows
+assert a.key in w.selected and a.key in p.rows
+assert p.rows[a.key].get_style_context().has_class("recipient-passive")
 w.update_recipient(replace(w.preferences[a.key],send_prompt=True))
 assert w.selected[a.key].custom_prompt=='Specific\nmessage'
 assert target_delivery.send_signals([w.selected[a.key]],w._prompt_text(),manual=True)[0].success
@@ -118,7 +117,7 @@ assert 'used 1 / 1' in p.rows[a.key].allowance.get_text()
 assert 'limit reached' in p.rows[a.key].plan.get_text()
 assert target_delivery.send_signals([w.selected[a.key]],w._prompt_text(),manual=True)[0].skipped
 assert sent==[(a.key,'Specific\nmessage')]
-p.list.select_row(p.rows[a.key]);p.reset.clicked()
+p.select_recipient(a.key);p.reset.clicked()
 assert not UsageLedger().snapshot()
 p.prompt_limit.unlimited.clicked()
 assert w.selected[a.key].prompt_limit==-1
@@ -130,7 +129,7 @@ w=make();p=w.recipient_panel
 assert w.selected[a.key].custom_prompt=='Specific\nmessage' and w.selected[a.key].prompt_limit==-1
 assert w.selected[b.key].custom_prompt=='Other message'
 assert AppConfig.load().prompt_limit==3
-p.list.select_row(p.rows[a.key])
+p.select_recipient(a.key)
 p.once.set_active(True)
 first=w.selected[a.key].custom_prompt_once
 assert first and AppConfig.load().targets()[0].custom_prompt_once==first
