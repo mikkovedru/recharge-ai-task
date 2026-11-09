@@ -69,17 +69,26 @@ try:
     assert row.preview_toggle.get_visible() and not row.preview.get_visible()
     assert not row.preview_toggle.get_label() and row.preview_toggle.get_allocated_width()<=32
     assert "Expand" in row.preview_toggle.get_accessible().get_name()
+    assert '<b>Custom</b> message' in row.allowance.get_label()
     stored=AppConfig.load().desktop_targets
     click(row.preview_toggle,w)
     assert row.expanded and row.preview.get_visible()
     assert row.preview.get_text()==long and row.preview_toggle.get_image().get_icon_name()[0]=='pan-up-symbolic'
+    assert '<b>Custom</b> message' in row.allowance.get_label()
+    assert 'First 🌻 line' not in row.allowance.get_text()
+    assert 'Full custom message line' not in row.allowance.get_text()
     w._summary();pump(w)
     assert row.expanded and row.preview.get_text()==long
+    assert 'First 🌻 line' not in row.allowance.get_text()
+    w.resize(1120,820);pump(w)
+    assert row.preview.get_text()==long and 'First 🌻 line' not in row.allowance.get_text()
     w.set_accept_focus(True);w.set_focus_on_map(True);pump(w)
     subprocess.run(['xdotool','windowactivate','--sync',str(w.get_window().get_xid())],check=True)
     pump(w);row.preview_toggle.grab_focus();pump(w)
     subprocess.run(['xdotool','key','space'],check=True);pump(w)
     assert not row.expanded and not row.preview.get_visible() and row.preview_toggle.get_image().get_icon_name()[0]=='pan-down-symbolic'
+    assert 'First 🌻 line' in row.allowance.get_text()
+    assert '<b>Custom</b> message' in row.allowance.get_label()
     assert AppConfig.load().desktop_targets==stored and 'start-watch' not in commands
     p.message_buffer.set_text('tiny');pump(w)
     assert not row.preview_toggle.get_visible() and not row.preview.get_visible()

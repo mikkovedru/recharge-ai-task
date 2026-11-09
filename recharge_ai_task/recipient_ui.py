@@ -386,7 +386,7 @@ class RecipientPanel(Gtk.Box):
                 row.manual = recipient_readiness(target, config, usage, message, manual=True, ledger_error=self.ledger_error)
                 self._readiness(row)
                 colors = status_colors(self)
-                allowances, details = [], []
+                allowances, expanded_allowances, details = [], [], []
                 for action, enabled, used, limit, override in (("Goal", goal, gu, gl, target.goal_limit),
                                                               ("Message", prompt, pu, pl, target.prompt_limit)):
                     if enabled:
@@ -399,14 +399,19 @@ class RecipientPanel(Gtk.Box):
                             text = f"<span foreground='{colors['error']}' weight='bold'>⚠ {text}</span>"
                         elif used.uncertain:
                             text = f"<span foreground='{colors['warning']}'>⚠ {text}</span>"
+                        expanded_text = text
                         if action == "Message" and target.custom_prompt is not None:
                             preview = " ".join(message.splitlines()) or "(empty)"
                             once = " (<b>once</b>)" if target.custom_prompt_once else ""
-                            text += "    |    Custom message" + once + ": " + GLib.markup_escape_text(preview)
+                            expanded_text += "    |    <b>Custom</b> message" + once + ":"
+                            text = expanded_text + " " + GLib.markup_escape_text(preview)
                             caption += "    |    Custom message" + (" (once)" if once else "") + ": " + message
                         allowances.append(text)
+                        expanded_allowances.append(expanded_text)
                         details.append(caption)
-                row.allowance.set_markup("\n".join(allowances))
+                row.allowance_collapsed = "\n".join(allowances)
+                row.allowance_expanded = "\n".join(expanded_allowances)
+                row.allowance.set_markup(row.allowance_expanded if row.expanded else row.allowance_collapsed)
                 row.allowance.set_tooltip_text("\n".join(details))
                 row.custom_message = message if prompt and target.custom_prompt is not None else ""
                 if not row.custom_message:
@@ -460,7 +465,10 @@ class RecipientPanel(Gtk.Box):
             row.preview_pending = False
             if row.get_parent() is None:
                 return False
+            row.allowance.set_markup(row.allowance_expanded if row.expanded else row.allowance_collapsed)
             layout = row.allowance.get_layout().copy()
+            # Measure the collapsed caption even while its message is expanded.
+            layout.set_markup(row.allowance_collapsed, -1)
             layout.set_width(-1)
             layout.set_ellipsize(Pango.EllipsizeMode.NONE)
             overflow = layout.get_pixel_size()[0] > row.allowance_box.get_allocated_width()
