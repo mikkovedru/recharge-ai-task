@@ -36,7 +36,7 @@ def run_configure(*, non_interactive: dict | None = None) -> AppConfig:
 
     print(t("configure.welcome"))
 
-    provider = _prompt("Default terminal AI (codex/claude/muse)", config.provider).lower()
+    provider = _prompt("Default terminal AI (codex/claude/muse/opencode)", config.provider).lower()
     if provider not in PROVIDERS:
         provider = config.provider
 

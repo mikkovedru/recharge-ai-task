@@ -785,3 +785,7 @@ socket host requires a separate client-credential handshake, and the local
 peer-message CLI reported `external_agent_ingress_closed`. Recharge neither
 impersonates that client nor sends peer messages as a substitute for user input.
 A supported app/browser continuation interface would be needed for that workflow.
+
+## OpenCode terminal support
+
+OpenCode: install and sign in to [OpenCode](https://opencode.ai/docs/cli/), then use `./recharge-ai-task-cli run --provider opencode`. Set a custom executable with `--opencode PATH` or `OPENCODE_CLI_PATH`, or save it with `configure --provider opencode --opencode PATH`. Dashboard settings and the tray can also configure and launch OpenCode. Arguments after `--` go to its interactive CLI. Automatic continuation requires a terminal usage/rate-limit message with an explicit “try again in” duration or “try again at” time, followed by the configured grace period. Native automatic retry messages suppress extra continuation prompts, and typing during the wait cancels the pending prompt. Limits without a supported reset time remain under manual control. OpenCode uses the model provider chosen in its own configuration; shared quota checks, dashboard chat recipients and Codex Goal commands are unavailable. Noninteractive `opencode run`, servers and remote attachment are outside this wrapper integration.

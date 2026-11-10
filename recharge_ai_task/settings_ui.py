@@ -56,6 +56,10 @@ class SettingsDialog(Gtk.Dialog):
         self.muse_path.set_tooltip_text("Optional path to Muse Code 1.4.13 or later; allowance checks run muse usage --json")
         self.muse_args = Gtk.Entry(text=shlex.join(config.muse_args or []), placeholder_text="Optional Muse Code arguments")
         self.muse_args.set_tooltip_text("Arguments for wrapped Muse terminal sessions, for example resume --last")
+        self.opencode_path = Gtk.Entry(text=config.opencode_path or "", placeholder_text="Auto-detect OpenCode")
+        self.opencode_path.set_tooltip_text("Optional OpenCode executable path. Supports wrapped interactive terminals; desktop quota and chat delivery are unavailable.")
+        self.opencode_args = Gtk.Entry(text=shlex.join(config.opencode_args or []), placeholder_text="Optional OpenCode arguments")
+        self.opencode_args.set_tooltip_text("Arguments for interactive OpenCode sessions, for example --session SESSION_ID. Native retries stay in control.")
         self.grace = Gtk.SpinButton.new_with_range(0, 86400, 10)
         self.grace.set_value(config.grace_seconds)
         self.poll = Gtk.SpinButton.new_with_range(1, 3600, 5)
@@ -80,6 +84,7 @@ class SettingsDialog(Gtk.Dialog):
             ("Codex CLI path", self.path), ("CLI arguments", self.args),
             ("Claude Code path", self.claude_path), ("Claude arguments", self.claude_args),
             ("Muse Code path", self.muse_path), ("Muse arguments", self.muse_args),
+            ("OpenCode path", self.opencode_path), ("OpenCode arguments", self.opencode_args),
             ("Reset grace (seconds)", self.grace), ("Quota polling (seconds)", self.poll), ("Color theme", self.theme))
         for index, (name, widget) in enumerate(rows):
             grid.attach(Gtk.Label(label=name, xalign=0), 0, index, 1, 1)
@@ -133,6 +138,7 @@ class SettingsDialog(Gtk.Dialog):
         args = shlex.split(self.args.get_text())
         claude_args = shlex.split(self.claude_args.get_text())
         muse_args = shlex.split(self.muse_args.get_text())
+        opencode_args = shlex.split(self.opencode_args.get_text())
         config = AppConfig.load()
         config.mode = self.mode.get_active_id()
         config.codex_path = self.path.get_text().strip() or None
@@ -142,6 +148,8 @@ class SettingsDialog(Gtk.Dialog):
         config.claude_args = claude_args or None
         config.muse_path = self.muse_path.get_text().strip() or None
         config.muse_args = muse_args or None
+        config.opencode_path = self.opencode_path.get_text().strip() or None
+        config.opencode_args = opencode_args or None
         config.grace_seconds = self.grace.get_value_as_int()
         config.poll_seconds = self.poll.get_value_as_int()
         config.autostart = self.autostart.get_active()

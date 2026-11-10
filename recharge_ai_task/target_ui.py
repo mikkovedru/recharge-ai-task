@@ -1018,7 +1018,10 @@ class TargetPicker(Gtk.Window):
             config = AppConfig.load()
             def one(provider):
                 try:
-                    if provider == "muse":
+                    if provider == "opencode":
+                        from .opencode import fetch_opencode_quota
+                        value = fetch_opencode_quota()
+                    elif provider == "muse":
                         value = fetch_muse_quota(config.muse_path)
                     elif provider == "claude":
                         value = fetch_claude_quota()

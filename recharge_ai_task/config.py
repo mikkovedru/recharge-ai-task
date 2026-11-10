@@ -13,7 +13,7 @@ from ._migration import LEGACY_CONTINUE_PROMPT, environment_value, import_settin
 from .desktop_input import DEFAULT_WINDOW_TITLES
 
 Mode = Literal["cli", "desktop"]
-PROVIDER_LABELS = {"codex": "OpenAI Codex", "claude": "Anthropic Claude", "muse": "Meta Muse Code"}
+PROVIDER_LABELS = {"codex": "OpenAI Codex", "claude": "Anthropic Claude", "muse": "Meta Muse Code", "opencode": "OpenCode"}
 PROVIDERS = tuple(PROVIDER_LABELS)
 
 
@@ -54,6 +54,8 @@ class AppConfig:
     claude_args: list[str] | None = None
     muse_path: str | None = None
     muse_args: list[str] | None = None
+    opencode_path: str | None = None
+    opencode_args: list[str] | None = None
     chat_provider_filter: str = "all"
 
     @classmethod
@@ -83,11 +85,13 @@ class AppConfig:
             color_theme=data.get("color_theme") if data.get("color_theme") in ("dark", "light", "auto") else "auto",
             prompt_limit=data.get("prompt_limit"),
             goal_limit=data.get("goal_limit"),
-            provider=data.get("provider") if data.get("provider") in ("codex", "claude", "muse") else "codex",
+            provider=data.get("provider") if data.get("provider") in PROVIDERS else "codex",
             claude_path=data.get("claude_path"),
             claude_args=data.get("claude_args"),
             muse_path=data.get("muse_path"),
             muse_args=data.get("muse_args"),
+            opencode_path=data.get("opencode_path"),
+            opencode_args=data.get("opencode_args"),
             chat_provider_filter=data.get("chat_provider_filter") if data.get("chat_provider_filter") in ("all", *PROVIDERS) else "all",
         )
 

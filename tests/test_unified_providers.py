@@ -92,6 +92,9 @@ def test_installed_detection_includes_native_apps_and_local_data(tmp_path, monke
     monkeypatch.setattr(quota,'discover_codex',missing)
     monkeypatch.setattr(claude,'discover_claude',missing)
     monkeypatch.setattr(muse,'discover_muse',missing)
+    from recharge_ai_task import opencode
+    monkeypatch.setattr(opencode,'discover_opencode',missing)
+    monkeypatch.setenv('XDG_DATA_HOME',str(tmp_path/'data'))
     monkeypatch.setattr(providers,'discover_windows',lambda p:[Target('window','42','Claude',provider=p)] if p=='claude' else [])
     assert providers.installed_providers()=={'claude':None,'muse':None}
     monkeypatch.setattr(muse,'discover_muse',lambda *_:'/native/muse')
@@ -311,6 +314,9 @@ def test_unavailable_display_does_not_hide_installed_cli_data(tmp_path,monkeypat
     monkeypatch.setattr(quota,'discover_codex',missing)
     monkeypatch.setattr(claude,'discover_claude',missing)
     monkeypatch.setattr(muse,'discover_muse',missing)
+    from recharge_ai_task import opencode
+    monkeypatch.setattr(opencode,'discover_opencode',missing)
+    monkeypatch.setenv('XDG_DATA_HOME',str(tmp_path/'data'))
     monkeypatch.setattr(providers,'discover_windows',lambda *_:(_ for _ in ()).throw(RuntimeError('No display')))
     assert providers.installed_providers()=={'muse':None}
 

@@ -416,6 +416,10 @@ def discover_targets(provider="codex"):
     from dataclasses import replace
     from .codex_ipc import DesktopIPC
     inventory = Inventory()
+    if provider == "opencode":
+        from .opencode import LIMITATION
+        inventory.warnings.append(LIMITATION)
+        return inventory
     if provider == "muse":
         from .session_catalog import discover_sessions
         return discover_sessions(provider)

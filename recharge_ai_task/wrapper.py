@@ -1,4 +1,4 @@
-"""PTY wrapper that auto-continues Codex, Claude and Muse Code after quota resets."""
+"""PTY wrapper that auto-continues Codex, Claude, Muse Code and OpenCode after quota resets."""
 
 from __future__ import annotations
 
@@ -28,6 +28,8 @@ class WrapperConfig:
     claude_args: list[str] | None = None
     muse_path: str | None = None
     muse_args: list[str] | None = None
+    opencode_path: str | None = None
+    opencode_args: list[str] | None = None
 
 
 def _log(message: str) -> None:
@@ -166,6 +168,28 @@ def wait_for_muse_recovery(pty, stop, executable, config, user_input):
     return False
 
 
+def wait_for_opencode_reset(pty, stop, wake_at, watcher, grace_seconds, user_input):
+    """Proxy output while respecting manual input and OpenCode's own retry loop."""
+    while not stop.is_set() and pty.isalive():
+        if user_input.is_set() or watcher.native_retry:
+            return None
+        if time.time() >= wake_at:
+            return True
+        try:
+            data = pty.read(4096)
+        except EOFError:
+            return False
+        if data:
+            sys.stdout.write(data)
+            sys.stdout.flush()
+            detected = watcher.feed(data)
+            if detected:
+                wake_at = max(wake_at, detected[0] + grace_seconds)
+                watcher.reset()
+        stop.wait(.05)
+    return False
+
+
 def run_wrapper(config: WrapperConfig) -> int:
     if config.provider == "claude":
         from .claude import discover_claude, ClaudeLimitWatcher
@@ -175,6 +199,15 @@ def run_wrapper(config: WrapperConfig) -> int:
         from .muse import discover_muse
         codex = discover_muse(config.muse_path)
         args = config.muse_args or []
+    elif config.provider == "opencode":
+        from .opencode import discover_opencode
+        codex = discover_opencode(config.opencode_path)
+        args = config.opencode_args or []
+        from .opencode import LIMITATION
+        _log("[recharge-ai-task-cli] " + LIMITATION)
+        if (args and args[0] in ("run", "serve", "web", "attach", "acp", "api")) or any(
+                arg == "--server" or arg.startswith("--server=") for arg in args):
+            raise ValueError("OpenCode wrapping requires a local interactive terminal, not run/serve/web/attach.")
     elif config.provider == "codex":
         codex = discover_codex(config.codex_path)
         args = config.codex_args or []
@@ -200,7 +233,10 @@ def run_wrapper(config: WrapperConfig) -> int:
         _log(f"[recharge-ai-task-cli] {t('cli.not_found')}")
         return 1
 
-    if config.provider == "muse":
+    if config.provider == "opencode":
+        from .opencode import OpenCodeLimitWatcher
+        watcher = OpenCodeLimitWatcher()
+    elif config.provider == "muse":
         from .muse import MuseLimitWatcher
         watcher = MuseLimitWatcher()
     else:
@@ -281,7 +317,11 @@ def run_wrapper(config: WrapperConfig) -> int:
             watcher.reset()
 
         try:
-            if config.provider == "claude":
+            if config.provider == "opencode":
+                ready = wait_for_opencode_reset(pty, stop, wake_at, watcher, config.grace_seconds, user_input)
+                if ready is None:
+                    return
+            elif config.provider == "claude":
                 ready = wait_for_claude_reset(pty, stop, wake_at, watcher, config.grace_seconds, user_input)
                 if ready is None:
                     return
@@ -295,9 +335,11 @@ def run_wrapper(config: WrapperConfig) -> int:
 
             if config.provider == "claude":
                 watcher.reset()
-            _submit(pty, prompt, config.enter_presses, config.key_delay, carriage_return=config.provider == "claude")
+            _submit(pty, prompt, config.enter_presses, config.key_delay, carriage_return=config.provider in ("claude", "opencode"))
             _log(f"[recharge-ai-task-cli] {t('cli.auto_continue_sent')}")
         finally:
+            if config.provider == "opencode":
+                watcher.reset()
             with limit_lock:
                 waiting_for_reset = False
 
@@ -309,7 +351,7 @@ def run_wrapper(config: WrapperConfig) -> int:
             user_input.set()
             pty.write(data)
 
-    stdin_pty = InputProxy() if config.provider in ("claude", "muse") else pty
+    stdin_pty = InputProxy() if config.provider in ("claude", "muse", "opencode") else pty
     stdin_thread = threading.Thread(target=forward_stdin, args=(stdin_pty, stop), daemon=True)
     reader_thread = threading.Thread(target=reader, daemon=True)
 

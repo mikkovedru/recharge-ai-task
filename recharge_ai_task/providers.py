@@ -1,4 +1,7 @@
 """Automatic local provider detection, independent from the list's display filter."""
+import os
+from pathlib import Path
+
 from .config import AppConfig, PROVIDERS
 from .targets import Inventory, discover_targets, codex_home, discover_windows
 
@@ -9,8 +12,9 @@ def installed_providers(config=None):
     from .claude import discover_claude, claude_home
     from .muse import discover_muse
     from .session_catalog import muse_home
-    roots = {"codex": codex_home(), "claude": claude_home(), "muse": muse_home()}
-    discover = {"codex": discover_codex, "claude": discover_claude, "muse": discover_muse}
+    from .opencode import discover_opencode
+    roots = {"codex": codex_home(), "claude": claude_home(), "muse": muse_home(), "opencode": Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "opencode"}
+    discover = {"codex": discover_codex, "claude": discover_claude, "muse": discover_muse, "opencode": discover_opencode}
     result = {}
     for provider in PROVIDERS:
         try:
@@ -18,7 +22,7 @@ def installed_providers(config=None):
         except Exception:
             executable = None
         present = bool(executable or roots[provider].is_dir())
-        if not present and provider != "muse":
+        if not present and provider not in ("muse", "opencode"):
             try:
                 present = bool(discover_windows(provider))
             except Exception:
@@ -34,7 +38,7 @@ def discover_all_targets():
     for provider, executable in available.items():
         if executable:
             installed.append(provider)
-        elif provider != "muse":
+        elif provider not in ("muse", "opencode"):
             try:
                 if discover_windows(provider):
                     installed.append(provider)

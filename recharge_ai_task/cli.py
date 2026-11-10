@@ -26,6 +26,7 @@ def _build_run_parser(prog: str = "recharge-ai-task-cli") -> argparse.ArgumentPa
     parser.add_argument("--provider", choices=PROVIDERS, help="AI provider (default from settings)")
     parser.add_argument("--claude", metavar="PATH", help="Path to Claude Code executable")
     parser.add_argument("--muse", metavar="PATH", help="Path to Meta Muse Code executable")
+    parser.add_argument("--opencode", metavar="PATH", help="Path to OpenCode executable (interactive terminal)")
     goal = parser.add_mutually_exclusive_group()
     goal.add_argument("--goal", dest="goal_mode", action="store_true", help="CLI: first /goal resume; desktop: native recovery of quota-stopped goals")
     goal.add_argument("--no-goal", dest="goal_mode", action="store_false", help="Use the normal continue prompt")
@@ -60,7 +61,10 @@ def _load_user_config() -> AppConfig:
 
 def _cmd_quota(codex_path: str | None, provider="codex") -> int:
     try:
-        if provider == "claude":
+        if provider == "opencode":
+            from .opencode import fetch_opencode_quota
+            quota = fetch_opencode_quota()
+        elif provider == "claude":
             from .claude import fetch_claude_quota
             quota = fetch_claude_quota()
         elif provider == "muse":
@@ -81,6 +85,7 @@ def _cmd_configure(argv: list[str]) -> int:
     parser.add_argument("--provider", choices=PROVIDERS)
     parser.add_argument("--claude", dest="claude_path", metavar="PATH")
     parser.add_argument("--muse", dest="muse_path", metavar="PATH")
+    parser.add_argument("--opencode", dest="opencode_path", metavar="PATH")
     parser.add_argument("--goal", action="store_true")
     parser.add_argument("--no-goal", action="store_true")
     parser.add_argument("--grace", type=int)
@@ -94,6 +99,8 @@ def _cmd_configure(argv: list[str]) -> int:
         overrides["claude_path"] = ns.claude_path
     if ns.muse_path:
         overrides["muse_path"] = ns.muse_path
+    if ns.opencode_path:
+        overrides["opencode_path"] = ns.opencode_path
     if ns.mode:
         overrides["mode"] = ns.mode
     if ns.goal:
@@ -209,6 +216,8 @@ def _cmd_run(argv: list[str]) -> int:
         claude_path=ns.claude or user.claude_path,
         claude_args=_normalize_codex_args(ns.codex_args) or user.claude_args,
         muse_path=ns.muse or user.muse_path,
+        opencode_path=ns.opencode or user.opencode_path,
+        opencode_args=_normalize_codex_args(ns.codex_args) or user.opencode_args,
         muse_args=_normalize_codex_args(ns.codex_args) or user.muse_args,
         codex_path=ns.codex or user.codex_path,
         codex_args=_normalize_codex_args(ns.codex_args) or user.codex_args,
@@ -220,7 +229,7 @@ def _cmd_run(argv: list[str]) -> int:
     )
     try:
         return run_wrapper(config)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         sys.stderr.write(f"recharge-ai-task-cli: {exc}\n")
         return 1
 
@@ -237,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
   tray             Start directly in the system tray without a dashboard
   targets --gui    Open the same graphical dashboard
   targets --json   List chats from all installed providers as JSON
-  run              Run Codex, Claude Code or Muse Code with auto-continue
+  run              Run Codex, Claude Code, Muse Code or OpenCode with auto-continue
   watch            Watch quota and signal saved desktop recipients
   quota            Show current quota and reset times
   configure        Configure command-line settings
