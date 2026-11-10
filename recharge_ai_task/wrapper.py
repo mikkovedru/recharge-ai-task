@@ -63,7 +63,7 @@ def wait_for_quota_recovery(pty, stop, codex, fallback_at, grace_seconds, initia
             last_error = None
         except Exception as exc:
             if str(exc) != last_error:
-                _log(f"[recharge-ai-task-cli] Quota check unavailable: {exc}; retaining terminal-time fallback.")
+                _log(f"[recharge-ai-task] Quota check unavailable: {exc}; retaining terminal-time fallback.")
             last_error = str(exc)
             if time.time() >= fallback_at:
                 return True
@@ -78,7 +78,7 @@ def wait_for_quota_recovery(pty, stop, codex, fallback_at, grace_seconds, initia
         else:
             if recovered_at is None:
                 recovered_at = now
-                _log("[recharge-ai-task-cli] Quota is available now; starting the recovery grace period.")
+                _log("[recharge-ai-task] Quota is available now; starting the recovery grace period.")
             due = recovered_at + grace_seconds
             if now >= due:
                 return True
@@ -99,7 +99,7 @@ def wait_for_claude_reset(pty, stop, wake_at, watcher, grace_seconds=0, user_inp
     while not stop.is_set() and pty.isalive():
         if user_input is not None and user_input.is_set():
             watcher.reset()
-            _log("[recharge-ai-task-cli] Manual terminal input cancelled Recharge's pending continuation.")
+            _log("[recharge-ai-task] Manual terminal input cancelled Recharge's pending continuation.")
             return None
         try:
             data = pty.read(4096)
@@ -110,7 +110,7 @@ def wait_for_claude_reset(pty, stop, wake_at, watcher, grace_seconds=0, user_inp
             sys.stdout.flush()
             detected = watcher.feed(data)
             if watcher.native_owned:
-                _log("[recharge-ai-task-cli] Claude owns or cancelled automatic continuation; no extra prompt queued.")
+                _log("[recharge-ai-task] Claude owns or cancelled automatic continuation; no extra prompt queued.")
                 return None
             if detected and detected[0] != previous_reset:
                 wake_at = max(time.time(), detected[0]) + grace_seconds
@@ -130,7 +130,7 @@ def wait_for_muse_recovery(pty, stop, executable, config, user_input):
     last_error = None
     while not stop.is_set() and pty.isalive():
         if user_input.is_set():
-            _log("[recharge-ai-task-cli] Manual input cancelled Muse continuation.")
+            _log("[recharge-ai-task] Manual input cancelled Muse continuation.")
             return None
         now = time.monotonic()
         if now >= next_check:
@@ -140,7 +140,7 @@ def wait_for_muse_recovery(pty, stop, executable, config, user_input):
             except Exception as exc:
                 recovered_at = None
                 if str(exc) != last_error:
-                    _log(f"[recharge-ai-task-cli] {exc}")
+                    _log(f"[recharge-ai-task] {exc}")
                 last_error = str(exc)
             else:
                 now = time.monotonic()
@@ -148,7 +148,7 @@ def wait_for_muse_recovery(pty, stop, executable, config, user_input):
                     recovered_at = None
                 elif recovered_at is None:
                     recovered_at = now
-                    _log("[recharge-ai-task-cli] Muse allowance is available; starting the recovery grace period.")
+                    _log("[recharge-ai-task] Muse allowance is available; starting the recovery grace period.")
             if user_input.is_set():
                 return None
             now = time.monotonic()
@@ -204,7 +204,7 @@ def run_wrapper(config: WrapperConfig) -> int:
         codex = discover_opencode(config.opencode_path)
         args = config.opencode_args or []
         from .opencode import LIMITATION
-        _log("[recharge-ai-task-cli] " + LIMITATION)
+        _log("[recharge-ai-task] " + LIMITATION)
         if (args and args[0] in ("run", "serve", "web", "attach", "acp", "api")) or any(
                 arg == "--server" or arg.startswith("--server=") for arg in args):
             raise ValueError("OpenCode wrapping requires a local interactive terminal, not run/serve/web/attach.")
@@ -216,7 +216,7 @@ def run_wrapper(config: WrapperConfig) -> int:
     argv = [codex, *args]
     cmdline = " ".join(argv)
 
-    _log(f"[recharge-ai-task-cli] {t('cli.running')}: {cmdline}")
+    _log(f"[recharge-ai-task] {t('cli.running')}: {cmdline}")
 
     rows, cols = 24, 120
     try:
@@ -230,7 +230,7 @@ def run_wrapper(config: WrapperConfig) -> int:
     try:
         pty = spawn_pty(argv, (rows, cols))
     except FileNotFoundError:
-        _log(f"[recharge-ai-task-cli] {t('cli.not_found')}")
+        _log(f"[recharge-ai-task] {t('cli.not_found')}")
         return 1
 
     if config.provider == "opencode":
@@ -271,13 +271,13 @@ def run_wrapper(config: WrapperConfig) -> int:
         parsed_reset_at, raw = detected
         user_input.clear()
         if config.provider == "muse":
-            _log("[recharge-ai-task-cli] Muse usage limit reached; checking subscription allowance.")
+            _log("[recharge-ai-task] Muse usage limit reached; checking subscription allowance.")
             watcher.reset()
             try:
                 ready = wait_for_muse_recovery(pty, stop, codex, config, user_input)
                 if ready and not user_input.is_set() and not stop.is_set() and pty.isalive():
                     _submit(pty, config.continue_prompt, config.enter_presses, config.key_delay, carriage_return=True)
-                    _log(f"[recharge-ai-task-cli] {t('cli.auto_continue_sent')}")
+                    _log(f"[recharge-ai-task] {t('cli.auto_continue_sent')}")
             finally:
                 with limit_lock:
                     waiting_for_reset = False
@@ -292,7 +292,7 @@ def run_wrapper(config: WrapperConfig) -> int:
                 if exhausted:
                     quota_reset_at = max(window.resets_at for window in exhausted)
             except Exception as exc:
-                _log(f"[recharge-ai-task-cli] {t('cli.quota_fallback_failed', error=exc)}")
+                _log(f"[recharge-ai-task] {t('cli.quota_fallback_failed', error=exc)}")
 
         try:
             wake_at, source = resolve_reset_at(
@@ -301,7 +301,7 @@ def run_wrapper(config: WrapperConfig) -> int:
                 grace_seconds=config.grace_seconds,
             )
         except RuntimeError as exc:
-            _log(f"[recharge-ai-task-cli] {exc}")
+            _log(f"[recharge-ai-task] {exc}")
             with limit_lock:
                 waiting_for_reset = False
             return
@@ -311,7 +311,7 @@ def run_wrapper(config: WrapperConfig) -> int:
 
         wake_local = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(wake_at))
         _log(
-            f"[recharge-ai-task-cli] {t('cli.limit_detected', raw=raw, source=source, prompt=prompt, time=wake_local)}"
+            f"[recharge-ai-task] {t('cli.limit_detected', raw=raw, source=source, prompt=prompt, time=wake_local)}"
         )
         if config.provider != "claude":
             watcher.reset()
@@ -329,14 +329,14 @@ def run_wrapper(config: WrapperConfig) -> int:
                 ready = (wait_for_quota_recovery(pty, stop, codex, wake_at, config.grace_seconds, initial=quota, poll_seconds=config.poll_seconds)
                          if quota_enabled else sleep_with_proxy(pty, stop, wake_at))
             if not ready:
-                _log(f"[recharge-ai-task-cli] {t('cli.exited_before_continue')}")
+                _log(f"[recharge-ai-task] {t('cli.exited_before_continue')}")
                 stop.set()
                 return
 
             if config.provider == "claude":
                 watcher.reset()
             _submit(pty, prompt, config.enter_presses, config.key_delay, carriage_return=config.provider in ("claude", "opencode"))
-            _log(f"[recharge-ai-task-cli] {t('cli.auto_continue_sent')}")
+            _log(f"[recharge-ai-task] {t('cli.auto_continue_sent')}")
         finally:
             if config.provider == "opencode":
                 watcher.reset()

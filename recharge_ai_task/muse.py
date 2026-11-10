@@ -16,7 +16,7 @@ from .quota import Quota, RateWindow
 
 DESKTOP_LIMITATION = (
     "Muse Code continuation runs in a wrapped terminal. Start Muse Code CLI here "
-    "or run recharge-ai-task-cli run --provider muse. Consumer Muse app/browser "
+    "or run recharge-ai-task run --provider muse. Consumer Muse app/browser "
     "chats have no supported continuation bridge in this integration."
 )
 

@@ -7,3 +7,4 @@ recursive-include recharge_ai_task/assets *.png *.ico
 recursive-include docs/assets *.png
 recursive-include scripts *.py *.sh *.ps1 *.spec
 include tests/tray_x11_fixture.py
+recursive-include packaging *.json

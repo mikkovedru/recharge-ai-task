@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "recharge-ai-task"
 version = "1.0"
-description = "Auto-continue Codex, Claude, Meta Muse Code and OpenCode terminals after quota resets — Windows & Ubuntu x86_64"
+description = "Auto-continue Codex, Claude, Meta Muse Code and OpenCode terminals after usage limits — Linux dashboard, Windows tray and terminal commands"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -19,9 +19,9 @@ classifiers = [
 dependencies = ["websocket-client>=1.8", "psutil>=6.0", "python-xlib>=0.33; sys_platform == 'linux'", "tzdata>=2024.1; sys_platform == 'win32'"]
 
 [project.optional-dependencies]
-windows = ["pywinpty>=2.0.15"]
+windows = ["pywinpty>=2.0.15; sys_platform == 'win32'"]
 tray = ["pystray>=0.19.5", "Pillow>=10.0.0"]
-dev = ["pytest>=8.0", "pyinstaller>=6.0"]
+dev = ["pytest>=8.0", "pyinstaller>=6.0", "markdown-it-py>=3.0"]
 all = ["recharge-ai-task[windows,tray]"]
 
 [project.urls]
@@ -30,11 +30,7 @@ Repository = "https://github.com/mikkovedru/recharge-ai-task"
 Issues = "https://github.com/mikkovedru/recharge-ai-task/issues"
 
 [project.scripts]
-recharge-ai-task = "recharge_ai_task.gui:main"
-recharge-ai-task-cli = "recharge_ai_task.cli:main"
-recharge-ai-task-gui = "recharge_ai_task.gui:main"
-recharge-ai-task-tray = "recharge_ai_task.tray:main"
-recharge-ai-task-configure = "recharge_ai_task.configure:main"
+recharge-ai-task = "recharge_ai_task.app:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

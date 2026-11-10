@@ -13,41 +13,14 @@ if [[ "$arch" != "x86_64" ]]; then
   exit 1
 fi
 
-LOCALES="$ROOT/recharge_ai_task/locales"
-COMMON=(
-  --noconfirm --onefile
-  --specpath "$ROOT/build"
-  --paths "$ROOT"
-  --collect-data recharge_ai_task
-  --add-data "$LOCALES:recharge_ai_task/locales"
-)
+# Remove only obsolete generated launchers, preserving unrelated dist contents.
+rm -f dist/install-desktop.sh dist/recharge-ai-task-cli dist/recharge-ai-task-gui dist/recharge-ai-task-tray
 
-echo "Building recharge-ai-task CLI..."
-"$PYTHON" -m PyInstaller "${COMMON[@]}" --console \
-  --name recharge-ai-task-cli \
-  scripts/entry_cli.py
-
-echo "Building the combined recharge-ai-task dashboard and tray..."
-# Submodule collection must not open the builder's display or fall back to Xorg.
+echo "Building recharge-ai-task (dashboard, tray and terminal commands)..."
 PYSTRAY_BACKEND=dummy "$PYTHON" -m PyInstaller --noconfirm scripts/gui_linux.spec
+"$ROOT/dist/recharge-ai-task" --version
+"$ROOT/dist/recharge-ai-task" run --help >/dev/null
 
-# Preserve the previous tray command without bundling another Python runtime.
-# Write beside the binaries so moving the release folder keeps it working.
-for launcher in gui tray; do
-  # Replace old executables atomically, including when a previous build is running.
-  install -m 755 "scripts/launch_${launcher}.sh" "dist/recharge-ai-task-${launcher}.new"
-  mv -f "dist/recharge-ai-task-${launcher}.new" "dist/recharge-ai-task-${launcher}"
-done
-
-echo ""
-install -m 755 scripts/install_desktop.sh dist/install-desktop.sh
-
-echo "Output:"
-echo "  dist/recharge-ai-task"
-echo "  dist/recharge-ai-task-tray (compatibility launcher)"
-echo "  dist/recharge-ai-task-cli"
-echo "  dist/install-desktop.sh (menu and file-manager icons)"
-echo "  dist/recharge-ai-task-gui (compatibility launcher)"
-echo ""
+echo "Output: dist/recharge-ai-task"
 echo "X11/XWayland window input also requires: sudo apt install xdotool"
 echo "Wayland: enable native accessibility in AI apps and StatusNotifier/AppIndicator support in your panel."

@@ -9,12 +9,16 @@ from dataclasses import dataclass, field
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 
 from .branding import asset_path
+from .desktop_entry import desktop_entry
 
-_NAMES = ("recharge-ai-task", "recharge-ai-task-cli")
+_NAMES = ("recharge-ai-task",)
+SYSTEM_EXECUTABLE = Path("/usr/bin/recharge-ai-task")
+SYSTEM_LAUNCHER = Path("/usr/share/applications/recharge-ai-task.desktop")
 
 
 @dataclass
@@ -29,7 +33,7 @@ def _commands():
         folder = Path(sys.executable).resolve().parent
         return {name: [str(folder / name)] for name in _NAMES if (folder / name).is_file()}
     result = {}
-    for name, module in zip(_NAMES, ("gui", "cli")):
+    for name, module in zip(_NAMES, ("app",)):
         command = shutil.which(name)
         result[name] = [command] if command else [sys.executable, "-m", f"recharge_ai_task.{module}"]
     return result
@@ -77,29 +81,73 @@ def _file_paths(commands):
     return sorted(files)
 
 
+def _data_home():
+    path = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share").expanduser()
+    return path if path.is_absolute() else Path.home() / ".local" / "share"
+
+
+def _generated_shadow(path, data_home):
+    """Only retire our own generated launcher, preserving edited user entries."""
+    if not path.is_file() or path.is_symlink():
+        return False
+    content = path.read_text()
+    main_section = content.split("\n[", 1)[0]
+    fields = dict(line.split("=", 1) for line in main_section.splitlines() if "=" in line)
+    expected = {"Type": "Application", "Version": "1.0", "Name": "Recharge AI-task",
+                "Comment": "Continue Codex tasks after quota recovery", "Terminal": "false",
+                "Categories": "Utility;", "StartupNotify": "false", "StartupWMClass": "recharge-ai-task-tray"}
+    # Historical generated files did not have a managed marker.
+    expected["Icon"] = _value(data_home / "recharge-ai-task" / "icon.png")
+    try:
+        command = shlex.split(fields.get("Exec", "").replace("\\\\", "\\"))
+    except ValueError:
+        return False
+    if command[:1] == ["/usr/bin/env"]:
+        command = command[1:]
+    if len(command) != 1:
+        return False
+    # shlex preserves these escapes inside double quotes; desktop Exec does not.
+    executable = command[0].replace("\\$", "$").replace("\\`", "`").replace("%%", "%")
+    if Path(executable).name != "recharge-ai-task":
+        return False
+    expected["Exec"] = _exec_value([executable])
+    current = desktop_entry(expected["Exec"], expected["Icon"])
+    if content == current:
+        return True
+    # A modified action or extra group makes the launcher user-owned too.
+    if "\n[" in content:
+        return False
+    return fields == expected or fields == dict(expected, **{"X-Recharge-AI-Task-Managed": "true"})
+
+
+def _installed_launcher(data_home):
+    if not (getattr(sys, "frozen", False) and SYSTEM_LAUNCHER.is_file() and SYSTEM_EXECUTABLE.is_file()):
+        return None
+    result = InstallResult(launchers=[SYSTEM_LAUNCHER])
+    shadow = data_home / "applications" / "recharge-ai-task.desktop"
+    if _generated_shadow(shadow, data_home):
+        shadow.unlink()
+    elif shadow.exists():
+        result.warnings.append(f"A customized launcher shadows the package-owned menu entry: {shadow}. Remove it manually to use Cinnamon's package uninstall action.")
+    return result
+
+
 def install_desktop() -> InstallResult:
     if sys.platform != "linux":
         raise RuntimeError("Desktop integration installation requires Linux")
+    data_home = _data_home()
+    installed = _installed_launcher(data_home)
+    if installed is not None:
+        return installed
     commands = _commands()
     if not commands:
         raise RuntimeError("No Recharge AI-task executable found beside this installer")
-    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share").expanduser()
-    if not data_home.is_absolute():
-        data_home = Path.home() / ".local" / "share"
     icon = data_home / "recharge-ai-task" / "icon.png"
     _write_if_changed(icon, asset_path("icon-256.png").read_bytes())
     result = InstallResult()
     for name, argv in commands.items():
-        terminal = name.endswith("-cli")
         launcher = data_home / "applications" / (name + ".desktop")
-        content = "\n".join((
-            "[Desktop Entry]", "Type=Application", "Version=1.0",
-            "Name=Recharge AI-task" + (" CLI" if terminal else ""),
-            "Comment=Continue Codex tasks after quota recovery",
-            "Exec=" + _exec_value(argv), "Icon=" + _value(icon),
-            "Terminal=" + str(terminal).lower(), "Categories=Utility;",
-            "StartupNotify=false", "StartupWMClass=recharge-ai-task-tray", "",
-        ))
+        content = desktop_entry(_exec_value(argv), _value(icon))
         _write_if_changed(launcher, content)
         result.launchers.append(launcher)
     gio = shutil.which("gio")

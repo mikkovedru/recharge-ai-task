@@ -1,791 +1,92 @@
 # Recharge AI-task
 
-<p align="center">
-  <img src="docs/assets/logo-lockup.png" width="360" alt="Recharge AI-task logo">
-</p>
+Continue selected AI tasks after their usage limits are reset. Recharge AI-task supports **OpenAI Codex**, **Claude Code** and **Meta (Facebook) Muse Code**, plus **OpenCode** in wrapped interactive terminals, through a Linux dashboard, a system tray, and terminal commands. Version **1.0** · [MIT license](LICENSE).
 
-[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Ubuntu%20x86__64-lightgrey.svg)](#release-builds-x86_64-only)
+![Recharge AI-task main screen](docs/assets/2026-11-09_Screenshot_Recharge-AI-task_Main-screen.png)
 
-> Auto-continue Codex, Anthropic Claude and Meta Muse Code after quota resets — CLI PTY wrapper and supported desktop watch, MIT.
+The Linux dashboard brings local chats, selected recipients, recovery actions, provider quota and activity logs into one window. Each recipient can have its own message, signal limits and recovery plan.
 
-The primary command, `recharge-ai-task`, opens the desktop app. Use
-`recharge-ai-task-cli` for terminal operation. The current project version is **1.0**.
+## Download and start
 
-### Usage at a glance
+Get the files from [GitHub Releases](https://github.com/mikkovedru/recharge-ai-task/releases). Python is bundled; install and sign in to the AI provider you intend to use separately.
 
-**CLI setup**
+| Platform | Download | Start |
+|---|---|---|
+| Linux x86_64 (Debian with glibc 2.39+ / Ubuntu 24.04 / Mint 22 family) | Linux ZIP or raw `recharge-ai-task` | Extract if needed, allow execution, then open `recharge-ai-task` |
+| Debian / Ubuntu / Mint x86_64 (glibc 2.39+) | `recharge-ai-task_1.0_amd64.deb` | Install with `sudo apt install ./recharge-ai-task_1.0_amd64.deb`, then open from the app menu |
+| Windows x86_64 | Windows ZIP | Extract both executables together and open `recharge-ai-task.exe` for the tray |
 
-```bash
-recharge-ai-task-cli configure          # choose mode (cli/desktop) and defaults
-```
-
-**For the Linux GUI, run `recharge-ai-task` and use Settings directly.**
-
-**Then pick your workflow:**
-
-| Scenario | What to run | Notes |
-|-----------------|------------------------|--------------|
-| **CLI + Goal mode** | `recharge-ai-task-cli --goal` | Wraps `codex` in terminal; first resume sends `/goal resume` |
-| **CLI + normal** | `recharge-ai-task-cli` | Auto-sends `Continue` after reset |
-| **CLI + task args** | `recharge-ai-task-cli --goal -- exec "your task"` | Pass args to codex after `--` |
-| **Linux graphical dashboard** | `recharge-ai-task` | Select recipients, view quota, change settings, start/stop Desktop watch |
-| **ChatGPT Codex desktop app** | `recharge-ai-task-cli watch` | Open Codex and save recipients in the GUI first |
-| **Claude Code CLI** | `recharge-ai-task-cli run --provider claude` | Uses the Claude terminal limit/reset message and configured continuation text |
-| **Claude desktop app** | `recharge-ai-task-cli watch --provider claude` | Select Claude windows or local Code chats in the main list; see [Claude setup](#anthropic-claude) |
-| **Meta Muse Code** | `recharge-ai-task-cli run --provider muse` or saved chats in the dashboard | Checks both subscription allowances with `muse usage --json`; see [Muse setup](#meta-muse-code) |
-| **Start directly in tray** | `recharge-ai-task --tray` or `recharge-ai-task-cli tray` | Starts without opening the dashboard or starting monitoring |
-| **Check quota only** | `recharge-ai-task-cli quota` | Shows short/long window usage |
-| **No Python (Release zip)** | Run `recharge-ai-task.exe` (Win) or `recharge-ai-task` (Linux) | Two binaries: CLI and combined desktop app. Keep them together for CLI integration; Codex CLI must be installed and signed in |
-
-**Prerequisites:** Install [Codex CLI](https://github.com/openai/codex) and sign in with ChatGPT, or follow [Claude setup](#anthropic-claude). X11/XWayland window input needs `sudo apt install xdotool`. Wayland supports the dashboard, tray, chat messages and accessible AI windows; see [Linux display support](#linux-display-support). Native Goal signals currently need Codex under X11/XWayland, accessibility and a clipboard manager (included in Mint Cinnamon). Source installs also need `gir1.2-atspi-2.0`.
-
-→ [Full guide](#english)
-
----
-
-<a id="english"></a>
-
-## Overview
-
-Auto-continue **Codex**, **Claude Code** and **Meta Muse Code** after usage limits reset. Codex and Claude also support selected desktop recipients.
-
-When quota is exhausted, Recharge AI-task waits for recovery and the grace period, then continues selected tasks. Codex recipients have independent Prompt and Goal signals; Codex CLI Goal mode enters `/goal resume` on its first recovery. Claude recipients use the configured continuation message. See [Claude setup](#anthropic-claude) for authentication and native continuation behavior.
-
-### Features
-
-- **Two modes**
-  - `cli` — PTY wrapper around `codex`, `claude` or `muse` in the terminal
-  - `desktop` — watches each saved recipient's provider quota and signals its selected chats
-- **Reset detection** — Codex terminal parsing plus `codex app-server`; Claude terminal reset messages or subscription usage for desktop; Muse Code's limit banner and official subscription-allowance command
-- **Cross-platform** — Windows and Ubuntu (x86_64); `pip install` for developers
-- **Optional tray app** — system tray on Windows & Linux (start/stop, quota, autostart)
-- **MIT licensed** — open source, release-ready
-
-### How Codex recovery works
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       Recharge AI-task                      │
-├──────────────────────────┬──────────────────────────────────┤
-│      CLI mode (PTY)      │       Desktop mode (watch)        │
-│  spawn codex in PTY      │  poll quota API every N seconds   │
-│  parse terminal output   │  on 100% → sleep until reset      │
-│  + quota API fallback    │  → type into desktop window       │
-│  → write to PTY          │                                   │
-└──────────────────────────┴──────────────────────────────────┘
-                              │
-                              ▼
-                    codex app-server (quota API)
-                    ChatGPT account / Codex CLI auth
-```
-
-**Why PTY for CLI?** Usage limits appear in the Codex CLI session. A PTY can read output and write input like a real terminal — no IDE plugin required.
-
-**Why dual-channel parsing?** Terminal messages may change format. Live quota checks detect early resets and usable added credits; the default **60s grace** starts when recovery is observed. If the CLI quota API is unavailable, the later terminal/API reset forecast remains its fallback.
-
-**Desktop delivery:** Desktop mode reads the quota API and addresses explicitly selected recipients. Linux chat targets use the running desktop’s private routing socket; window targets use keyboard input in the selected window. See [target discovery and delivery](docs/target-selection.md) for compatibility and focus requirements.
-
-### Quick start
-
-#### 1. Install
-
-**Windows (full — CLI + tray):**
-
-```powershell
-pip install "recharge-ai-task[all]"
-recharge-ai-task-cli configure
-```
-
-**Ubuntu / Debian (tray + desktop):**
+For a portable Linux download:
 
 ```bash
-sudo apt install xdotool    # required for desktop mode on X11
-pip install "recharge-ai-task[tray]"
-recharge-ai-task-cli configure
+chmod +x recharge-ai-task
+./recharge-ai-task
 ```
 
-**CLI only (no tray):**
+Linux has **one executable** for the dashboard, tray and terminal commands. The portable app registers a per-user menu entry and file icon when opened; keep the executable at a permanent location. You can refresh integration with `./recharge-ai-task --install-desktop`. No installer script is needed. Closing the dashboard leaves the tray running; use **Exit** in the tray to quit. `./recharge-ai-task --tray` starts without opening the dashboard.
+
+Windows currently provides a **tray and terminal interface**, without the Linux graphical dashboard. Keep `recharge-ai-task-cli.exe` beside the tray executable for terminal actions and configuration. Windows is included in the release plan; native verification is tracked in the [release guide](RELEASE.md).
+
+### Remove the Debian package
+
+Use Cinnamon’s **Uninstall** action or Synaptic to remove the installed package. You can also run `recharge-ai-task --uninstall` to open the Recharge removal dialog with its logo and GitHub link; it opens a terminal where apt requests your password and confirmation. The launcher also includes an **Uninstall Recharge AI-task…** action. Your personal settings and logs are retained. Captain’s downloaded `.deb` window offers reinstall only; its buttons are controlled by the system installer. Captain also changes the short description to title case (rendering `AI` as `Ai`) and does not display the package logo or GitHub Homepage link. The stored description preserves `AI` correctly. The Recharge removal dialog and supporting software managers show the logo and GitHub link; opening the `.deb` in Captain does not.
+
+After updating from an older build, launch `/usr/bin/recharge-ai-task` once. It removes the older generated per-user launcher that could hide the package-owned menu entry and prevent Cinnamon from finding the package. Customized user launchers are preserved and reported for manual review.
+
+## Choose recipients and start monitoring
+
+1. Open your AI app and sign in. For Codex quota checks, install and sign in to [Codex CLI](https://github.com/openai/codex) with the corresponding account. Claude Code uses its subscription login. Muse Code requires a subscription and a working `muse usage --json` command (integration tested with 1.4.13).
+2. Open Recharge AI-task. Select the chats to receive recovery signals and enable **Send message**, **Resume goal** (Codex only), or both in **Recipients & actions**.
+3. Review each recipient's message, grace period and signal allowances, then start monitoring. Provider filters change visibility; hidden recipients retain their plans.
+4. Recharge waits for exhausted quota to become usable, waits the grace period (60 seconds by default), and checks again before sending the selected actions. Monitor progress and failures in the provider status and activity log.
+
+Local Claude Code and Muse Code sessions can be resumed by their exact session ID. An already active session is not taken over. Use a wrapped terminal for an interactive session that should keep running. Muse consumer app/browser chats are not supported recipients.
+
+## Terminal commands
+
+Run these beside the Linux executable. On Windows replace `./recharge-ai-task` with `.\recharge-ai-task-cli.exe`.
 
 ```bash
-pip install recharge-ai-task
-recharge-ai-task-cli configure --mode cli
+./recharge-ai-task --version
+./recharge-ai-task quota
+./recharge-ai-task targets --json
+./recharge-ai-task watch
+./recharge-ai-task run --goal
+./recharge-ai-task run --provider claude
+./recharge-ai-task run --provider opencode
+./recharge-ai-task run --provider muse
+./recharge-ai-task configure
+./recharge-ai-task --help
 ```
 
-#### 2. First-time setup (mode and defaults)
+`run` wraps a provider CLI in a terminal and sends its continuation after quota recovery. Keep that terminal open. Put provider arguments after `--`, for example `./recharge-ai-task run --provider claude -- --resume SESSION_ID`. `watch` uses the saved desktop recipients. Every command has `--help`.
 
-```bash
-recharge-ai-task-cli configure
-# non-interactive example:
-recharge-ai-task-cli configure --mode desktop --goal
-```
+OpenCode: install and sign in to [OpenCode](https://opencode.ai/docs/cli/), then use `./recharge-ai-task run --provider opencode`. Set a custom executable with `--opencode PATH` or `OPENCODE_CLI_PATH`, or save it with `configure --provider opencode --opencode PATH`. Dashboard settings and the tray can also configure and launch OpenCode. Arguments after `--` go to its interactive CLI. Automatic continuation requires a terminal usage/rate-limit message with an explicit “try again in” duration or “try again at” time, followed by the configured grace period. Native automatic retry messages suppress extra continuation prompts, and typing during the wait cancels the pending prompt. Limits without a supported reset time remain under manual control. OpenCode uses the model provider chosen in its own configuration; shared quota checks, dashboard chat recipients and Codex Goal commands are unavailable. Noninteractive `opencode run`, servers and remote attachment are outside this wrapper integration.
 
-On first run in an interactive terminal, the setup wizard starts automatically if no config exists.
+## Compatibility and limits
 
-Config file: `~/.recharge-ai-task/config.json`
+The GUI was tested on **Linux Mint 22.3 “Zena” Cinnamon**, the [latest stable Linux Mint release](https://linuxmint.com/download.php) as of 2026-11-10.
 
-| Setting | Description |
-|---------|-------------|
-| `mode` | `cli` or `desktop` |
-| `goal_mode` | CLI: first `/goal resume`; migration default for old Desktop selections |
-| `grace_seconds` | Extra wait after reset (default `60`) |
-| `continue_prompt` | Text to send (default `Continue`) |
-| `desktop_targets` | Saved chat/window recipient identities |
-| `poll_seconds` | Shared quota polling interval for the dashboard, Desktop watch and CLI recovery |
-| `autostart` | Startup preference; the GUI also checks the OS registration |
+- **Linux:** release builds target compatible x86_64 Debian / Ubuntu / Mint systems with glibc 2.39 or later (Ubuntu 24.04 / Mint 22 baseline). Other distributions require testing.
+- **X11 / XWayland:** window input needs `xdotool`. Prefer Codex chat-ID recipients when available.
+- **Wayland:** the dashboard and chat messages work without X11. Window delivery requires accessible composer and Send controls in the target app. The tray needs AppIndicator/StatusNotifier support; GNOME may need an extension.
+- **Codex Resume goal:** requires Codex under X11 or XWayland, accessibility and a clipboard manager. Native Wayland Goal controls are not supported. Use **Send message** for a native Wayland Codex window.
+- Desktop integrations depend on provider versions and, for Codex chat routing, private desktop interfaces. Unsupported or ambiguous targets can fail. An uncertain send is not retried automatically. Prompt acceptance does not guarantee the task completed or eliminate later permission requests.
+- This tool continues work after limits recover; it does not bypass quotas. Review recipient messages and permissions before enabling automatic actions.
 
-#### 3. Run
+Settings and logs are local, normally under `~/.recharge-ai-task/` (Windows: `%USERPROFILE%\.recharge-ai-task\`). `RECHARGE_AI_TASK_CONFIG_DIR` selects an isolated profile. Existing settings from the original project are imported on first launch without deleting the originals.
 
-```bash
-# CLI mode (default when mode=cli)
-recharge-ai-task-cli --goal
-recharge-ai-task-cli --goal -- exec "your long task"
+## More information
 
-# Linux GUI: choose and save recipients, then start Desktop watch
-recharge-ai-task
-# Terminal watcher using the saved recipients
-recharge-ai-task-cli watch
+- [GitHub repository and source](https://github.com/mikkovedru/recharge-ai-task)
+- [Report a bug or request a feature](https://github.com/mikkovedru/recharge-ai-task/issues)
 
-# Check quota
-recharge-ai-task-cli quota
+- [Target discovery, delivery and compatibility](docs/target-selection.md)
+- [Provider integration design](doc/architecture/2026-11-07_unified-provider-chats.md)
+- [Builds, release formats and publishing](RELEASE.md)
+- [Contributing and source setup](CONTRIBUTING.md)
+- [Source distribution and license](OPEN_SOURCE.md)
 
-# Start only the system tray (Windows / Linux)
-recharge-ai-task --tray
-# Equivalent command through the CLI:
-recharge-ai-task-cli tray
-```
+Based on [Autumnpoem/codex-autocontinue](https://github.com/Autumnpoem/codex-autocontinue).
 
-### Desktop app support
-
-The **ChatGPT Codex desktop app** is supported via `desktop` mode:
-
-1. Choose and save one or several chat/window recipients in the Linux GUI (or with `targets --select`).
-2. Poll `codex app-server` quota API using the CLI account.
-3. Wait for every exhausted window to recover, retain the grace period, and check fresh quota.
-4. Signal each saved recipient once; retry confirmed failures independently.
-
-Linux chat delivery uses exact IDs and the desktop router. X11 window delivery
-requires `xdotool` and a focused composer. Native Wayland window delivery uses
-accessible composer and Send controls. The GTK dashboard is available on
-Linux with either display system. Windows uses CLI selection and window input. Legacy title-pattern
-matching has been replaced by explicit recipients.
-
-### Linux display support
-
-The dashboard and CLI support X11 and Wayland. Under Wayland the tray uses
-AppIndicator/StatusNotifier over D-Bus, including on Cinnamon, rather than an
-XEmbed icon. Your panel must support AppIndicators; GNOME may need its
-AppIndicator extension. Source installs need
-`sudo apt install gir1.2-ayatanaappindicator3-0.1`.
-
-Codex **chat-ID messages**, quota monitoring, wrapped terminals and saved CLI
-sessions do not depend on X11. Prefer chat-ID recipients for Codex.
-Native Wayland **window** recipients need native accessibility enabled in the
-AI app and one accessible multiline composer plus an enabled Send button.
-Delivery addresses that window's controls directly, refuses to replace drafts,
-and submits once without global typing, clipboard changes or focus stealing.
-An unsupported composer or ambiguous Send control produces an error. Failures
-after editing are marked uncertain and are not automatically retried.
-XWayland windows keep the existing X11 input path. Refresh and reselect window
-recipients after changing display sessions; saved chat-ID recipients stay stable.
-
-**Resume goal currently requires Codex under X11 or XWayland**, plus a clipboard
-manager. Only its isolated helper uses the X11 GTK backend; the dashboard can
-remain native Wayland. Native Wayland Codex Goal controls are not yet supported:
-use **Send message** without **Resume goal**. A Wayland login alone does not
-make an XWayland-only Goal control work with a native Wayland Codex window.
-
-### Distribution options
-
-| Method | Best for | How |
-|--------|----------|-----|
-| **Tray app** | Non-technical users | Download [GitHub Release](https://github.com/mikkovedru/recharge-ai-task/releases) zip, run `recharge-ai-task` |
-| **Pre-built binary** | Users without Python | CLI plus one combined GUI/tray executable; no separate GUI runtime |
-| **pip install** | Developers | `pip install "recharge-ai-task[all]"` |
-
-> End users need their selected provider's CLI installed and signed in. This tool handles auto-continue after quota resets.
-
-#### Tray menu
-
-| Item | Action |
-|------|--------|
-| Start Codex (Goal) | New console, `--goal` mode |
-| Start Codex (Normal) | Auto-send `Continue` after reset |
-| Start Desktop Watch | Desktop app mode |
-| Stop | End running process |
-| Show Quota | Notification with usage |
-| Settings… | Re-run configure wizard |
-| Run at startup | Toggle autostart |
-| Exit | Stop and quit tray |
-
-The tray keeps the blue 5h recharge logo in both states. Its bottom strip is
-**yellow** when idle and **green** when running; the tooltip also reports the state.
-
-#### Autostart
-
-| Platform | Mechanism |
-|----------|-----------|
-| Windows | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\recharge-ai-task-tray.bat` |
-| Linux | `~/.config/autostart/recharge-ai-task-tray.desktop` |
-
-Toggle via tray menu **Run at startup**.
-
-### Release builds (x86_64 only)
-
-Official binaries target **x86_64** on Windows and Ubuntu only (no ARM builds in official releases).
-
-Build scripts keep generated PyInstaller specifications and intermediate files
-under `build/`. Finished executables are written to `dist/`.
-
-**Windows:**
-
-```powershell
-pip install "recharge-ai-task[all,dev]"
-powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1
-# → dist/recharge-ai-task-cli.exe, dist/recharge-ai-task.exe
-```
-
-**Ubuntu:**
-
-```bash
-pip install "recharge-ai-task[tray,dev]"
-bash scripts/build_linux.sh
-# → dist/recharge-ai-task-cli, dist/recharge-ai-task
-```
-
-The desktop executable runs independently for the GUI and tray. Keep the CLI
-beside it to use CLI actions from the tray and to open the desktop from the CLI.
-Linux includes small compatibility scripts named `recharge-ai-task-gui` and
-`recharge-ai-task-tray`; Windows includes matching `.cmd` launchers. Neither
-contains another bundled runtime.
-
-**GitHub Release** (suggested attachments):
-
-- `recharge-ai-task-windows-x86_64.zip`
-- `recharge-ai-task-linux-x86_64.tar.gz`
-
-**PyPI** (optional):
-
-```bash
-pip install build twine
-python -m build
-twine upload dist/recharge_ai_task-*.tar.gz dist/recharge_ai_task-*.whl
-```
-
-### Resource usage
-
-| State | RAM | CPU |
-|-------|-----|-----|
-| Tray idle | ~30–50 MB | ~0% |
-| CLI wrapper | +~5 MB over Codex | ~0% when waiting |
-| Desktop watch | ~20–40 MB | ~0% (scheduled sleep) |
-| Codex running | Codex itself dominates | task-dependent |
-| Limit triggered | One quota API call (~1–2s) | brief spike |
-
-You can leave the tray running in the background — it is lightweight. Codex itself is what consumes resources.
-
-### CLI options
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--grace SECONDS` | Wait after reset | `60` |
-| `--continue TEXT` | Auto-send text | `Continue` |
-| `--goal` | First send `/goal resume` | off |
-| `--codex PATH` | Codex executable | auto-detect |
-| `--provider codex/claude/muse` | Select the AI provider | saved setting, initially `codex` |
-| `--claude PATH` | Claude Code executable | auto-detect |
-| `--muse PATH` | Muse Code executable | auto-detect |
-
-The CLI, tray and dashboard use English. Language selectors and language
-environment variables are no longer supported. Existing language preferences
-are ignored, and the previous shipped continue prompt becomes `Continue`.
-Custom prompts (including non-English text) and recipient choices are preserved.
-
-### FAQ
-
-**Does it support the new ChatGPT Codex desktop app?**  
-Yes — use `desktop` mode or tray **Start Desktop Watch**. It uses the same quota API as CLI, not Electron hooks.
-
-**Does it work with Cursor / VS Code?**  
-It wraps **Codex CLI**, **Claude Code CLI** or **Muse Code** in a terminal. IDE extensions are out of scope; run `recharge-ai-task-cli` in a terminal instead.
-
-**What happens at quota reset?**  
-Detect availability through live checks, including manual early resets and usable additional credits, then wait the configured grace period (60 seconds by default) and send the selected actions. A forecast timestamp does not delay an observed early recovery.
-
-**Can I run it 24/7?**  
-Yes. Idle tray/watch uses negligible CPU; only Codex tasks consume meaningful resources.
-
-### Project layout
-
-```
-recharge-ai-task/
-├── recharge_ai_task/       # Main package
-│   ├── cli.py          # Entry point
-│   ├── configure.py    # Mode and defaults wizard
-│   ├── wrapper.py      # CLI PTY mode
-│   ├── watch.py        # Desktop watch mode
-│   ├── tray.py         # System tray
-│   ├── quota.py        # codex app-server API
-│   ├── parser.py       # Limit message parser
-│   ├── i18n.py         # Shared English messages
-│   └── locales/        # English message catalog
-├── scripts/            # build_*.ps1 / build_*.sh, fake_codex.py
-├── tests/              # Automated regression tests
-├── LICENSE             # MIT
-├── RELEASE.md          # Release checklist
-└── CONTRIBUTING.md
-```
-
-### Development
-
-```bash
-git clone https://github.com/mikkovedru/recharge-ai-task.git recharge-ai-task
-cd recharge-ai-task
-pip install -e ".[all,dev]"
-pytest tests/ -v
-```
-
-Tests cover Codex, Claude and Muse limit parsing, PTY continuation, desktop recovery,
-provider isolation, quota failures, recipient accounting and GTK controls.
-
-See also: [CONTRIBUTING.md](CONTRIBUTING.md) · [RELEASE.md](RELEASE.md) · [OPEN_SOURCE.md](OPEN_SOURCE.md)
-
-### Requirements
-
-- Python 3.10+
-- The selected provider's CLI installed and signed in: [Codex CLI](https://github.com/openai/codex) with ChatGPT, [Claude Code](https://code.claude.com/docs/en/setup) with Claude, or [Muse Code](https://dev.meta.ai/docs/muse-code) with a Meta subscription
-- Windows CLI mode: `pywinpty` (included in `[windows]` extra)
-- Linux window input: `xdotool` on X11/XWayland; native accessibility on Wayland
-- Linux Wayland tray: AppIndicator/StatusNotifier support in the panel
-
-### Limitations
-
-- Official release binaries: **x86_64 only** (Windows + Ubuntu)
-- Native Goal activation requires X11/XWayland; native Wayland window messages require accessible composer/Send controls
-- Codex desktop quota requires local Codex CLI auth (`codex app-server` must work)
-- Claude desktop quota requires a local Claude Code subscription login and its private usage endpoint
-- Terminal limit message formats may change; Codex has a quota API fallback, while Claude CLI uses the printed reset
-- Muse continuation supports wrapped terminals and saved local Code sessions; consumer Muse app/browser chats have no continuation bridge in this integration
-
-### Logs
-
-When a limit is hit (CLI mode), stderr shows:
-
-```text
-[recharge-ai-task-cli] limit detected ('4 hours 12 minutes'), source=quota API, will send 'Continue' at 2026-07-13 04:01:00
-[recharge-ai-task-cli] auto-continue sent
-```
-
-Log files: `~/.recharge-ai-task/tray.log`, `~/.recharge-ai-task/wrapper.log`
-
-### GitHub repository
-
-| Field | Value |
-|-------|-------|
-| **Repository** | [Recharge AI-task source](https://github.com/mikkovedru/recharge-ai-task) |
-| **GUI / package name** | `recharge-ai-task` (also the pip install name) |
-| **CLI command** | `recharge-ai-task-cli` |
-| **Description** | Auto-continue Codex, Claude and Meta Muse Code after quota resets — Windows & Ubuntu x86_64, MIT |
-| **License** | MIT |
-| **Topics** | `codex`, `openai`, `chatgpt`, `automation`, `quota`, `rate-limit`, `cli`, `python`, `windows`, `linux`, `tray-app` |
-
-Repository: [Recharge AI-task source](https://github.com/mikkovedru/recharge-ai-task)
-
-### License
-
-MIT — see [LICENSE](LICENSE).
-
----
-
-## Project identity and upgrades
-
-The application is **Recharge AI-task**. Its package and desktop command use
-`recharge-ai-task`; terminal commands use `recharge-ai-task-cli`. The Python
-package is `recharge_ai_task`.
-Run `recharge-ai-task` for the dashboard. Resize columns by dragging their edges,
-click headers to sort, and drag headers to reorder them. Long text wraps; column
-widths, positions and sorting are remembered between launches. The visible
-**Last active** column shows each chat's last update in Codex in local time.
-Chats sort newest first by default; you can choose and save another sort.
-The resizable **Recipients & actions** panel shows each selected item's
-automatic/manual plan, effective message and used/remaining allowances. Set global Message and Goal
-activation limits beside the default message, then override either limit or the
-message for individual recipients. Counts persist until explicitly reset and
-cover manual sends and automatic recovery. Unconfirmed sends keep their allowance.
-See [recipient policies and allowances](docs/target-selection.md#recipient-messages-and-continuation-limits)
-for action ordering, skipped actions and counter reset behavior.
-
-Settings now live in `~/.recharge-ai-task/config.json`. On the first default
-launch, existing settings from the previous name are copied byte for byte;
-existing new settings are never overwritten and the original remains a backup.
-Explicit `RECHARGE_AI_TASK_CONFIG_DIR` paths stay isolated. The previous
-configuration-directory environment variable is accepted during upgrades,
-with the new variable taking precedence. Language preferences are ignored.
-Startup registration uses
-`recharge-ai-task-tray.desktop` on Linux or `recharge-ai-task-tray.bat` on Windows;
-enabling or disabling startup also retires its previous registration.
-
-The GitHub repository is
-[Recharge AI-task](https://github.com/mikkovedru/recharge-ai-task).
-Use `origin` for this repository and `upstream` for
-[Autumnpoem's original project](https://github.com/Autumnpoem/codex-autocontinue).
-Development and releases use `master` as the only primary branch. There is no
-local or `origin/main` branch. The local `upstream-sync` branch tracks the
-original project’s `upstream/main`; update it before integrating upstream work.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the remote and branch setup.
-
-## Linux Mint Cinnamon
-
-The tray uses the blue 5h recharge logo on an opaque white background with a dark border and a yellow (idle) or green (running) status strip. When Cinnamon's native XApp status applet is active, it uses XApp; with legacy or collapsible trays it uses an opaque XEmbed drawing surface at the actual allocated size, avoiding GTK StatusIcon caches and clipping. Image paths bypass symbolic icon recoloring; status is also shown by the tooltip and bottom color strip. Double-click toggles the dashboard; right-click opens the menu. The icon reconnects if Cinnamon or its tray socket is replaced. Cinnamon still controls the panel's icon size and whether its XApp status applet is visible.
-
-```bash
-sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-xapp-1.0 gir1.2-atspi-2.0 gir1.2-ayatanaappindicator3-0.1 xdotool
-/usr/bin/python3 -m venv --system-site-packages .venv
-.venv/bin/python -m pip install -e ".[tray,dev]"
-PYTHON=.venv/bin/python bash scripts/build_linux.sh
-./dist/recharge-ai-task --tray
-```
-
-Alternatively, run from source with `bash scripts/run_tray.sh`. The launcher works from any directory. Use `RECHARGE_AI_TASK_CONFIG_DIR` for isolated settings during checks; live quota tests require `RECHARGE_AI_TASK_LIVE_TESTS=1`. `PYSTRAY_BACKEND` can explicitly override the Cinnamon backend selection.
-
-
-## Combined dashboard and tray
-
-`recharge-ai-task` contains the dashboard and tray in one executable.
-On Linux, the frozen desktop app installs persistent menu and file-manager icons
-for both executables on normal launch. To install or refresh these without opening
-the app, run `recharge-ai-task --install-desktop`, or `./install-desktop.sh` beside
-the unpacked release. Nemo uses per-file GIO metadata for raw executable icons;
-that metadata is local to your user and does not travel inside the release archive.
-Re-run the installer after moving the release directory. It also handles matching
-command symlinks in `~/.local/bin`. GUI launchers open the dashboard; the CLI
-launcher runs in a terminal. See [Linux desktop integration](docs/branding.md#linux-file-manager-and-menu-icons).
-
-On Linux, normal launch opens the dashboard and starts its tray icon. To start
-with only the icon, run either command:
-
-```bash
-recharge-ai-task --tray
-recharge-ai-task-cli tray
-```
-
-Starting the tray does not start quota monitoring or send any signals.
-If the app is already running, the tray command leaves the dashboard's current
-visibility unchanged. Both launch forms repair the existing process's tray surface
-and refresh timer without restarting monitoring or CLI jobs. `recharge-ai-task`
-opens or restores its dashboard. Tray artwork fills the panel's physical pixel
-allocation, including scaled displays.
-Closing the dashboard keeps the tray and any active monitoring running.
-The old `recharge-ai-task-gui` and `recharge-ai-task-tray` commands remain
-compatibility launchers. CLI scripts must now use `recharge-ai-task-cli`;
-`recharge-ai-task` opens the graphical app. `python -m recharge_ai_task` also
-opens the graphical app; `python -m recharge_ai_task.cli` starts the CLI.
-On Windows, the combined desktop executable starts in the tray by default;
-the GTK dashboard remains Linux-only.
-
-## Choose Codex signal recipients
-
-The tray menu now has **Open Recharge AI-task…**. Select one or several chats or
-windows; checkbox and prompt changes save automatically for quota-reset signals.
-The picker shows titles,
-thread/window IDs, process IDs, profiles, deep links, projects and live desktop
-owners. Chat targets address a stable ID; window targets use the chat and focused
-input currently shown in that window.
-
-```bash
-./dist/recharge-ai-task
-./dist/recharge-ai-task-cli targets --gui
-./dist/recharge-ai-task-cli targets --json
-./dist/recharge-ai-task-cli targets --select THREAD_ID_1 --select THREAD_ID_2
-```
-
-After installing the Python package, use `recharge-ai-task`.
-For a release archive, there are two binaries: CLI and combined desktop app.
-`recharge-ai-task --help` lists desktop options including `--tray`;
-`recharge-ai-task-cli --help` lists terminal commands. GUI launch commands also start the tray, or reuse the
-running tray and bring its dashboard forward. Closing the window keeps the tray
-and its watch available. Double-click the tray icon to hide the open dashboard
-to the tray or restore it, preserving the current view. Right-click for the tray menu. Use **Exit** in that menu to quit the application.
-
-The GUI saves checkbox and multiline prompt edits automatically, and shows
-task and goal status refreshed every 15 seconds,
-live quota usage and reset countdowns,
-and the actual Desktop watch state. Startup registration and launch origin are
-available in Settings. Settings also offers **Dark**, **Light** and **Auto (OS)**
-color themes, with live preview and a saved preference.
-Use **Start/Stop Desktop watch** and **Settings…** directly from this window.
-Each row has independent **Send message** and **Resume goal** checkboxes.
-Choices and message text save automatically for future quota recovery; editing
-them does not send a manual signal. Enabling the first active recipient
-starts Desktop watch after saving only when fresh quota data shows that its
-provider is blocked. Available credits, unknown quota, stale data or a failed
-refresh leave Watch off. The automatically started worker must observe exhaustion
-before it can schedule recovery, even if credits return during startup. Loading
-saved recipients or editing message/limit settings does not start a stopped watch. **Send now (X goals, Y messages)** applies those
-choices immediately, even with monitoring off. Its second line shows the Goal
-and Message totals; the button is disabled when every recipient action is off:
-
-- **Send message** sends only the configured message.
-- **Resume goal** verifies native activation and continues the goal without a user prompt.
-- **Both** verifies Goal activation first, then sends the prompt to continue work.
-- **Neither** excludes the recipient. Window recipients support Send message only.
-
-Goal activation preserves the existing objective, budget and usage history.
-Manual sends may resume paused goals even while a prompt turn is running,
-without adding a competing empty turn; automatic quota recovery respects intentional
-pauses and skips blocked, completed, budget-limited or already-running goals.
-An independently selected Prompt still sends when the Goal action is skipped;
-a failed or unconfirmed Goal action prevents the subsequent prompt. Results for
-each recipient appear in the window. Starting watch after quota has recovered
-also recovers selected usage-limited goals, after the grace period.
-Settings contains the **Run the tray when I log in** checkbox and startup
-details. The short **On**, **Off** or **Reloading** status sits beside
-**Monitoring**. Its whole box has a bright green border when On, red when Off,
-Waiting or in error, and yellow during transitions. The compact quota box and
-logo match its height; the quota box keeps a neutral border with selected status
-text colors. **Refresh** sits directly
-below the list; **Copy link / ID** and **Open selected row** are on its right.
-The recipient summary sits directly below the multiline message in the same
-group; **Send now (X goals, Y messages)** sits first in the recipient action toolbar, before the reset buttons. **Project** shows the name assigned in Codex;
-**Project path** retains the chat's working path. Both precede **Kind**.
-Old selections migrate to Prompt, or Prompt + Goal when old goal recovery was enabled.
-Settings' **Quota polling (seconds)** controls all regular quota reads and retry
-checks. An active dashboard reuses the watch's quota snapshot and schedule. There
-is no independent 60-second refresh or hidden adaptive polling interval.
-The recipient counts share a group with the default message and Send now;
-immediate-send details are in the button's hover help. **Program log** includes
-**Save log…** (with a dated text-file name) and **Clear log**. Clearing the view
-preserves stored delivery history and allowances.
-Saved changes automatically restart an active watch after a short debounce.
-The previous worker finishes first, and quota-reset delivery accounting is
-preserved. Empty selections or blank Prompt drafts suspend it until valid;
-explicitly stopping the watch cancels pending restarts.
-
-Choose targets before starting desktop watch. Local saved chats are included;
-account-wide ChatGPT history and disconnected remote hosts are not enumerated.
-See [the research, design and delivery notes](docs/target-selection.md) for protocol
-compatibility, focus requirements and per-target retry behavior.
-
-
-The status ⓘ buttons show a compact green/red continuation list for automatic
-and manual actions, including the default allowance for new statuses.
-**Check quota now** (**Ctrl+Shift+R**) wakes active monitoring so early resets
-and added usable credits are checked immediately. **Ctrl+F** searches, **Ctrl+R**
-refreshes chats and **Ctrl+Enter** sends. Focus a status ⓘ button and press
-Enter/Space for its details.
-See [status help and keyboard controls](docs/target-selection.md#status-help-and-keyboard-controls).
-
-## Anthropic Claude
-
-The main list automatically discovers locally installed Codex, Claude Code and Muse
-Code and shows their chats together. No provider selection in Settings is needed.
-Use the **All / Codex / Claude / Muse** buttons above Search to filter chats.
-The **Recipients & actions** heading has a separate button group for its list. This changes visibility only: hidden recipients keep
-their selected actions, messages, allowances and monitoring. The Provider column
-appears first, before Project, in All and is hidden in individual provider views.
-Recipient filter buttons show each category's total count, including hidden rows.
-The last filter is remembered; fresh installations start at All.
-
-Select recipients from several providers at once. Desktop watch monitors their
-quotas independently, so one unavailable login does not block other providers.
-The monitoring box has **All / Codex / Claude / Muse** tabs. Each provider tab
-shows its own plan, quota windows, check/reset timing, recovery forecast and action
-statistics, and reuses its worker's observations. Login and quota-read errors stay
-in that tab instead of repeating in the shared log. Main provider buttons show
-question/exclamation icons in parentheses only for warnings and errors. Healthy
-tabs have no status icon. **Check quota now** and the full recovery explanation
-sit below Monitoring; **Settings** sits below the logo. **Settings → Default terminal AI** only chooses the
-provider for a new wrapped terminal; optional executable paths and arguments are
-separate for every CLI. All paths are auto-detected by default.
-
-### Saved local Code chats
-
-Claude Code histories under `~/.claude/projects/` (or `CLAUDE_CONFIG_DIR`) and
-Muse Code histories under `$XDG_DATA_HOME/muse/sessions/` (normally
-`~/.local/share/muse/sessions/`) appear automatically. This inventories local main
-sessions, not account-wide cloud conversations or internal subagents. Saved chat
-status means its local history exists; it does not assert that a turn is idle.
-
-**Open selected row** resumes a local chat in its provider's terminal. **Send
-message** and automatic recovery use native exact-session continuation:
-`claude --resume ID --print --verbose --output-format stream-json MESSAGE` or
-`muse exec --session-id ID --json MESSAGE`. The original project and profile are
-retained. Provider permissions stay in effect; saved general terminal arguments
-are not applied to targeted delivery because they could select another chat or
-change permissions. Native Goal activation remains Codex-only.
-
-A running provider session is not taken over. Recharge blocks a second continuation launch
-for an identified active chat, or conservatively for an unidentified interactive
-session in the same project. Use the existing wrapped terminal for that case.
-Prompt acceptance is verified from the native session record or successful Claude
-result; launching a process alone is insufficient. Unconfirmed launches are
-counted as uncertain and are not retried automatically. Native output is retained
-in private `session-runs/` logs under Recharge's configuration directory.
-Native permission requests or further input may still require attention in the
-provider; accepting a prompt does not assert that its task completed.
-
-See [provider discovery and recovery design](doc/architecture/2026-11-07_unified-provider-chats.md)
-for metadata versions and integration boundaries.
-
-### Claude Code terminal
-
-Install [Claude Code](https://code.claude.com/docs/en/setup), sign in, and run:
-
-```bash
-recharge-ai-task-cli run --provider claude
-recharge-ai-task-cli run --provider claude -- --continue
-recharge-ai-task-cli run --provider claude -- --resume SESSION_ID
-recharge-ai-task-cli run --provider claude --claude /path/to/claude --grace 60
-# Save the provider for future CLI and tray launches:
-recharge-ai-task-cli configure --provider claude --mode cli
-```
-
-Arguments after `--` go to Claude. Discovery uses `--claude`, `CLAUDE_CLI_PATH`,
-PATH and the standard native-install location. The wrapper reads Claude's
-terminal limit messages, including clock times, dated weekly resets and named
-timezones. After the indicated reset plus grace, it submits the configured
-message (default `Continue`). It never sends Codex's `/goal resume` to Claude,
-even if Goal mode was previously enabled. Terminal recovery does not require
-access to a quota API and cannot detect an early refill before the printed reset.
-Unknown reset formats leave the terminal under manual control.
-Typing in the terminal cancels Recharge's pending continuation for that limit.
-
-Recent Claude Code versions have their own
-[automatic continuation](https://code.claude.com/docs/en/interactive-mode#wait-for-a-usage-limit-to-reset).
-When Claude reports native automatic continuation or its cancellation, the
-wrapper leaves that wait to Claude and does not queue another prompt. To use
-Recharge's continuation message and grace instead, turn off **Continue
-automatically at usage limit** in Claude's `/config`. Leave the terminal open.
-Interactive sessions are supported; `claude -p` exits after its response and
-cannot be resumed through that terminated PTY.
-
-### Claude desktop
-
-1. Run `claude auth login` using the **same subscription account** as Claude desktop.
-2. Open Claude desktop; its supported native windows appear automatically.
-3. Select **Send message** for the desired window recipients. Keep the intended
-   chat open with its empty message composer focused. Adding the first recipient
-   starts Desktop watch only while fresh quota data shows exhaustion; otherwise
-   use **Start Desktop watch** explicitly. Use Start/Stop to control it thereafter.
-4. Recharge observes exhaustion, waits for fresh usage to show recovery across
-   every reported window, retains the configured grace, then sends the message.
-
-The same workflow is available through the CLI:
-
-```bash
-recharge-ai-task-cli targets --provider claude --json
-recharge-ai-task-cli targets --provider claude --select WINDOW_ID
-recharge-ai-task-cli quota --provider claude
-recharge-ai-task-cli watch --provider claude
-```
-
-Window discovery checks application identity, not page titles in browsers.
-Delivery rechecks the provider, window ID, process and foreground window.
-Window recipients address the **current chat in a window**, rather than a saved Code session ID;
-changing that window's chat changes where its next signal goes. OS input cannot
-verify that Claude accepted a turn. Check the composer before retrying an
-unconfirmed send. Per-recipient messages, limits and one-use overrides use the
-same accounting as Codex. Native Codex Goal recovery is unavailable for Claude;
-use Send message. Disable Claude's own automatic continuation for any desktop
-session managed by Recharge to avoid independent continuations. Linux requires
-`xdotool` for X11/XWayland windows, or native accessible composer/Send controls
-for Wayland windows; Windows uses foreground window input. macOS is not
-supported by this desktop delivery implementation.
-
-Desktop quota uses the private read-only usage endpoint used by Claude Code's
-`/usage`, authenticated from `~/.claude/.credentials.json` (or
-`CLAUDE_CONFIG_DIR/.credentials.json`). It sends the existing access token only
-to `https://api.anthropic.com/api/oauth/usage`, refuses redirects, never copies
-it into Recharge settings/logs, and does not refresh or write Claude credentials.
-API-key billing, setup-token-only logins and desktop-only logins do not supply
-the required subscription profile access. Open Claude Code or sign in again when
-its token expires. Missing, malformed, expired or failed usage reads remain
-unavailable and never trigger a desktop recovery. HTTP 429 means the usage read
-was throttled; it does not prove that model quota is exhausted.
-
-The endpoint is undocumented and may change. See Anthropic's issue tracker for
-[profile-scope requirements](https://github.com/anthropics/claude-code/issues/81015)
-and [usage endpoint throttling](https://github.com/anthropics/claude-code/issues/30930).
-Recharge checks all returned five-hour and weekly windows, including model
-windows, conservatively waiting for every exhausted window. Enabling extra usage
-alone does not prove that funds are usable, so it does not bypass those checks.
-The configured quota polling interval applies to Claude too; increase it if
-reads are throttled. No model requests are made to check quota.
-
-## Meta Muse Code
-
-Install [Muse Code](https://dev.meta.ai/docs/muse-code) **1.4.13 or later**, then
-sign in with `muse login` using a Muse Code subscription. Meta added the
-no-model-turn allowance command in
-[1.4.13](https://dev.meta.ai/docs/muse-code/changelog). Confirm it works first:
-
-```bash
-muse usage --json
-recharge-ai-task-cli quota --provider muse
-recharge-ai-task-cli run --provider muse
-recharge-ai-task-cli run --provider muse -- resume --last
-recharge-ai-task-cli run --provider muse --muse /path/to/muse --grace 60
-# Optionally save Muse as the default for new wrapped terminals:
-recharge-ai-task-cli configure --provider muse --mode cli
-```
-
-Discovery uses `--muse`, `MUSE_CLI_PATH`, PATH and the standard native-install
-location. Arguments after `--` go to Muse; its executable path and saved arguments
-are independent of Codex and Claude. The list filter preserves all saved
-recipients and policies. Muse uses the configured continuation message (default
-`Continue`); a previously enabled Codex Goal setting does not inject `/goal resume`.
-Muse's own goals remain available through its native `/goal` commands.
-
-When Muse prints its native **Usage limit reached** banner, Recharge polls
-`muse usage --json` at the configured **Quota polling (seconds)** interval.
-It requires fresh availability in **both the session and weekly allowances**,
-then waits the configured grace and rechecks before submitting the message.
-An early refill is observed through those live checks. A failed check or renewed
-exhaustion restarts the grace. Typing in the terminal cancels Recharge's pending
-continuation for that limit. Leave the terminal open; a headless `muse exec` run
-that exits cannot receive a message through its terminated PTY.
-
-The schema-v1 allowance uses `usedPercent` and millisecond `resetsAtMs`, with
-`asOfMs` identifying the observation. Recharge rejects missing, malformed,
-unsupported or older-than-two-minute observations, and timestamps more than
-30 seconds in the future. A missing window never becomes a fabricated zero.
-Terminal recovery also requires an observation made after the detected limit;
-an earlier cached "available" allowance cannot trigger continuation.
-`allowance: null` with `reason: api_key` means API-key billing, not available
-subscription quota. A login failure or missing allowance keeps recovery waiting;
-run `muse login` and `muse usage --json` to diagnose it. Recharge does not read
-Meta credentials, make a model probe, or call a private Meta HTTP endpoint.
-Allowance subprocesses disable launcher auto-updates so polling cannot start an
-update on every check; the wrapped interactive Muse command retains its normal
-launcher behavior.
-
-### Muse in the dashboard and tray
-
-Saved local Muse Code sessions appear in the main list alongside Codex and Claude.
-Use the **Muse Code** filter to view only those rows. Select **Send message** to
-include them in recovery, or use **Open selected row** to resume one interactively.
-The dashboard shows its subscription session and weekly allowances automatically.
-The tray's **Start Muse Code** action is available when Muse is the default for new
-wrapped terminal sessions. Existing interactive sessions remain under their own
-terminal's control.
-
-Consumer **Muse app/browser chats are not continuation recipients** in this
-integration. They are a separate product from Muse Code and must not inherit its
-subscription quota or Codex/Claude routing. `targets --provider muse` lists local
-Code sessions; `watch --provider muse` monitors selected Code recipients. Native
-Codex Goal recovery is unavailable for Muse, while per-recipient messages, limits
-and one-use overrides apply to saved Code sessions.
-
-This boundary was checked against Muse Code 1.4.13 and the official
-[MSP transport documentation](https://meta-models.github.io/muse-code-sdk/next/guides/msp-wire/framing-and-caps/):
-normal interactive sessions host their runtime in-process; a new `muse serve`
-stdio process does not control an already-open terminal session. The installed
-socket host requires a separate client-credential handshake, and the local
-peer-message CLI reported `external_agent_ingress_closed`. Recharge neither
-impersonates that client nor sends peer messages as a substitute for user input.
-A supported app/browser continuation interface would be needed for that workflow.
-
-## OpenCode terminal support
-
-OpenCode: install and sign in to [OpenCode](https://opencode.ai/docs/cli/), then use `./recharge-ai-task-cli run --provider opencode`. Set a custom executable with `--opencode PATH` or `OPENCODE_CLI_PATH`, or save it with `configure --provider opencode --opencode PATH`. Dashboard settings and the tray can also configure and launch OpenCode. Arguments after `--` go to its interactive CLI. Automatic continuation requires a terminal usage/rate-limit message with an explicit “try again in” duration or “try again at” time, followed by the configured grace period. Native automatic retry messages suppress extra continuation prompts, and typing during the wait cancels the pending prompt. Limits without a supported reset time remain under manual control. OpenCode uses the model provider chosen in its own configuration; shared quota checks, dashboard chat recipients and Codex Goal commands are unavailable. Noninteractive `opencode run`, servers and remote attachment are outside this wrapper integration.
+Recharge AI-task adds the multi-provider dashboard, recipient controls, quota monitoring, tray integration and verified delivery paths maintained here.

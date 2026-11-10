@@ -15,4 +15,4 @@ a = Analysis([str(root / "scripts/entry_gui.py")], pathex=[str(root)],
              excludes=["numpy", "pytest", "pkg_resources"],
              hooksconfig={"gi": {"icons": [], "themes": [], "languages": ["en"]}})
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name="recharge-ai-task", console=False)
+exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name="recharge-ai-task", console=True)

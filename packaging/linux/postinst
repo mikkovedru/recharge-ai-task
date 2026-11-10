@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+# A portable launcher with the same desktop ID hides the package-owned entry.
+# Migrate before the first launch, so Cinnamon's Uninstall sees a dpkg-owned file.
+# Run as each owner: never process user-controlled paths with root privileges.
+if [ "${1:-}" = configure ]; then
+    getent passwd | while IFS=: read -r account password uid gid gecos home shell; do
+        case "$uid" in
+            ''|*[!0-9]*) continue ;;
+        esac
+        [ "$uid" -ge 1000 ] && [ "$uid" -lt 65534 ] || continue
+        case "$home" in
+            /*) ;;
+            *) continue ;;
+        esac
+        [ -f "$home/.local/share/applications/recharge-ai-task.desktop" ] || continue
+        if ! runuser -u "$account" -- env -u XDG_DATA_HOME HOME="$home" /usr/bin/recharge-ai-task --install-desktop; then
+            echo "Recharge AI-task: could not retire a portable launcher for $account; customized launchers are preserved." >&2
+        fi
+    done
+fi

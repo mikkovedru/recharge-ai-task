@@ -116,8 +116,4 @@ def test_distribution_and_commands_use_new_identity():
     package=distribution('recharge-ai-task')
     assert package.metadata['Name']=='recharge-ai-task'
     assert {e.name:e.value for e in package.entry_points} == {
-        'recharge-ai-task':'recharge_ai_task.gui:main',
-        'recharge-ai-task-cli':'recharge_ai_task.cli:main',
-        'recharge-ai-task-gui':'recharge_ai_task.gui:main',
-        'recharge-ai-task-tray':'recharge_ai_task.tray:main',
-        'recharge-ai-task-configure':'recharge_ai_task.configure:main'}
+        'recharge-ai-task':'recharge_ai_task.app:main'}

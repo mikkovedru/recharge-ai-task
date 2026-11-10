@@ -12,7 +12,7 @@ def test_root_help_lists_gui_and_tray_commands(capsys):
     assert cli.main(["--help"]) == 0
     output = capsys.readouterr().out
     assert "gui" in output and "targets --gui" in output
-    assert output.startswith("usage: recharge-ai-task-cli ")
+    assert output.startswith(f"usage: {cli.PROG} ")
     assert "tray" in output and "--tray" in output
 
 
@@ -29,23 +29,23 @@ def test_cli_desktop_commands_skip_terminal_setup(monkeypatch, command, args):
     assert calls == [[gui.sys.executable, "-m", "recharge_ai_task.gui", *args]]
 
 
-def test_frozen_cli_uses_the_combined_desktop_binary(monkeypatch, tmp_path):
+def test_frozen_linux_desktop_reuses_itself_even_if_renamed(monkeypatch, tmp_path):
     monkeypatch.setattr(gui.sys, "platform", "linux")
     monkeypatch.setattr(gui.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(gui.sys, "executable", str(tmp_path / "recharge-ai-task-cli"))
-    desktop = tmp_path / "recharge-ai-task"
-    desktop.touch()
+    executable = tmp_path / "renamed-recharge"
+    executable.touch()
+    monkeypatch.setattr(gui.sys, "executable", str(executable))
     calls = []
     monkeypatch.setattr(launcher.subprocess, "call", lambda args: calls.append(args) or 0)
     assert launcher.launch([], tray=True) == 0
-    assert calls == [[str(desktop), "--tray"]]
+    assert calls == [[str(executable), "--tray"]]
 
 
-def test_missing_desktop_companion_is_clear_failure(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(gui.sys, "platform", "linux")
+def test_missing_windows_desktop_companion_is_clear_failure(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(gui.sys, "platform", "win32")
     monkeypatch.setattr(gui.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(gui.sys, "executable", str(tmp_path / "recharge-ai-task-cli"))
-    assert launcher.launch([]) == 1
+    monkeypatch.setattr(gui.sys, "executable", str(tmp_path / "recharge-ai-task-cli.exe"))
+    assert launcher.launch([], tray=True) == 1
     assert "Missing desktop executable" in capsys.readouterr().err
 
 
@@ -86,35 +86,14 @@ def test_desktop_help_does_not_import_graphical_runtime(monkeypatch, capsys):
     assert exc.value.code == 0
     output = capsys.readouterr().out
     assert output.startswith("usage: recharge-ai-task ")
-    assert "--tray" in output and "recharge-ai-task-cli" in output
-
-
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux compatibility launcher")
-@pytest.mark.parametrize("script,alias", [("launch_tray.sh", "recharge-ai-task-tray"), ("launch_gui.sh", "recharge-ai-task-gui")])
-@pytest.mark.parametrize("args,expected", [([], ["--tray"]), (["--autostart"], ["--tray", "--autostart"]),
-    (["--targets"], ["--targets"]), (["--settings"], ["--settings"]),
-    (["--resume-goal-ui"], ["--resume-goal-ui"])])
-def test_legacy_launcher_follows_symlink_and_preserves_arguments(tmp_path, args, expected, script, alias):
-    import json
-    package = tmp_path / "release folder"
-    package.mkdir()
-    desktop = package / "recharge-ai-task"
-    desktop.write_text("#!/bin/sh\nexec " + sys.executable + " -c 'import json,sys; print(json.dumps(sys.argv[1:])); sys.exit(7)' \"$@\"\n")
-    desktop.chmod(0o755)
-    wrapper = package / alias
-    wrapper.write_bytes((Path(__file__).resolve().parents[1] / "scripts" / script).read_bytes())
-    wrapper.chmod(0o755)
-    link = tmp_path / alias
-    link.symlink_to(wrapper)
-    result = subprocess.run([str(link), *args],cwd="/tmp",capture_output=True,text=True)
-    assert result.returncode == 7, result.stderr
-    assert json.loads(result.stdout) == (args if script == "launch_gui.sh" else expected)
+    assert "--tray" in output and "recharge-ai-task quota" in output
 
 
 def test_primary_package_module_uses_desktop_entry_point(monkeypatch):
     import runpy
     calls = []
-    monkeypatch.setattr(gui, "main", lambda: calls.append("desktop") or 0)
+    from recharge_ai_task import app
+    monkeypatch.setattr(app, "main", lambda: calls.append("desktop") or 0)
     monkeypatch.setattr(sys, "argv", ["recharge-ai-task"])
     with pytest.raises(SystemExit) as exc:
         runpy.run_module("recharge_ai_task", run_name="__main__")
@@ -128,4 +107,4 @@ def test_primary_desktop_rejects_cli_commands_and_points_to_cli(capsys):
     # The desktop help tells users which executable owns terminal commands.
     with pytest.raises(SystemExit):
         gui.main(["--help"])
-    assert "recharge-ai-task-cli" in capsys.readouterr().out
+    assert "recharge-ai-task quota" in capsys.readouterr().out

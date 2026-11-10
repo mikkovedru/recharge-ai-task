@@ -9,6 +9,8 @@ from pathlib import Path
 
 def desktop_command() -> list[str]:
     if getattr(sys, "frozen", False):
+        if sys.platform == "linux":
+            return [str(Path(sys.executable).resolve())]
         name = "recharge-ai-task.exe" if sys.platform == "win32" else "recharge-ai-task"
         desktop = Path(sys.executable).resolve().with_name(name)
         if not desktop.is_file():
@@ -23,9 +25,10 @@ def _parser() -> argparse.ArgumentParser:
     mode.add_argument("--tray", action="store_true", help="Start directly in the system tray without opening the dashboard")
     mode.add_argument("--settings", action="store_true", help="Open dashboard settings (Linux)")
     mode.add_argument("--install-desktop", action="store_true", help="Install Linux menu launchers and file-manager icons, then exit")
+    mode.add_argument("--uninstall", action="store_true", help="Open package removal with the system package manager (Linux)")
     mode.add_argument("--targets", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--autostart", action="store_true", help="Start in the tray and record that this launch was at login")
-    parser.epilog = "For terminal commands, use recharge-ai-task-cli (for example: recharge-ai-task-cli quota)."
+    parser.epilog = "Terminal commands include recharge-ai-task quota and recharge-ai-task run."
     return parser
 
 

@@ -15,21 +15,17 @@ git remote add upstream https://github.com/Autumnpoem/codex-autocontinue.git
 git fetch upstream
 git branch --track upstream-sync upstream/main
 git config remote.pushDefault origin
+# Linux GTK builds: install the native dependencies listed in RELEASE.md,
+# then use /usr/bin/python3 -m venv --system-site-packages .venv.
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[all,dev]"
 pytest tests/ -v
 ```
 
-`origin` is the Recharge AI-task repository. `upstream` is the original
-Autumnpoem project, used to fetch upstream changes. `master` is the only primary
-branch in this repository; do not create a second `main` branch. Work on `master`
-and push to `origin`.
+`origin` is the Recharge AI-task repository. `upstream` is the original Autumnpoem project, used to fetch upstream changes. `master` is the only primary branch in this repository; do not create a second `main` branch. Work on `master` and push to `origin`.
 
-`upstream-sync` tracks the original repository’s `upstream/main`. Fetch and
-update `upstream-sync` before integrating upstream work into `master`. The
-original repository keeps its own branch naming; its `main` is not a development
-branch in this fork.
+`upstream-sync` tracks the original repository’s `upstream/main`. Fetch and update `upstream-sync` before integrating upstream work into `master`. The original repository keeps its own branch naming; its `main` is not a development branch in this fork.
 
 ## Platform notes
 
@@ -48,7 +44,7 @@ branch in this fork.
 
 ## Release targets
 
-Official binaries are built for **x86_64** only:
+Release candidates are built for **x86_64** only:
 
 - Windows: `scripts/build_windows.ps1`
 - Ubuntu: `scripts/build_linux.sh`
@@ -58,3 +54,9 @@ See [RELEASE.md](RELEASE.md) for the full checklist.
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+
+## Documentation style
+
+Write each Markdown prose paragraph or list item on one source line. Do not add hard line breaks at a fixed column width. Preserve code blocks, tables, nested lists and explicit formatting breaks where their structure requires separate lines. `.editorconfig` records that Markdown has no maximum line length.
+
+Source, releases and issue tracking are available in the [GitHub repository](https://github.com/mikkovedru/recharge-ai-task).

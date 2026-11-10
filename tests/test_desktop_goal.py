@@ -85,7 +85,7 @@ def test_frozen_native_helper_uses_combined_desktop_binary(monkeypatch, tmp_path
     binary = tmp_path / "recharge-ai-task"
     binary.touch()
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(tmp_path / "recharge-ai-task-cli"))
+    monkeypatch.setattr(sys, "executable", str(binary))
     control.activate(TARGET, GOAL, desktop)
     assert calls[0][0] == [str(binary), "--resume-goal-ui"]
 

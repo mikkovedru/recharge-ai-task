@@ -1,176 +1,98 @@
-# Release checklist (x86_64)
+# Release and build guide
 
-<p align="center">
-  <img src="docs/assets/logo-lockup.png" width="200" alt="Recharge AI-task logo">
-</p>
+Current version: **1.0**, tag **v1.0**. Source metadata and the logo tooltip use 1.0; Windows file/product resources use 1.0 (numeric resource: 1.0.0.0). `python scripts/check_version.py --tag v1.0` checks source, installed metadata and tag. Do not reuse a published tag for different code. Existing local v1.1.0/v1.1.1 tags are retained; this release intentionally uses the requested 1.0 version. When publishing, explicitly select whether 1.0 should be marked Latest rather than assuming version ordering will choose it.
 
-Target: **Windows x86_64** + **Ubuntu x86_64** only.
+## Release formats
 
-Repository: https://github.com/mikkovedru/recharge-ai-task
+| Format | 1.0 decision | Considerations |
+|---|---|---|
+| Linux ZIP | Ship | One executable, README and license; file managers may require restoring the executable permission |
+| Raw Linux `recharge-ai-task` | Ship | Same executable, convenient for updates; `chmod +x` after download |
+| `.deb` (amd64) | Ship; owner tested installation/use | Debian / Ubuntu / Mint with glibc 2.39+; Ubuntu 24.04 / Mint 22 baseline; installs binary, menu entry, icon and license |
+| Windows ZIP | Ship; owner approved proceeding | Tray EXE plus console CLI EXE; no Linux GTK dashboard |
+| AppImage | Excluded by owner | Still needs an older-system build baseline and tests of GTK, tray, accessibility and host CLI discovery; not a universal compatibility fix |
+| Flatpak | Excluded by owner | Host processes, provider files/sockets and accessibility need deliberate permissions and host execution adapters; a sandbox wrapper alone would break features |
+| `.tar.gz`, RPM, ARM, macOS, Windows installer | Omit for 1.0 | ZIP covers portable downloads; additional targets need their own builds and validation |
+| SHA-256 manifests | Ship | Detect corrupt/incorrect downloads; not a code signature |
 
----
+The Linux executable handles dashboard, tray and terminal commands itself. Windows keeps `recharge-ai-task.exe` (windowed tray) and `recharge-ai-task-cli.exe` (console). The tray launches its console companion for interactive actions. PyInstaller's windowed build has no standard streams; a single Windows EXE would need a tested console attachment/hiding design. See [PyInstaller's standard-stream limitations](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#sys-stdin-sys-stdout-and-sys-stderr-in-noconsole-windowed-applications-windows-only).
 
-## 0. Pre-release
+AppImage must be built against a compatible oldest target system; see its [build guidance](https://docs.appimage.org/reference/best-practices.html). Flatpak restricts host access; see its [sandbox permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html). Neither format is built or advertised as available in 1.0.
+
+## GitHub setup and first release
+
+1. In the repository's **Settings → Actions → General**, enable GitHub Actions and allow the actions used by the workflows (`actions/*` and `softprops/action-gh-release`). Organization policies can override this. The workflow grants only its final draft-release job `contents: write`. GitHub supplies `GITHUB_TOKEN`; no personal token or signing secret is needed. See [GitHub token permissions](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token).
+2. Push the reviewed commits to `origin/master` when ready. CI tests Python 3.10 and 3.12 on Linux and Windows, plus Linux GTK/X11 and native Wayland tests.
+3. In **Actions → Release → Run workflow**, choose `master`. This runs the same checks and both platform builds, then uploads downloadable workflow artifacts. A branch run creates no release. Download them and complete the manual tests below.
+4. Once checks and manual tests pass, create and push the matching tag:
+
+   ```bash
+   git tag -a v1.0 -m "Recharge AI-task 1.0"
+   git push origin master
+   git push origin v1.0
+   ```
+
+5. The tag build validates versions, reruns CI, builds on Ubuntu 24.04 and Windows Server 2022, verifies archives/checksums and creates a **draft** under **Releases** with the artifacts and [1.0 notes](docs/2026-11-09_release-notes-1.0.md).
+6. Download and check the draft’s assets, including the Windows ZIP. Windows is approved for the release plan; record native verification results without claiming tests that have not been run. Then select **Publish release**. Nothing is automatically published.
+
+No push, tag or remote release is performed by local build scripts. This task prepares the process; a successful GitHub run and real Windows session remain verification steps. Future versions must update both version declarations, the notes and the workflow's `body_path` before tagging. The tag must exactly match the version prefixed by `v` (for example 1.0.1 → v1.0.1).
+
+## Build locally
+
+For shared-checkout builds, artifact provenance checks and the unresolved historical extraction failure, see [build verification and shared-checkout lessons](doc/investigations/2026-11-11_build-verification-and-shared-checkouts.md).
+
+Linux x86_64, Debian / Ubuntu / Mint with glibc 2.39+ (Ubuntu 24.04 / Mint 22 baseline):
 
 ```bash
-# Clone & install dev deps
-git clone https://github.com/mikkovedru/recharge-ai-task.git recharge-ai-task
-cd recharge-ai-task
-
-pip install -e ".[all,dev]"
-pytest tests/ -v
+sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo \
+  gir1.2-gtk-3.0 gir1.2-xapp-1.0 gir1.2-atspi-2.0 \
+  gir1.2-ayatanaappindicator3-0.1 dpkg-dev
+/usr/bin/python3 -m venv --system-site-packages .venv
+.venv/bin/python -m pip install -e ".[tray,dev]"
+PYTHON=.venv/bin/python bash scripts/build_linux.sh
+PYTHON=.venv/bin/python bash scripts/package_release.sh
 ```
 
-Update version in `pyproject.toml` and `recharge_ai_task/__init__.py` if bumping.
-
----
-
-## 1. Build Windows (on Windows x86_64)
+Windows x86_64, from PowerShell in the source checkout:
 
 ```powershell
-cd D:\recharge-ai-task
-pip install "recharge-ai-task[all,dev]"
-powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
-powershell -ExecutionPolicy Bypass -File scripts\package_release.ps1
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[windows,tray,dev]"
+.\scripts\build_windows.ps1
+.\scripts\package_release.ps1
 ```
 
-**Output:**
+Build on the target OS; PyInstaller does not cross-compile. Windows EXEs include file/product version resources and icons, but are unsigned. Signing and a Windows installer can be added after native validation; unsigned downloads may trigger Windows reputation warnings.
 
-| File | Purpose |
-|------|---------|
-| `dist\recharge-ai-task-cli.exe` | CLI wrapper |
-| `dist\recharge-ai-task.exe` | Combined desktop app (tray on Windows, no console) |
-| `dist\recharge-ai-task-windows-x86_64.zip` | **Upload to GitHub Release** |
+Built executables go in `dist/`; uploadable packages go in `dist/release/`. Packaging uses an explicit input list, excluding unrelated files and previous builds. Build scripts remove only obsolete generated launchers.
+## Verify before publishing
 
-> Keep both `.exe` in the same folder for CLI/tray integration. The desktop
-> executable starts independently. A small `recharge-ai-task-tray.cmd` launcher
-> preserves the previous tray command; `recharge-ai-task-gui.cmd` preserves
-> the old GUI command.
+The GUI was tested on Linux Mint 22.3 “Zena” Cinnamon, the [latest stable Linux Mint release](https://linuxmint.com/download.php) as of 2026-11-10. This is the confirmed test environment; Debian and Ubuntu GUI sessions remain separate verification targets.
 
----
+- On a compatible Debian / Ubuntu / Mint machine, launch the extracted ZIP, raw executable and installed `.deb`. Check `--version`, `--help`, `run --help`, `quota`, tray startup, dashboard open/close/reopen, terminal launch and autostart. Check package install/removal with apt; package removal leaves personal settings.
+- Test selecting recipients, resizing the dashboard, editing messages, and monitoring start/stop. Verify a real provider recovery without duplicate sends. Check X11 and Wayland separately, including the documented native Goal limits.
+- On Windows 10/11 x86_64, launch the tray, configuration, quota, a real pywinpty wrapped provider, recipient selection and desktop delivery, start/stop and autostart. CLI unit tests use a fake PTY and do not establish these native behaviors.
+- Verify downloaded checksums with `sha256sum -c SHA256SUMS-linux.txt` on Linux or `Get-FileHash` on Windows. GitHub workflow artifacts wrap release files in another ZIP; use the inner release packages for these checks.
 
-## 2. Build Ubuntu (on Ubuntu x86_64)
+The `.deb` is a direct-download package, not an apt repository with automatic updates. Portable menu/autostart registrations refer to the executable's location; refresh them after moving the file. No Flatpak, AppImage, macOS or ARM support is claimed. Record failed native checks before publishing; do not treat a build or mocked test suite as proof of end-to-end provider compatibility.
 
-```bash
-cd ~/recharge-ai-task
-sudo apt update
-sudo apt install -y python3 python3-pip python3-venv
-pip install "recharge-ai-task[tray,dev]"
-bash scripts/build_linux.sh
-bash scripts/package_release.sh
-chmod +x dist/recharge-ai-task-cli dist/recharge-ai-task
-```
+## Package name, descriptions, logo and repository
 
-**Output:**
+For the incorrect assumptions, root causes and verification gaps discovered during packaging, see [Debian packaging and installer lessons](doc/investigations/2026-11-11_debian-packaging-and-installer-behavior.md).
 
-| File | Purpose |
-|------|---------|
-| `dist/recharge-ai-task-cli` | CLI wrapper |
-| `dist/recharge-ai-task` | Combined dashboard and tray |
-| `dist/recharge-ai-task-linux-x86_64.tar.gz` | **Upload to GitHub Release** |
+Edit [packaging/linux/metadata.json](packaging/linux/metadata.json), then run `PYTHON=.venv/bin/python bash scripts/package_release.sh` to regenerate the `.deb`. `summary` is the short description; `description` is a list of long-description paragraphs. `repository_description` adds a final Debian long-description paragraph with the GitHub repository URL so installers that omit `Homepage` can still show it. AppStream uses its dedicated homepage/source/bugtracker links because its description format rejects plain URLs. OpenCode is described as a wrapped interactive terminal integration, with its quota and recipient limitations. `name` is the human display name; keep `package` unchanged because it identifies the installed package and removal command.
 
-X11/XWayland window input also needs: `sudo apt install xdotool`.
-Native Wayland window input needs accessible composer/Send controls in the AI app.
-The Wayland tray requires AppIndicator/StatusNotifier support in the desktop panel.
-Linux builds require `gir1.2-ayatanaappindicator3-0.1` alongside GTK/XApp/AT-SPI;
-the build bundles its typelib and shared libraries. See
-[Linux display support](README.md#linux-display-support) for native Goal limits.
+Desktop launcher content is generated by [recharge_ai_task/desktop_entry.py](recharge_ai_task/desktop_entry.py). Edit `COMMENT` for the concise tooltip, `GENERIC_NAME` for the generic application label, and `KEYWORDS` for menu search terms (also used by AppStream). Both launchers expose the GitHub action; only the package-owned launcher exposes package removal. [recharge_ai_task/desktop_integration.py](recharge_ai_task/desktop_integration.py) writes portable launchers to `$XDG_DATA_HOME/applications/recharge-ai-task.desktop` (normally `~/.local/share/applications/`); [scripts/package_release.py](scripts/package_release.py) writes the system launcher and descriptions into the `.deb`. The desktop `Comment` is a short tooltip; the package and AppStream long descriptions are separate metadata.
 
-> **Cannot cross-compile:** Linux binaries must be built on Linux. Use a Ubuntu VM, WSL2, or GitHub Actions if you only have Windows.
+The packager also calculates `Installed-Size` from the unpacked payload in KiB so Captain can display installed disk usage; the compressed download size is the `.deb` file’s size. It uses this metadata for `DEBIAN/control`, the package-owned desktop launcher and AppStream information. `Homepage` and AppStream homepage/source/bugtracker URLs point to GitHub. The package installs the Recharge icon and includes its repository URL with the copyright/license information. Supporting software managers can display the AppStream name, description, icon and links.
 
----
+Mint’s Captain 1.1.2 reads the window title from the control `Package` field, the subtitle from `Version`, and its description from `Description`. It applies Python `summary.title()` to the summary, so both occurrences of `AI` appear as `Ai` even though `DEBIAN/control` preserves the exact uppercase text. Its installer does not read the package’s icon or Homepage for that window and implements reinstall without a Remove action. These installer controls cannot be changed through `.deb` metadata. Recharge therefore provides its own branded removal dialog through `recharge-ai-task --uninstall` and a desktop action. It opens the system apt removal command in a terminal so authentication, package changes and confirmation stay with the package manager; settings and logs are retained.
 
-## 3. Test before release
+Installed builds use `/usr/share/applications/recharge-ai-task.desktop`, which dpkg owns. They must not create a user launcher with the same desktop ID: Cinnamon can mistake that unowned override for an app with no package. During Debian package configuration, `packaging/linux/postinst` runs launcher migration as each regular local account that has a default-location portable launcher. This happens before the first app launch, so installing and immediately choosing Cinnamon’s Uninstall uses the package-owned file. The helper drops privileges with `runuser` (from the `util-linux` dependency), retires only exact app-generated shadows, and preserves customized launchers. Installed builds also perform this check on launch, including a session’s custom `XDG_DATA_HOME`. Package configuration cannot discover arbitrary per-session XDG paths; those are repaired on launch or with `recharge-ai-task --install-desktop`. Portable builds keep their per-user integration.
 
-**Windows:**
+The owner confirmed that `.deb` installation and use work and Synaptic removes the installed package. This does not establish Windows behavior or certify every distro/installer. The install-time migration and removal dialog are covered by regression tests. Installing the rebuilt package on the owner’s Mint 22.3 system retired the existing generated override. Cinnamon’s live application lookup then selected the dpkg-owned system launcher, and its native removal helper identified `recharge-ai-task` and opened the normal package-removal confirmation; that verification canceled before removal.
 
-```powershell
-cd dist
-.\recharge-ai-task-cli.exe quota
-.\recharge-ai-task.exe
-# Tray → Show Quota / Start Codex (Goal)
-```
+## Release-note image and documentation links
 
-**Ubuntu:**
-
-```bash
-cd dist
-./recharge-ai-task-cli quota
-./recharge-ai-task          # Dashboard and tray
-./recharge-ai-task-cli tray     # Start only the tray
-./recharge-ai-task --tray   # Same, without requiring the CLI
-```
-
-The Linux archive contains two binaries (`recharge-ai-task` for the desktop
-and `recharge-ai-task-cli` for terminal commands) plus small compatibility
-launchers named `recharge-ai-task-gui` and `recharge-ai-task-tray`. Check that tray-only launch leaves the dashboard closed,
-a GUI launch reuses the same tray, and closing the dashboard leaves its icon
-running. The desktop binary must also launch when copied alone to another folder.
-Codex actions require Codex CLI installed and logged in on the test machine.
-
----
-
-## 4. Git tag & push
-
-```bash
-git tag v1.1.0
-git push origin master
-git push origin v1.1.0
-```
-
----
-
-## 5. Create GitHub Release
-
-### Option A — Web UI
-
-1. Open https://github.com/mikkovedru/recharge-ai-task/releases/new
-2. **Choose a tag:** `v1.1.0`
-3. **Release title:** `v1.1.0`
-4. **Description:** copy from [docs/RELEASE_NOTES_v1.1.0.md](docs/RELEASE_NOTES_v1.1.0.md)
-5. **Attach files:**
-   - `dist/recharge-ai-task-windows-x86_64.zip`
-   - `dist/recharge-ai-task-linux-x86_64.tar.gz`
-6. Click **Publish release**
-
-### Option B — GitHub CLI (`gh`)
-
-```bash
-gh release create v1.1.0 \
-  dist/recharge-ai-task-windows-x86_64.zip \
-  dist/recharge-ai-task-linux-x86_64.tar.gz \
-  --title "v1.1.0" \
-  --notes-file docs/RELEASE_NOTES_v1.1.0.md
-```
-
----
-
-## 6. End-user install (from Release zip)
-
-**Windows:**
-
-1. Download `recharge-ai-task-windows-x86_64.zip`
-2. Extract to e.g. `C:\Tools\recharge-ai-task\`
-3. Double-click `recharge-ai-task.exe`
-4. Right-click tray icon → Start Codex (Goal)
-5. Prerequisite: [Codex CLI](https://github.com/openai/codex) installed & signed in
-
-**Ubuntu:**
-
-```bash
-tar -xzf recharge-ai-task-linux-x86_64.tar.gz -C ~/recharge-ai-task
-chmod +x ~/recharge-ai-task/recharge-ai-task-cli ~/recharge-ai-task/recharge-ai-task
-~/recharge-ai-task/recharge-ai-task
-```
-
----
-
-## PyPI (optional, separate from GitHub Release)
-
-```bash
-pip install build twine
-python -m build
-twine upload dist/recharge_ai_task-*.tar.gz dist/recharge_ai_task-*.whl
-```
-
-Users then: `pip install "recharge-ai-task[all]"` + `recharge-ai-task-cli configure`
+The source [1.0 notes](docs/2026-11-09_release-notes-1.0.md) use a relative logo path and relative documentation links, so they work in the repository and local previews without requiring a published tag. A GitHub Release body is a separate document context. Before creating the draft, the workflow runs `scripts/render_release_notes.py` to turn local image links into raw-content URLs and documentation links into GitHub file URLs using `GITHUB_SHA`. The pushed release commit already exists at that point, and later branch changes cannot redirect those links. The generated body stays under `build/`; the source Markdown remains relative.

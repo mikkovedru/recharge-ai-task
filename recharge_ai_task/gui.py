@@ -24,6 +24,11 @@ def main(argv=None):
         parser.error("The graphical dashboard requires Linux GTK")
     if options.autostart and (options.targets or options.settings):
         parser.error("--autostart starts in the tray; it cannot open dashboard settings or targets")
+    if options.uninstall:
+        if sys.platform != "linux" or options.autostart:
+            parser.error("--uninstall requires Linux and cannot be combined with --autostart")
+        from .uninstall import main as uninstall_main
+        return uninstall_main()
     if options.install_desktop:
         if sys.platform != "linux":
             parser.error("--install-desktop requires Linux")

@@ -49,8 +49,8 @@ def _setup_logging() -> None:
 
 def _resolve_cli_exe() -> list[str]:
     if getattr(sys, "frozen", False):
-        name = "recharge-ai-task-cli.exe" if sys.platform == "win32" else "recharge-ai-task-cli"
-        cli = Path(sys.executable).with_name(name)
+        cli = (Path(sys.executable).with_name("recharge-ai-task-cli.exe")
+               if sys.platform == "win32" else Path(sys.executable))
         if cli.exists():
             return [str(cli)]
         raise FileNotFoundError(f"Missing companion CLI executable: {cli}")
@@ -494,7 +494,7 @@ def main(argv=None) -> int:
         sys.stderr.write("recharge-ai-task tray supports Windows and Linux only.\n")
         return 1
     import argparse
-    parser = argparse.ArgumentParser(prog="recharge-ai-task-tray", description="Start in the tray; run recharge-ai-task for the dashboard")
+    parser = argparse.ArgumentParser(prog="recharge-ai-task --tray", description="Start in the tray; run recharge-ai-task for the dashboard")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--targets", action="store_true", help="Open the dashboard")
     mode.add_argument("--settings", action="store_true", help="Open dashboard settings")

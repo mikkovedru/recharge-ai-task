@@ -79,7 +79,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
     codex = None
     targets = tuple(t for t in config.desktop_targets if t.provider == config.provider and any(t.signal_actions(config.goal_mode)))
     if not targets:
-        status("Choose signal targets first: recharge-ai-task-cli targets --gui")
+        status("Choose signal targets first: recharge-ai-task targets --gui")
         return 1
     state = config.state if config.state is not None else WatchState()
     checked_at = None
@@ -329,7 +329,7 @@ def _run_provider_watches(config, stop):
     from . import watch_state
     providers = sorted({t.provider for t in config.desktop_targets})
     if not providers:
-        _log_status("Choose signal targets first: recharge-ai-task-cli targets --gui")
+        _log_status("Choose signal targets first: recharge-ai-task targets --gui")
         return 1
     # Preserve legacy single-provider checkpoint contents when upgrading.
     state = config.state if config.state is not None else WatchState()

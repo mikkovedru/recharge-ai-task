@@ -353,7 +353,7 @@ def test_frozen_desktop_finds_cli_without_relaunching_itself(monkeypatch, tmp_pa
     cli = tmp_path / ("recharge-ai-task-cli" + suffix)
     cli.touch()
     monkeypatch.setattr(tray.sys, "executable", str(desktop))
-    assert tray._resolve_cli_exe() == [str(cli)]
+    assert tray._resolve_cli_exe() == [str(cli if platform == "win32" else desktop)]
 
 
 def test_active_watch_accepts_custom_messages_with_empty_default(monkeypatch):
