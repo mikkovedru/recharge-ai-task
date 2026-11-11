@@ -26,6 +26,12 @@ The failure's root cause was not established. Concurrent work was present, but t
 
 If it recurs, retain the failing executable's hash and size, the source snapshot identity, tool versions and complete error before rebuilding or replacing the file. Verify the exact failing archive and its copied versions. Use separate build/output paths to remove shared-output ambiguity, then distinguish a reproducible build problem from a failure observed only in the original environment. Preserve the uncertainty until a cause is demonstrated.
 
+## Native dependencies and sandbox failures
+
+The Linux build uses system GTK/GObject bindings, including the foreign Cairo bridge, XApp, AT-SPI and Ayatana AppIndicator. A normal isolated Python virtualenv may not expose those distro packages. [build_linux.sh](../../scripts/build_linux.sh) checks the imports before freezing; use a system-site-packages environment as described in the release guide. The [PyInstaller spec](../../scripts/gui_linux.spec) includes the GI/Cairo hooks and excludes `pkg_resources`, whose setuptools dependency is unnecessary for Cairo's extension-build-only `get_include()` path. Preserve these constraints when changing build environments rather than treating a successful pure-Python test run as a native dependency check.
+
+A sandboxed native test can fail because it cannot reach the X11 display or local IPC sockets. During the desktop metadata investigation, GTK initialization failed in the sandbox and the same focused tests passed with local display/IPC access. Diagnose the actual error and rerun only the required checks with that access; do not label an inaccessible display as an application regression or silently count the check as passed. A running desktop shared with other tasks can also make mouse-coordinate tests unreliable. Record the display conditions and test actual pointer/keyboard interaction when layout or focus is the acceptance criterion.
+
 ## Where the knowledge belongs
 
 Keep reproducible build commands and current release requirements in the release guide. Keep non-obvious investigation findings and unresolved causal limits in this document. Tests should enforce practical regressions, such as archive contents, relative source images and metadata correctness. Temporary ledgers can record task progress and test counts, but they must not be the sole surviving location of reusable technical knowledge.

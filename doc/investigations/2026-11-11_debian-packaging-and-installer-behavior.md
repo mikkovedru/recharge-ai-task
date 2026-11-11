@@ -28,6 +28,12 @@ The package now runs migration during its `configure` phase through [postinst](.
 
 Package configuration cannot discover every arbitrary per-session XDG location. Those paths retain on-launch or explicit `--install-desktop` repair. This limit must remain documented rather than claiming universal install-time cleanup.
 
+## Desktop content and command quoting are separate contracts
+
+The short desktop `Comment` is a tooltip, while the Debian long description and AppStream description are separate fields with different formatting rules. Python project keywords do not populate desktop `Keywords` automatically. Both launcher types now use the shared desktop-entry generator, and AppStream receives the same search terms; package paragraphs remain editable in the Linux metadata JSON. Keep the distinction visible in the [release guide](../../RELEASE.md#package-name-descriptions-logo-and-repository).
+
+A portable executable path is serialized through both desktop string escaping and `Exec` argument quoting. Literal percent signs require desktop field-code escaping; dollar signs, backticks, double quotes and backslashes also need correct round trips. Shell quoting alone is insufficient. Shadow migration originally used `shlex` decoding that retained escapes before dollar signs and backticks, so an exact generated file with those path characters could fail recognition. The migration now corrects that decoding and re-encodes the expected command before comparison. Native GIO launcher tests exercise a path containing all these characters. Preserve exact-content checks for actions as well as the main entry: a user's edited website action makes the entry customized too.
+
 ## An external installer's controls are not package controls
 
 Captain implements installation/reinstallation without a Remove action in its `.deb` window. Adding metadata cannot add that button. This should have been established before suggesting package-side display changes would satisfy that window's requirements.
