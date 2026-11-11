@@ -85,8 +85,8 @@ def test_deb_installs_safe_modes_and_one_executable(tmp_path):
         assert installed_size >= payload_kib
     description = subprocess.check_output(["dpkg-deb", "--field", str(deb), "Description"], text=True)
     assert description.splitlines()[0] == "Continue selected AI tasks after AI provider token quota recovery"
-    assert "OpenCode in wrapped interactive terminals" in description
-    assert "OpenCode shared quota checks, dashboard chat recipients and Goal actions are unavailable." in description
+    assert "Google Gemini CLI, Google Antigravity CLI and OpenCode in wrapped interactive terminals" in description
+    assert "Shared dashboard quota checks, desktop chat recipients and Codex Goal actions are unavailable for these terminal integrations." in description
     assert "\n .\n Project source, documentation and issues: https://github.com/mikkovedru/recharge-ai-task\n" in description
     with tarfile.open(fileobj=io.BytesIO(data)) as archive:
         desktop = archive.extractfile("./usr/share/applications/recharge-ai-task.desktop").read().decode()
@@ -107,7 +107,7 @@ def test_deb_installs_safe_modes_and_one_executable(tmp_path):
         assert info.findtext("name") == "Recharge AI-task"
         assert {keyword.text for keyword in info.findall("keywords/keyword")} == set(KEYWORDS)
         paragraphs = [paragraph.text for paragraph in info.findall("description/p")]
-        assert "OpenCode in wrapped interactive terminals" in paragraphs[0]
+        assert "Google Gemini CLI, Google Antigravity CLI and OpenCode in wrapped interactive terminals" in paragraphs[0]
         assert not any("https://" in paragraph for paragraph in paragraphs)
         assert info.find("url[@type='vcs-browser']").text == "https://github.com/mikkovedru/recharge-ai-task"
         assert info.findtext("icon") == "recharge-ai-task"

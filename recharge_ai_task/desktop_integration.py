@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 from .branding import asset_path
-from .desktop_entry import desktop_entry
+from .desktop_entry import desktop_entry, PREVIOUS_SEARCH_METADATA
 
 _NAMES = ("recharge-ai-task",)
 SYSTEM_EXECUTABLE = Path("/usr/bin/recharge-ai-task")
@@ -112,7 +112,8 @@ def _generated_shadow(path, data_home):
         return False
     expected["Exec"] = _exec_value([executable])
     current = desktop_entry(expected["Exec"], expected["Icon"])
-    if content == current:
+    if content == current or any(content == desktop_entry(expected["Exec"], expected["Icon"], comment=comment, keywords=keywords)
+                                 for comment, keywords in PREVIOUS_SEARCH_METADATA):
         return True
     # A modified action or extra group makes the launcher user-owned too.
     if "\n[" in content:

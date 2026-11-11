@@ -56,6 +56,13 @@ class SettingsDialog(Gtk.Dialog):
         self.muse_path.set_tooltip_text("Optional path to Muse Code 1.4.13 or later; allowance checks run muse usage --json")
         self.muse_args = Gtk.Entry(text=shlex.join(config.muse_args or []), placeholder_text="Optional Muse Code arguments")
         self.muse_args.set_tooltip_text("Arguments for wrapped Muse terminal sessions, for example resume --last")
+        self.google_fields = {}
+        for provider, label, executable in (("gemini", "Gemini CLI", "gemini"), ("antigravity", "Antigravity CLI", "agy")):
+            path = Gtk.Entry(text=getattr(config, provider + "_path") or "", placeholder_text="Auto-detect " + executable)
+            path.set_tooltip_text(f"Optional path to Google {label} ({executable}); wrapped interactive terminal support. Dashboard quota and chat delivery are unavailable.")
+            arguments = Gtk.Entry(text=shlex.join(getattr(config, provider + "_args") or []), placeholder_text="Optional interactive CLI arguments")
+            arguments.set_tooltip_text("Arguments for new wrapped terminals. Do not use headless/print, ACP or remote-agent modes.")
+            self.google_fields[provider] = (path, arguments)
         self.opencode_path = Gtk.Entry(text=config.opencode_path or "", placeholder_text="Auto-detect OpenCode")
         self.opencode_path.set_tooltip_text("Optional OpenCode executable path. Supports wrapped interactive terminals; desktop quota and chat delivery are unavailable.")
         self.opencode_args = Gtk.Entry(text=shlex.join(config.opencode_args or []), placeholder_text="Optional OpenCode arguments")
@@ -84,6 +91,8 @@ class SettingsDialog(Gtk.Dialog):
             ("Codex CLI path", self.path), ("CLI arguments", self.args),
             ("Claude Code path", self.claude_path), ("Claude arguments", self.claude_args),
             ("Muse Code path", self.muse_path), ("Muse arguments", self.muse_args),
+            ("Gemini CLI path", self.google_fields["gemini"][0]), ("Gemini arguments", self.google_fields["gemini"][1]),
+            ("Antigravity CLI path", self.google_fields["antigravity"][0]), ("Antigravity arguments", self.google_fields["antigravity"][1]),
             ("OpenCode path", self.opencode_path), ("OpenCode arguments", self.opencode_args),
             ("Reset grace (seconds)", self.grace), ("Quota polling (seconds)", self.poll), ("Color theme", self.theme))
         for index, (name, widget) in enumerate(rows):
@@ -148,6 +157,9 @@ class SettingsDialog(Gtk.Dialog):
         config.claude_args = claude_args or None
         config.muse_path = self.muse_path.get_text().strip() or None
         config.muse_args = muse_args or None
+        for provider, (path, arguments) in self.google_fields.items():
+            setattr(config, provider + "_path", path.get_text().strip() or None)
+            setattr(config, provider + "_args", shlex.split(arguments.get_text()) or None)
         config.opencode_path = self.opencode_path.get_text().strip() or None
         config.opencode_args = opencode_args or None
         config.grace_seconds = self.grace.get_value_as_int()

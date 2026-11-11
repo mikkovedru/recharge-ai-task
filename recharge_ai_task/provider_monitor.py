@@ -52,7 +52,11 @@ def statistics(targets, config, usage):
 def provider_status(provider, *, targets, config, usage, quota=None, error='', notices='',
                     checked_at=None, runtime=None, installed=True, now=0, usage_error=''):
     if provider in TERMINAL_PROVIDERS:
-        from .opencode import LIMITATION
+        if provider == 'opencode':
+            from .opencode import LIMITATION
+        else:
+            from .google_ai import limitation
+            LIMITATION = limitation(provider)
         return dict(provider=provider, terminal_only=True, state='off', installed=installed,
                     enabled=False, monitored=False, selection='Wrapped interactive terminals only; no dashboard recipients.',
                     error='', notices=LIMITATION, command=f'recharge-ai-task run --provider {provider}')

@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "recharge-ai-task"
 version = "1.0"
-description = "Auto-continue Codex, Claude, Meta Muse Code and OpenCode terminals after usage limits — Linux dashboard, Windows tray and terminal commands"
+description = "Auto-continue Codex, Claude, Meta Muse Code, Google Gemini/Antigravity and OpenCode terminals after usage limits — Linux dashboard, Windows tray and terminal commands"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Recharge AI-task contributors" }]
-keywords = ["codex", "openai", "claude", "anthropic", "muse", "meta", "opencode", "quota", "rate-limit", "automation"]
+keywords = ["codex", "openai", "claude", "anthropic", "muse", "meta", "gemini", "google", "antigravity", "opencode", "quota", "rate-limit", "automation"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: Microsoft :: Windows",

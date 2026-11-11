@@ -3,9 +3,9 @@
   "name": "Recharge AI-task",
   "summary": "Continue selected AI tasks after AI provider token quota recovery",
   "description": [
-    "Continue selected AI tasks after their usage limits reset. Supports OpenAI Codex, Claude Code and Meta (Facebook) Muse Code, plus OpenCode in wrapped interactive terminals. Includes a Linux dashboard, system tray and CLI (terminal commands).",
+    "Continue selected AI tasks after their usage limits reset. Supports OpenAI Codex, Claude Code and Meta (Facebook) Muse Code, plus Google Gemini CLI, Google Antigravity CLI and OpenCode in wrapped interactive terminals. Includes a Linux dashboard, system tray and CLI (terminal commands).",
     "Choose desktop recipients and continuation messages, monitor supported provider quotas and recovery times, or wrap a provider CLI in a terminal. Codex chats also support Goal recovery. Provider tools must be installed and signed in separately.",
-    "OpenCode continuation requires a terminal usage-limit message with a supported explicit reset time. OpenCode shared quota checks, dashboard chat recipients and Goal actions are unavailable."
+    "Google Gemini CLI, Google Antigravity CLI and OpenCode support wrapped interactive terminals with an explicit supported reset time. Native retries and model fallback remain in control. Shared dashboard quota checks, desktop chat recipients and Codex Goal actions are unavailable for these terminal integrations."
   ],
   "homepage": "https://github.com/mikkovedru/recharge-ai-task",
   "issues": "https://github.com/mikkovedru/recharge-ai-task/issues",

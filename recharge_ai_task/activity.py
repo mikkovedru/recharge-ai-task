@@ -64,7 +64,7 @@ def display_event(event):
     action = {"prompt": "Message", "goal": "Goal", "signals": "Signals"}.get(event["action"], event["action"])
     status = event["status"]
     project = event.get("project_name") or "not available"
-    provider = {"codex": "Codex", "claude": "Claude", "muse": "Muse"}.get(event.get("provider"), "Provider unknown")
+    provider = {"codex": "Codex", "claude": "Claude", "muse": "Muse", "gemini": "Gemini", "antigravity": "Antigravity", "opencode": "OpenCode"}.get(event.get("provider"), "Provider unknown")
     text = f"[{provider}] {event['source'].title()} · {event['title']} [Project: {project}] · {action}: {status}"
     if event["detail"]:
         text += " — " + event["detail"]

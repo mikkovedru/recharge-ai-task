@@ -293,12 +293,14 @@ class TrayApp:
             from .providers import installed_providers
             from .claude import fetch_claude_quota
             from .opencode import fetch_opencode_quota
+            from .google_ai import fetch_google_quota
             from .muse import fetch_muse_quota
             config = AppConfig.load()
             lines = []
             for provider in installed_providers(config):
                 try:
-                    quota = (fetch_opencode_quota() if provider == "opencode" else
+                    quota = (fetch_google_quota(provider) if provider in ("gemini", "antigravity") else
+                             fetch_opencode_quota() if provider == "opencode" else
                              fetch_claude_quota() if provider == "claude" else
                              fetch_muse_quota(config.muse_path) if provider == "muse" else
                              fetch_quota(discover_codex(config.codex_path)))
@@ -370,7 +372,7 @@ class TrayApp:
                 enabled=lambda _: not self._is_running() and AppConfig.load().provider == "codex",
             ),
             pystray.MenuItem(
-                lambda _: {"claude": "Start Claude Code", "muse": "Start Muse Code", "opencode": "Start OpenCode"}.get(AppConfig.load().provider, t("tray.start_normal")),
+                lambda _: {"claude": "Start Claude Code", "muse": "Start Muse Code", "gemini": "Start Gemini CLI", "antigravity": "Start Antigravity CLI", "opencode": "Start OpenCode"}.get(AppConfig.load().provider, t("tray.start_normal")),
                 self.start_normal,
                 enabled=lambda _: not self._is_running(),
             ),
@@ -445,7 +447,7 @@ class TrayApp:
             self._watch_error = f"Could not read saved watch settings: {exc}"
         thread = self._watch_thread
         alive = thread is not None and thread.is_alive()
-        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True, "muse_support": True, "opencode_terminal_support": True, "unified_providers": True, "quota_blocked_start": True,
+        return {"pid": os.getpid(), "desktop_watch": alive, "native_goal_recovery": True, "gui_control": True, "per_target_signals": True, "recipient_policies": True, "one_use_messages": True, "manual_quota_check": True, "auto_watch_restart": True, "delivery_history": True, "watch_progress_version": 3, "shared_quota": True, "claude_support": True, "muse_support": True, "opencode_terminal_support": True, "google_terminal_support": True, "unified_providers": True, "quota_blocked_start": True,
                 "restarting": self._restart_pending, "watch_requested": self._watch_requested,
                 "watch_pause_reason": self._watch_pause_reason,
                 "stopping": alive and self._watch_stop.is_set(),

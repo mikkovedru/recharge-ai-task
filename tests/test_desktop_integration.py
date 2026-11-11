@@ -232,3 +232,18 @@ sys.exit(integration.install_main())
     if kind != "generated":
         assert shadow.read_text() == original
     assert system.read_text() == "[Desktop Entry]\nName=Package-owned entry\n"
+
+
+@pytest.mark.parametrize("version", [0,1])
+def test_previous_provider_metadata_is_still_an_exact_generated_shadow(tmp_path,version):
+    from recharge_ai_task.desktop_entry import PREVIOUS_SEARCH_METADATA
+    comment,keywords=PREVIOUS_SEARCH_METADATA[version]
+    data=tmp_path/"data"
+    launcher=data/"applications/recharge-ai-task.desktop"
+    launcher.parent.mkdir(parents=True)
+    content=integration.desktop_entry(integration._exec_value(["/old/recharge-ai-task"]),
+        integration._value(data/"recharge-ai-task/icon.png"),comment=comment,keywords=keywords)
+    launcher.write_text(content)
+    assert integration._generated_shadow(launcher,data)
+    launcher.write_text(content.replace("Name=Project on GitHub","Name=My repository"))
+    assert not integration._generated_shadow(launcher,data)

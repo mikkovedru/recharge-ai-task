@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 
-from .config import AppConfig, PROVIDERS
+from .config import AppConfig, PROVIDERS, TERMINAL_PROVIDERS
 from .targets import Inventory, discover_targets, codex_home, discover_windows
 
 
@@ -13,8 +13,12 @@ def installed_providers(config=None):
     from .muse import discover_muse
     from .session_catalog import muse_home
     from .opencode import discover_opencode
+    from .google_ai import discover_google_cli
     roots = {"codex": codex_home(), "claude": claude_home(), "muse": muse_home(), "opencode": Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "opencode"}
     discover = {"codex": discover_codex, "claude": discover_claude, "muse": discover_muse, "opencode": discover_opencode}
+    roots.update(gemini=Path.home()/".gemini", antigravity=Path.home()/".gemini/antigravity-cli")
+    discover.update(gemini=lambda path: discover_google_cli("gemini", path),
+                    antigravity=lambda path: discover_google_cli("antigravity", path))
     result = {}
     for provider in PROVIDERS:
         try:
@@ -22,7 +26,7 @@ def installed_providers(config=None):
         except Exception:
             executable = None
         present = bool(executable or roots[provider].is_dir())
-        if not present and provider not in ("muse", "opencode"):
+        if not present and provider not in ("muse", *TERMINAL_PROVIDERS):
             try:
                 present = bool(discover_windows(provider))
             except Exception:
@@ -38,7 +42,7 @@ def discover_all_targets():
     for provider, executable in available.items():
         if executable:
             installed.append(provider)
-        elif provider not in ("muse", "opencode"):
+        elif provider not in ("muse", *TERMINAL_PROVIDERS):
             try:
                 if discover_windows(provider):
                     installed.append(provider)

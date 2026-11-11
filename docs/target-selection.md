@@ -6,7 +6,7 @@
 
 The selector distinguishes **desktop windows** (X11 window ID + process ID, or Wayland accessibility bus/connection/object identity + process ID) from **Codex chats** (stable thread ID + Codex profile) and **Claude/Muse Code sessions** (native session ID + provider profile). Titles are labels, not identities: two chats can have the same name, and several chats can use the same window. Selection is explicit, supports several recipients, and survives restart.
 
-The main list discovers installed providers automatically and starts at **All chats**. The **Provider** buttons above Search select All, Codex, Claude or Muse Code without changing recipients or monitoring. The Provider column keeps equal titles and IDs distinguishable. Hidden selected recipients remain active in the recipient panel. Settings' default terminal provider only controls new wrapped terminals. See [provider integration design](../doc/architecture/2026-11-07_unified-provider-chats.md) for native session paths, delivery behavior and current limits.
+The main list discovers installed providers automatically and starts at **All chats**. The **Provider** buttons above Search select All, Codex, Claude, Muse Code, Gemini, Antigravity or OpenCode without changing recipients or monitoring. The Provider column keeps equal titles and IDs distinguishable. Hidden selected recipients remain active in the recipient panel. Settings' default terminal provider only controls new wrapped terminals. See [provider integration design](../doc/architecture/2026-11-07_unified-provider-chats.md) for native session paths, delivery behavior and current limits.
 
 ## Research
 
@@ -35,7 +35,7 @@ Successful automatic saves do not add a status line. Write failures remain visib
 
 The overview has a compact **Monitoring** group and a framed provider notebook. **All** shows the earliest check/recovery forecast and combined maximum action counts, plus an overview of each provider's quota. This is a combined overview; providers recover independently and do not share a send schedule.
 
-The **Codex**, **Claude** and **Muse** tabs show their own plan, usage windows, reset times/countdowns, next quota check, recovery status, selected/pending message and Goal counts, and persisted usage statistics. Scroll within a tab for long notices or additional quota windows. A confirmed Send countdown is distinct from a Forecast that may change; usable quota and the running worker's grace period still govern delivery. An unmonitored provider says **Not monitored**. Unknown quota or statistics are marked unavailable rather than shown as zero. Stale observations and retained values after a failed refresh are labeled.
+The **Codex**, **Claude** and **Muse** tabs show their own plan, usage windows, reset times/countdowns, next quota check, recovery status, selected/pending message and Goal counts, and persisted usage statistics. The **Gemini**, **Antigravity** and **OpenCode** tabs instead explain wrapped-terminal support and its launch command; dashboard quotas, desktop chat recipients and Codex Goal actions are unavailable for those integrations. OpenCode is last. Provider filter buttons wrap on narrow panels, and tabs use compact spacing. Scroll within a tab for long notices or additional quota windows. A confirmed Send countdown is distinct from a Forecast that may change; usable quota and the running worker's grace period still govern delivery. An unmonitored provider says **Not monitored**. Unknown quota or statistics are marked unavailable rather than shown as zero. Stale observations and retained values after a failed refresh are labeled.
 
 Login, allowance/version, quota and provider-discovery errors appear in the individual provider tab and update on the next successful observation. Repeated polling does not append them to the shared Program log. Delivery outcomes remain logged with their provider. The tab labels and main-list provider buttons use status icons and theme-aware colors:
 
@@ -207,7 +207,7 @@ The dashboard never restarts Codex or shared desktop services automatically. See
 
 ## Provider filters and custom-message disclosure
 
-Both the main chat list and the **Recipients & actions** heading have linked **All / Codex / Claude / Muse** buttons. Each filters its own list without changing saved actions, counts or monitoring. Use Left/Right or Home/End to switch a focused button group. Empty recipient filters show an explicit empty state. Every recipient row labels its provider immediately left of the information icon.
+Both the main chat list and the **Recipients & actions** heading have linked **All / Codex / Claude / Muse / Gemini / Antigravity / OpenCode** buttons. Each filters its own list without changing saved actions, counts or monitoring. Use Left/Right or Home/End to switch a focused button group. Empty recipient filters show an explicit empty state. Every recipient row labels its provider immediately left of the information icon.
 
 Custom messages retain their compact inline preview. The down-arrow **Expand** icon appears only when the full inline content does not fit; it reveals the original multiline message within the scrolling recipient list. The up-arrow **Shorten** icon restores the preview. Editing, refreshing or filtering does not send a message, and expansion is a view preference rather than a change to the saved message.
 

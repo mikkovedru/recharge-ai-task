@@ -28,6 +28,8 @@ def _build_run_parser(prog: str = PROG) -> argparse.ArgumentParser:
     parser.add_argument("--provider", choices=PROVIDERS, help="AI provider (default from settings)")
     parser.add_argument("--claude", metavar="PATH", help="Path to Claude Code executable")
     parser.add_argument("--muse", metavar="PATH", help="Path to Meta Muse Code executable")
+    parser.add_argument("--gemini", metavar="PATH", help="Path to Google Gemini CLI")
+    parser.add_argument("--antigravity", metavar="PATH", help="Path to Google Antigravity CLI (agy)")
     parser.add_argument("--opencode", metavar="PATH", help="Path to OpenCode executable (interactive terminal)")
     goal = parser.add_mutually_exclusive_group()
     goal.add_argument("--goal", dest="goal_mode", action="store_true", help="CLI: first /goal resume; desktop: native recovery of quota-stopped goals")
@@ -63,7 +65,10 @@ def _load_user_config() -> AppConfig:
 
 def _cmd_quota(codex_path: str | None, provider="codex") -> int:
     try:
-        if provider == "opencode":
+        if provider in ("gemini", "antigravity"):
+            from .google_ai import fetch_google_quota
+            quota = fetch_google_quota(provider)
+        elif provider == "opencode":
             from .opencode import fetch_opencode_quota
             quota = fetch_opencode_quota()
         elif provider == "claude":
@@ -87,6 +92,8 @@ def _cmd_configure(argv: list[str]) -> int:
     parser.add_argument("--provider", choices=PROVIDERS)
     parser.add_argument("--claude", dest="claude_path", metavar="PATH")
     parser.add_argument("--muse", dest="muse_path", metavar="PATH")
+    parser.add_argument("--gemini", dest="gemini_path", metavar="PATH")
+    parser.add_argument("--antigravity", dest="antigravity_path", metavar="PATH")
     parser.add_argument("--opencode", dest="opencode_path", metavar="PATH")
     parser.add_argument("--goal", action="store_true")
     parser.add_argument("--no-goal", action="store_true")
@@ -101,6 +108,10 @@ def _cmd_configure(argv: list[str]) -> int:
         overrides["claude_path"] = ns.claude_path
     if ns.muse_path:
         overrides["muse_path"] = ns.muse_path
+    if ns.gemini_path:
+        overrides["gemini_path"] = ns.gemini_path
+    if ns.antigravity_path:
+        overrides["antigravity_path"] = ns.antigravity_path
     if ns.opencode_path:
         overrides["opencode_path"] = ns.opencode_path
     if ns.mode:
@@ -218,6 +229,10 @@ def _cmd_run(argv: list[str]) -> int:
         claude_path=ns.claude or user.claude_path,
         claude_args=_normalize_codex_args(ns.codex_args) or user.claude_args,
         muse_path=ns.muse or user.muse_path,
+        gemini_path=ns.gemini or user.gemini_path,
+        gemini_args=_normalize_codex_args(ns.codex_args) or user.gemini_args,
+        antigravity_path=ns.antigravity or user.antigravity_path,
+        antigravity_args=_normalize_codex_args(ns.codex_args) or user.antigravity_args,
         opencode_path=ns.opencode or user.opencode_path,
         opencode_args=_normalize_codex_args(ns.codex_args) or user.opencode_args,
         muse_args=_normalize_codex_args(ns.codex_args) or user.muse_args,
@@ -254,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
   tray             Start directly in the system tray without a dashboard
   targets --gui    Open the same graphical dashboard
   targets --json   List chats from all installed providers as JSON
-  run              Run Codex, Claude Code, Muse Code or OpenCode with auto-continue
+  run              Run Codex, Claude, Muse, Gemini, Antigravity or OpenCode with auto-continue
   watch            Watch quota and signal saved desktop recipients
   quota            Show current quota and reset times
   configure        Configure command-line settings

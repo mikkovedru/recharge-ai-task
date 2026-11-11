@@ -1,4 +1,4 @@
-"""PTY wrapper that auto-continues Codex, Claude, Muse Code and OpenCode after quota resets."""
+"""PTY wrapper that auto-continues Codex, Claude, Muse Code, Gemini, Antigravity and OpenCode after quota resets."""
 
 from __future__ import annotations
 
@@ -28,6 +28,10 @@ class WrapperConfig:
     claude_args: list[str] | None = None
     muse_path: str | None = None
     muse_args: list[str] | None = None
+    gemini_path: str | None = None
+    gemini_args: list[str] | None = None
+    antigravity_path: str | None = None
+    antigravity_args: list[str] | None = None
     opencode_path: str | None = None
     opencode_args: list[str] | None = None
 
@@ -208,6 +212,12 @@ def run_wrapper(config: WrapperConfig) -> int:
         if (args and args[0] in ("run", "serve", "web", "attach", "acp", "api")) or any(
                 arg == "--server" or arg.startswith("--server=") for arg in args):
             raise ValueError("OpenCode wrapping requires a local interactive terminal, not run/serve/web/attach.")
+    elif config.provider in ("gemini", "antigravity"):
+        from .google_ai import discover_google_cli, limitation, validate_interactive_args
+        codex = discover_google_cli(config.provider, getattr(config, config.provider + "_path"))
+        args = getattr(config, config.provider + "_args") or []
+        validate_interactive_args(config.provider, args)
+        _log("[recharge-ai-task] " + limitation(config.provider))
     elif config.provider == "codex":
         codex = discover_codex(config.codex_path)
         args = config.codex_args or []
@@ -233,7 +243,10 @@ def run_wrapper(config: WrapperConfig) -> int:
         _log(f"[recharge-ai-task] {t('cli.not_found')}")
         return 1
 
-    if config.provider == "opencode":
+    if config.provider in ("gemini", "antigravity"):
+        from .google_ai import GoogleLimitWatcher
+        watcher = GoogleLimitWatcher()
+    elif config.provider == "opencode":
         from .opencode import OpenCodeLimitWatcher
         watcher = OpenCodeLimitWatcher()
     elif config.provider == "muse":
@@ -317,7 +330,7 @@ def run_wrapper(config: WrapperConfig) -> int:
             watcher.reset()
 
         try:
-            if config.provider == "opencode":
+            if config.provider in ("gemini", "antigravity", "opencode"):
                 ready = wait_for_opencode_reset(pty, stop, wake_at, watcher, config.grace_seconds, user_input)
                 if ready is None:
                     return
@@ -335,10 +348,10 @@ def run_wrapper(config: WrapperConfig) -> int:
 
             if config.provider == "claude":
                 watcher.reset()
-            _submit(pty, prompt, config.enter_presses, config.key_delay, carriage_return=config.provider in ("claude", "opencode"))
+            _submit(pty, prompt, config.enter_presses, config.key_delay, carriage_return=config.provider in ("claude", "gemini", "antigravity", "opencode"))
             _log(f"[recharge-ai-task] {t('cli.auto_continue_sent')}")
         finally:
-            if config.provider == "opencode":
+            if config.provider in ("gemini", "antigravity", "opencode"):
                 watcher.reset()
             with limit_lock:
                 waiting_for_reset = False
@@ -351,7 +364,7 @@ def run_wrapper(config: WrapperConfig) -> int:
             user_input.set()
             pty.write(data)
 
-    stdin_pty = InputProxy() if config.provider in ("claude", "muse", "opencode") else pty
+    stdin_pty = InputProxy() if config.provider in ("claude", "muse", "gemini", "antigravity", "opencode") else pty
     stdin_thread = threading.Thread(target=forward_stdin, args=(stdin_pty, stop), daemon=True)
     reader_thread = threading.Thread(target=reader, daemon=True)
 

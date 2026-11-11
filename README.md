@@ -1,6 +1,6 @@
 # Recharge AI-task
 
-Continue selected AI tasks after their usage limits are reset. Recharge AI-task supports **OpenAI Codex**, **Claude Code** and **Meta (Facebook) Muse Code**, plus **OpenCode** in wrapped interactive terminals, through a Linux dashboard, a system tray, and terminal commands. Version **1.0** · [MIT license](LICENSE).
+Continue selected AI tasks after their usage limits are reset. Recharge AI-task supports **OpenAI Codex**, **Claude Code** and **Meta (Facebook) Muse Code**, plus **Google Gemini CLI**, **Google Antigravity CLI** and **OpenCode** in wrapped interactive terminals, through a Linux dashboard, a system tray, and terminal commands. Version **1.0** · [MIT license](LICENSE).
 
 ![Recharge AI-task main screen](docs/assets/2026-11-09_Screenshot_Recharge-AI-task_Main-screen.png)
 
@@ -53,6 +53,8 @@ Run these beside the Linux executable. On Windows replace `./recharge-ai-task` w
 ./recharge-ai-task watch
 ./recharge-ai-task run --goal
 ./recharge-ai-task run --provider claude
+./recharge-ai-task run --provider gemini
+./recharge-ai-task run --provider antigravity
 ./recharge-ai-task run --provider opencode
 ./recharge-ai-task run --provider muse
 ./recharge-ai-task configure
@@ -60,6 +62,8 @@ Run these beside the Linux executable. On Windows replace `./recharge-ai-task` w
 ```
 
 `run` wraps a provider CLI in a terminal and sends its continuation after quota recovery. Keep that terminal open. Put provider arguments after `--`, for example `./recharge-ai-task run --provider claude -- --resume SESSION_ID`. `watch` uses the saved desktop recipients. Every command has `--help`.
+
+Google: install and sign in to [Gemini CLI](https://geminicli.com/docs/get-started/authentication/) (`gemini`) or [Antigravity CLI](https://antigravity.google/docs/getting-started?tab=cli) (`agy`), then run the matching `--provider` command above. Set custom executables with `--gemini PATH` / `--antigravity PATH`, `GEMINI_CLI_PATH` / `ANTIGRAVITY_CLI_PATH`, or save their paths and interactive arguments in Settings. Each has a provider tab; OpenCode stays last. Automatic continuation requires an explicit supported reset time in a stopped usage/quota-limit banner. Native retries, model fallback and choice dialogs stay in control, and typing cancels the pending continuation. These are wrapped-terminal integrations: shared dashboard quotas, saved desktop recipients, Antigravity app/IDE delivery and Codex Goal actions are unavailable. Use `/stats` in Gemini and `/usage` in Antigravity for their native usage views. See [Google integration design and limits](doc/architecture/2026-11-11_google-terminal-providers.md).
 
 OpenCode: install and sign in to [OpenCode](https://opencode.ai/docs/cli/), then use `./recharge-ai-task run --provider opencode`. Set a custom executable with `--opencode PATH` or `OPENCODE_CLI_PATH`, or save it with `configure --provider opencode --opencode PATH`. Dashboard settings and the tray can also configure and launch OpenCode. Its provider tab explains terminal support and shows the launch command; it does not invent shared quota percentages or desktop recipients. Provider filter buttons wrap when needed, and OpenCode stays last. Arguments after `--` go to its interactive CLI. Automatic continuation requires a terminal usage/rate-limit message with an explicit “try again in” duration or “try again at” time, followed by the configured grace period. Native automatic retry messages suppress extra continuation prompts, and typing during the wait cancels the pending prompt. Limits without a supported reset time remain under manual control. OpenCode uses the model provider chosen in its own configuration; shared quota checks, dashboard chat recipients and Codex Goal commands are unavailable. Noninteractive `opencode run`, servers and remote attachment are outside this wrapper integration.
 

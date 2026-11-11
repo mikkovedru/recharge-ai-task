@@ -43,7 +43,7 @@ class StatusLog(Gtk.ScrolledWindow):
         if self.buffer.get_char_count():
             self.buffer.insert(self.buffer.get_end_iter(), "\n")
         moment = datetime.now().astimezone() if timestamp is None else datetime.fromtimestamp(timestamp).astimezone()
-        scope = {"codex": "Codex", "claude": "Claude", "muse": "Muse"}.get(provider, "Program")
+        scope = {"codex": "Codex", "claude": "Claude", "muse": "Muse", "gemini": "Gemini", "antigravity": "Antigravity", "opencode": "OpenCode"}.get(provider, "Program")
         content = message if attributed else f"[{scope}] {message}"
         entry = f"[{moment:%Y-%m-%d %H:%M:%S}] {content}"
         self.buffer.insert_with_tags_by_name(self.buffer.get_end_iter(), entry, level)

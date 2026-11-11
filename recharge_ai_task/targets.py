@@ -416,8 +416,12 @@ def discover_targets(provider="codex"):
     from dataclasses import replace
     from .codex_ipc import DesktopIPC
     inventory = Inventory()
-    if provider == "opencode":
-        from .opencode import LIMITATION
+    if provider in ("gemini", "antigravity", "opencode"):
+        if provider == "opencode":
+            from .opencode import LIMITATION
+        else:
+            from .google_ai import limitation
+            LIMITATION = limitation(provider)
         inventory.warnings.append(LIMITATION)
         return inventory
     if provider == "muse":

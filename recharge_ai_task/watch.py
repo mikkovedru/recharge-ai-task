@@ -70,8 +70,12 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
         _log_status(f"[{config.provider.title()}] {message}")
     if config.provider == "all":
         return _run_provider_watches(config, stop)
-    if config.provider == "opencode":
-        from .opencode import LIMITATION
+    if config.provider in ("gemini", "antigravity", "opencode"):
+        if config.provider == "opencode":
+            from .opencode import LIMITATION
+        else:
+            from .google_ai import limitation
+            LIMITATION = limitation(config.provider)
         status(LIMITATION)
         return 1
     if config.provider not in ("codex", "claude", "muse"):

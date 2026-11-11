@@ -20,7 +20,7 @@ target_ui.fetch_claude_quota=lambda:(_ for _ in ()).throw(RuntimeError(error))
 target_ui.fetch_muse_quota=lambda _:(_ for _ in ()).throw(RuntimeError(muse_error))
 w=make()
 try:
-    assert w.monitor_tabs.get_n_pages()==5
+    assert w.monitor_tabs.get_n_pages()==7
     assert error not in w.status.text() and muse_error not in w.status.text()
     assert 'Codex daemon fallback' not in w.status.text()
     assert error in w.monitor_tabs.pages['claude'].get_text()
@@ -93,7 +93,7 @@ try:
         for p in ('codex','claude','muse'):
             button=w.provider_filter.buttons[p]
             assert button.status_image is not None and button.get_tooltip_text()
-        for page in range(5):
+        for page in range(7):
             w.monitor_tabs.set_current_page(page);pump(w)
             w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
             surface.write_to_png('/tmp/2026-11-07_provider-monitor-'+str(page)+'-'+('dark' if dark else 'light')+'.png')
@@ -105,7 +105,7 @@ try:
     sx,sy=pos(w.workspace_split,w);xid=str(w.get_window().get_xid())
     subprocess.run(['xdotool','mousemove','--window',xid,str(sx+x+3),str(sy+y),'mousedown','1','mousemove_relative','--sync','30','0','mouseup','1'],check=True);pump(w)
     assert abs(w.workspace_split.get_position()-x)>=15
-    assert w.monitor_tabs.get_current_page()==4
+    assert w.monitor_tabs.get_current_page()==6
 finally:w.destroy()
 ''')
 

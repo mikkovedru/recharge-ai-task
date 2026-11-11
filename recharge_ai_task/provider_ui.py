@@ -33,7 +33,7 @@ class ProviderButtons(Gtk.FlowBox):
     def __init__(self, *, active='all', purpose='Filter visible items; saved recipients and monitoring stay unchanged', include_all=True):
         super().__init__()
         self.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.set_min_children_per_line(3)
+        self.set_min_children_per_line(4)
         self.set_max_children_per_line(len(PROVIDER_NAMES))
         self.set_row_spacing(2)
         self.set_column_spacing(2)

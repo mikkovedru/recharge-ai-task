@@ -13,10 +13,10 @@ from ._migration import LEGACY_CONTINUE_PROMPT, environment_value, import_settin
 from .desktop_input import DEFAULT_WINDOW_TITLES
 
 Mode = Literal["cli", "desktop"]
-PROVIDER_LABELS = {"codex": "OpenAI Codex", "claude": "Anthropic Claude", "muse": "Meta Muse Code", "opencode": "OpenCode"}
+PROVIDER_LABELS = {"codex": "OpenAI Codex", "claude": "Anthropic Claude", "muse": "Meta Muse Code", "gemini": "Google Gemini CLI", "antigravity": "Google Antigravity CLI", "opencode": "OpenCode"}
 PROVIDERS = tuple(PROVIDER_LABELS)
-PROVIDER_SHORT_NAMES = {"codex": "Codex", "claude": "Claude", "muse": "Muse", "opencode": "OpenCode"}
-TERMINAL_PROVIDERS = ("opencode",)
+PROVIDER_SHORT_NAMES = {"codex": "Codex", "claude": "Claude", "muse": "Muse", "gemini": "Gemini", "antigravity": "Antigravity", "opencode": "OpenCode"}
+TERMINAL_PROVIDERS = ("gemini", "antigravity", "opencode")
 
 
 def config_dir() -> Path:
@@ -56,6 +56,10 @@ class AppConfig:
     claude_args: list[str] | None = None
     muse_path: str | None = None
     muse_args: list[str] | None = None
+    gemini_path: str | None = None
+    gemini_args: list[str] | None = None
+    antigravity_path: str | None = None
+    antigravity_args: list[str] | None = None
     opencode_path: str | None = None
     opencode_args: list[str] | None = None
     chat_provider_filter: str = "all"
@@ -92,6 +96,10 @@ class AppConfig:
             claude_args=data.get("claude_args"),
             muse_path=data.get("muse_path"),
             muse_args=data.get("muse_args"),
+            gemini_path=data.get("gemini_path"),
+            gemini_args=data.get("gemini_args"),
+            antigravity_path=data.get("antigravity_path"),
+            antigravity_args=data.get("antigravity_args"),
             opencode_path=data.get("opencode_path"),
             opencode_args=data.get("opencode_args"),
             chat_provider_filter=data.get("chat_provider_filter") if data.get("chat_provider_filter") in ("all", *PROVIDERS) else "all",
