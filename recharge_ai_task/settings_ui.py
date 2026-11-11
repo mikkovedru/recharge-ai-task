@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import shlex
-from gi.repository import Gdk, Gtk
+from gi.repository import Gdk, Gtk, Pango
 
 from .autostart import is_autostart_enabled, set_autostart
-from .config import AppConfig, PROVIDER_LABELS
+from .config import AppConfig
+from .provider_ui import ProviderButtons
+from .i18n import terminal_start_label
 from .branding import set_window_icon
 from .window_layout import WindowLayout
 from .theme_ui import apply_color_theme, install_readability
@@ -44,10 +46,21 @@ class SettingsDialog(Gtk.Dialog):
         self.mode.set_active_id(config.mode)
         self.path = Gtk.Entry(text=config.codex_path or "", placeholder_text="Auto-detect Codex CLI")
         self.args = Gtk.Entry(text=shlex.join(config.codex_args or []), placeholder_text="Optional CLI arguments")
-        self.provider = Gtk.ComboBoxText()
-        for key, label in PROVIDER_LABELS.items():
-            self.provider.append(key, label)
-        self.provider.set_active_id(config.provider)
+        self.provider = ProviderButtons(active=config.provider, include_all=False,
+            purpose="Choose the default AI for new wrapped terminal sessions")
+        self.provider.get_accessible().set_name("Default terminal AI")
+        self.provider_hint = Gtk.Label(xalign=0, selectable=True)
+        self.provider_hint.set_line_wrap(True)
+        self.provider_hint.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.provider_hint.set_width_chars(1)
+        self.provider_hint.set_max_width_chars(54)
+        self.provider.connect("changed", self._explain_provider)
+        self._explain_provider()
+        provider_body=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6,margin=6)
+        provider_body.pack_start(self.provider,False,False,0)
+        provider_body.pack_start(self.provider_hint,False,False,0)
+        self.provider_group=Gtk.Frame()
+        self.provider_group.add(provider_body)
         self.claude_path = Gtk.Entry(text=config.claude_path or "", placeholder_text="Auto-detect Claude Code")
         self.claude_path.set_tooltip_text("Optional path to the Claude Code executable; desktop quota uses its subscription login")
         self.claude_args = Gtk.Entry(text=shlex.join(config.claude_args or []), placeholder_text="Optional Claude Code arguments")
@@ -86,8 +99,8 @@ class SettingsDialog(Gtk.Dialog):
         self.autostart.set_active(startup == "Enabled")
         runtime = getattr(parent, "runtime", None)
         launched = "Unknown (tray unavailable)" if runtime is None else "Yes" if runtime.get("launched_at_startup") else "No"
-        self.provider.set_tooltip_text("Default for starting a new terminal session only. Chat discovery, filtering and monitoring automatically use all installed providers (Alt+Down)")
-        rows = (("Default terminal AI", self.provider), ("Default mode", self.mode),
+        self.provider.set_tooltip_text("Select with the mouse or Left / Right, Home / End. Save settings to change the default for future terminals.")
+        rows = (("Default terminal AI", self.provider_group), ("Default mode", self.mode),
             ("Codex CLI path", self.path), ("CLI arguments", self.args),
             ("Claude Code path", self.claude_path), ("Claude arguments", self.claude_args),
             ("Muse Code path", self.muse_path), ("Muse arguments", self.muse_args),
@@ -96,7 +109,10 @@ class SettingsDialog(Gtk.Dialog):
             ("OpenCode path", self.opencode_path), ("OpenCode arguments", self.opencode_args),
             ("Reset grace (seconds)", self.grace), ("Quota polling (seconds)", self.poll), ("Color theme", self.theme))
         for index, (name, widget) in enumerate(rows):
-            grid.attach(Gtk.Label(label=name, xalign=0), 0, index, 1, 1)
+            label=Gtk.Label(label=name, xalign=0)
+            if index==0:
+                label.set_valign(Gtk.Align.START)
+            grid.attach(label, 0, index, 1, 1)
             widget.set_hexpand(True)
             grid.attach(widget, 1, index, 1, 1)
         startup_row = Gtk.Box(spacing=6)
@@ -127,6 +143,14 @@ class SettingsDialog(Gtk.Dialog):
         self.error.set_line_wrap(True)
         grid.attach(self.error, 0, len(rows) + 2, 2, 1)
         self.show_all()
+
+    def _explain_provider(self, *_):
+        self.provider_hint.set_text(
+            "Tray action: " + terminal_start_label(self.provider.get_active_id()) +
+            ".\nThe run and quota commands also use this provider when --provider is omitted. "
+            "New terminals use its saved executable and arguments. Save settings to apply.\n"
+            "Dashboard discovery and Desktop watch use all installed providers and your selected recipients. "
+            "Model choice and sign-in stay in each AI tool.")
 
     def _restore_saved_theme(self, *_):
         try:

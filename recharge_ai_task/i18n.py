@@ -17,3 +17,9 @@ def _load_messages() -> dict[str, str]:
 def t(key: str, **kwargs: Any) -> str:
     template = _load_messages().get(key, key)
     return template.format(**kwargs) if kwargs else template
+
+
+def terminal_start_label(provider: str) -> str:
+    """Use the same explicit terminal action in Settings and the tray."""
+    from .config import PROVIDER_SHORT_NAMES
+    return t("tray.start_terminal", provider=PROVIDER_SHORT_NAMES.get(provider, provider))

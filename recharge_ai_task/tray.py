@@ -14,7 +14,7 @@ from pathlib import Path
 from .autostart import is_autostart_enabled, sync_autostart, set_autostart
 from .config import AppConfig, config_dir
 from .delivery_policy import invalid_messages
-from .i18n import t
+from .i18n import t, terminal_start_label
 from .pty_backend import StopEvent
 from .quota import discover_codex, fetch_quota, format_quota
 from .watch import WatchConfig, WatchState, run_desktop_watch
@@ -372,7 +372,7 @@ class TrayApp:
                 enabled=lambda _: not self._is_running() and AppConfig.load().provider == "codex",
             ),
             pystray.MenuItem(
-                lambda _: {"claude": "Start Claude Code", "muse": "Start Muse Code", "gemini": "Start Gemini CLI", "antigravity": "Start Antigravity CLI", "opencode": "Start OpenCode"}.get(AppConfig.load().provider, t("tray.start_normal")),
+                lambda _: terminal_start_label(AppConfig.load().provider),
                 self.start_normal,
                 enabled=lambda _: not self._is_running(),
             ),
