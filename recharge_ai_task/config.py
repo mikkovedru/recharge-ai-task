@@ -15,6 +15,8 @@ from .desktop_input import DEFAULT_WINDOW_TITLES
 Mode = Literal["cli", "desktop"]
 PROVIDER_LABELS = {"codex": "OpenAI Codex", "claude": "Anthropic Claude", "muse": "Meta Muse Code", "opencode": "OpenCode"}
 PROVIDERS = tuple(PROVIDER_LABELS)
+PROVIDER_SHORT_NAMES = {"codex": "Codex", "claude": "Claude", "muse": "Muse", "opencode": "OpenCode"}
+TERMINAL_PROVIDERS = ("opencode",)
 
 
 def config_dir() -> Path:

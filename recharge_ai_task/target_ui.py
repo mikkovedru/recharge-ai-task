@@ -24,7 +24,7 @@ from .provider_ui import ProviderButtons
 from .provider_monitor import provider_status
 from .provider_monitor_ui import ProviderMonitor, update_selectable_markup
 from .delivery_policy import invalid_messages, clear_consumed_custom_prompt, effective_limit
-from .config import AppConfig, config_path, PROVIDER_LABELS
+from .config import AppConfig, config_path, PROVIDER_LABELS, PROVIDERS, TERMINAL_PROVIDERS
 from .quota import discover_codex, fetch_quota, quota_from_snapshot, quota_windows, quota_blocked
 from .claude import fetch_claude_quota
 from .muse import fetch_muse_quota
@@ -843,7 +843,7 @@ class TargetPicker(Gtk.Window):
             error=self.quota_errors.get(provider, ""), notices=self.provider_notices.get(provider, ""),
             checked_at=self.quota_checked.get(provider), runtime=self.runtime,
             installed=provider in self.installed_providers, now=time.time(), usage_error=usage_error)
-            for provider in ("codex", "claude", "muse")}
+            for provider in PROVIDERS}
         self.monitor_tabs.update(statuses, self.quota_interval)
         for provider, status in statuses.items():
             detail = status["selection"] + "\n" + (status["error"] or status["notices"] or
@@ -1018,9 +1018,8 @@ class TargetPicker(Gtk.Window):
             config = AppConfig.load()
             def one(provider):
                 try:
-                    if provider == "opencode":
-                        from .opencode import fetch_opencode_quota
-                        value = fetch_opencode_quota()
+                    if provider in TERMINAL_PROVIDERS:
+                        return provider, (None, None)
                     elif provider == "muse":
                         value = fetch_muse_quota(config.muse_path)
                     elif provider == "claude":
@@ -1059,6 +1058,9 @@ class TargetPicker(Gtk.Window):
             return (f'<span foreground="{colors[level]}">{text}</span>' if level else text) + suffix
         lines = []
         for provider in self.active_providers or tuple(self.quotas):
+            if provider in TERMINAL_PROVIDERS:
+                lines.append(GLib.markup_escape_text(PROVIDER_LABELS[provider]+": wrapped terminal · see provider tab"))
+                continue
             quota = self.quotas.get(provider)
             if quota is None:
                 lines.append(GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider) + ": quota unavailable"))

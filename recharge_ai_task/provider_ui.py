@@ -1,8 +1,9 @@
 """Compact, keyboard-accessible provider buttons shared by dashboard sections."""
 from gi.repository import Gdk, GObject, Gtk
 from .status_display import status_colors
+from .config import PROVIDER_SHORT_NAMES
 
-PROVIDER_NAMES = {'all': 'All', 'codex': 'Codex', 'claude': 'Claude', 'muse': 'Muse'}
+PROVIDER_NAMES = {'all': 'All', **PROVIDER_SHORT_NAMES}
 
 
 class ProviderNotice(Gtk.Box):
@@ -26,12 +27,19 @@ class ProviderNotice(Gtk.Box):
         self.set_visible(visible)
 
 
-class ProviderButtons(Gtk.Box):
+class ProviderButtons(Gtk.FlowBox):
     __gsignals__ = {'changed': (GObject.SignalFlags.RUN_FIRST, None, ())}
 
-    def __init__(self, *, active='all', purpose='Filter visible items; saved recipients and monitoring stay unchanged'):
-        super().__init__(spacing=0)
-        self.get_style_context().add_class('linked')
+    def __init__(self, *, active='all', purpose='Filter visible items; saved recipients and monitoring stay unchanged', include_all=True):
+        super().__init__()
+        self.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.set_min_children_per_line(3)
+        self.set_max_children_per_line(len(PROVIDER_NAMES))
+        self.set_row_spacing(2)
+        self.set_column_spacing(2)
+        self.get_style_context().add_class('provider-buttons')
+        self.names = PROVIDER_NAMES if include_all else PROVIDER_SHORT_NAMES
+        self.fallback = next(iter(self.names))
         self.buttons = {}
         self.purpose = purpose
         self.palette = None
@@ -40,7 +48,7 @@ class ProviderButtons(Gtk.Box):
         self.connect('style-updated', self._colors)
         self.connect('destroy', lambda *_: Gtk.StyleContext.remove_provider_for_screen(self.get_screen(), self.css))
         group = None
-        for key, caption in PROVIDER_NAMES.items():
+        for key, caption in self.names.items():
             button = Gtk.RadioButton.new_with_label_from_widget(group, caption)
             group = group or button
             button.set_mode(False)
@@ -60,7 +68,8 @@ class ProviderButtons(Gtk.Box):
             button.get_accessible().set_name(f'{caption} providers')
             button.connect('toggled', self._changed)
             button.connect('key-press-event', self._keys, key)
-            self.pack_start(button, False, False, 0)
+            self.add(button)
+            button.get_parent().set_can_focus(False)
             self.buttons[key] = button
         self.set_active_id(active)
 
@@ -71,6 +80,8 @@ class ProviderButtons(Gtk.Box):
             return
         self.palette = palette
         self.css.load_from_data((
+            ".provider-buttons flowboxchild { padding: 0; }"
+            ".provider-buttons button { padding: 2px 5px; min-width: 0; min-height: 16px; }"
             f".provider-enabled image {{ color: {colors['success']}; }}"
             f".provider-error image {{ color: {colors['error']}; }}"
             f".provider-warning image {{ color: {colors['warning']}; }}"
@@ -89,7 +100,7 @@ class ProviderButtons(Gtk.Box):
             button.provider_state = state
         button.set_sensitive(installed)
         if not installed and button.get_active():
-            self.set_active_id('all')
+            self.set_active_id(self.fallback)
         button.get_accessible().set_name(PROVIDER_NAMES[provider] + ": " + (state if installed else 'not installed'))
         tooltip = PROVIDER_NAMES[provider] + ': ' + detail
         if self.purpose:
@@ -112,12 +123,12 @@ class ProviderButtons(Gtk.Box):
             self.emit('changed')
 
     def get_active_id(self):
-        return next((key for key, button in self.buttons.items() if button.get_active()), 'all')
+        return next((key for key, button in self.buttons.items() if button.get_active()), self.fallback)
 
     def set_active_id(self, key):
-        selected = key if key in self.buttons else 'all'
+        selected = key if key in self.buttons else self.fallback
         if not self.buttons[selected].get_sensitive():
-            selected = 'all'
+            selected = self.fallback
         self.buttons[selected].set_active(True)
 
     def _keys(self, _button, event, key):

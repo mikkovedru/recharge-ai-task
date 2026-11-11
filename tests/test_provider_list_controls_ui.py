@@ -16,9 +16,9 @@ target_ui.fetch_claude_quota=lambda:Quota('Claude',RateWindow(20,300,9999999999)
 target_ui.fetch_muse_quota=lambda _:Quota('Muse',RateWindow(30,300,9999999999),None,False)
 w=make();p=w.recipient_panel
 try:
-    assert p.heading.get_parent() is p.provider_filter.get_parent()
-    assert set(p.provider_filter.buttons)=={'all','codex','claude','muse'}
-    assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (4)','Codex (2)','Claude (1)','Muse (1)']
+    assert p.heading.get_parent() is p.heading_row and p.provider_filter.get_parent() is p
+    assert set(p.provider_filter.buttons)=={'all','codex','claude','muse','opencode'}
+    assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (4)','Codex (2)','Claude (1)','Muse (1)','OpenCode (0)']
     assert [column.get_title() for column in w.table.get_columns()[:2]]==['Provider','Project']
     stored=tray_control.watch_settings(AppConfig.load())
     main_filter=w.provider_filter.get_active_id()
@@ -44,12 +44,12 @@ try:
     click(p.provider_filter.buttons['all'],w)
     assert len(p._visible_rows())==4 and len(w.selected)==4
     w.update_recipient(replace(c,send_prompt=False,send_goal=False));pump(w)
-    assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (4)','Codex (2)','Claude (1)','Muse (1)']
+    assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (4)','Codex (2)','Claude (1)','Muse (1)','OpenCode (0)']
     for dark in (False,True):
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
         w.resize(1120,820);pump(w)
         assert w.get_size().width<=1120 and w.get_size().height<=820
-        assert p.provider_filter.get_allocated_width()+pos(p.provider_filter,p.heading_row)[0]<=p.heading_row.get_allocated_width()
+        assert p.provider_filter.get_allocated_width()+pos(p.provider_filter,p)[0]<=p.get_allocated_width()
         assert pos(w.provider_filter,w.main_split)[1]>=0  # Controls must not be clipped above the pane.
         w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
         surface.write_to_png('/tmp/2026-11-07_provider-list-buttons-'+('dark' if dark else 'light')+'.png')

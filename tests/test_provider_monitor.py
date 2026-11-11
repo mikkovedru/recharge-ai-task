@@ -89,3 +89,11 @@ def test_local_history_does_not_falsely_mark_provider_installed(monkeypatch):
     assert inventory.providers==('claude','muse')
     assert inventory.installed_providers==('muse',)
     assert {t.provider for t in inventory.targets}=={'claude','muse'}
+
+
+def test_terminal_only_status_does_not_invent_quota_or_recipient_statistics():
+    data=status('opencode',installed=True,error='not a shared quota API')
+    assert data['terminal_only'] and data['state']=='off'
+    assert data['command']=='recharge-ai-task run --provider opencode'
+    assert 'model provider' in data['notices'] and not data['error']
+    assert 'counts' not in data and 'windows' not in data

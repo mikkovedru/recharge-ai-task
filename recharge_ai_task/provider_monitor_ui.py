@@ -19,6 +19,11 @@ class ProviderMonitor(Gtk.Notebook):
     def __init__(self, summary):
         super().__init__()
         self.set_scrollable(True)
+        self.get_style_context().add_class('provider-monitor')
+        self.compact_css=Gtk.CssProvider()
+        self.compact_css.load_from_data(b'notebook.provider-monitor > header > tabs > tab { padding: 4px 5px; min-width: 0; }')
+        self.get_style_context().add_provider_for_screen(self.get_screen(),self.compact_css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.connect('destroy',lambda *_:Gtk.StyleContext.remove_provider_for_screen(self.get_screen(),self.compact_css))
         self.set_hexpand(True)
         self.pages = {}
         self.tab_labels = {}
@@ -95,6 +100,14 @@ class ProviderMonitor(Gtk.Notebook):
             tooltip=status['selection']+'\n'+(status['error'] or status['notices'] or ('Monitoring on' if status['monitored'] else 'Monitoring off'))
             if self.tab_headers[provider].get_tooltip_text()!=tooltip:
                 self.tab_headers[provider].set_tooltip_text(tooltip)
+            if status.get('terminal_only'):
+                lines=[f'<b>{title}</b> · Wrapped terminal', escape(status['notices']),
+                       '<b>Start:</b> '+escape(status['command']),
+                       'Install the provider CLI and sign in first.' if not status['installed'] else
+                       'Provider detected. Terminal waits and continuations run in the wrapped session.',
+                       'Dashboard recipient counts, quota percentages and delivery statistics are not available for this integration.']
+                update_selectable_markup(self.pages[provider], '\n'.join(lines))
+                continue
             lines=[f'<b>{title}</b> · Plan: '+escape(status['plan']), escape(status['availability'])]
             if status['error']:
                 lines.append(f'<span foreground="{colors["error"]}">'+escape(status['error'])+'</span>')

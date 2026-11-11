@@ -1,11 +1,11 @@
 """Provider-scoped monitoring presentation; no quota fetches or delivery side effects."""
 from datetime import datetime
-from .config import PROVIDERS
+from .config import PROVIDERS, PROVIDER_SHORT_NAMES, TERMINAL_PROVIDERS
 from .delivery_policy import Usage, effective_limit
 from .quota import quota_blocked, quota_windows
 from .status_display import watch_check_summary, send_schedule_summary
 
-NAMES = {'codex': 'Codex', 'claude': 'Claude', 'muse': 'Muse'}
+NAMES = PROVIDER_SHORT_NAMES
 
 
 def observations(runtime):
@@ -51,6 +51,11 @@ def statistics(targets, config, usage):
 
 def provider_status(provider, *, targets, config, usage, quota=None, error='', notices='',
                     checked_at=None, runtime=None, installed=True, now=0, usage_error=''):
+    if provider in TERMINAL_PROVIDERS:
+        from .opencode import LIMITATION
+        return dict(provider=provider, terminal_only=True, state='off', installed=installed,
+                    enabled=False, monitored=False, selection='Wrapped interactive terminals only; no dashboard recipients.',
+                    error='', notices=LIMITATION, command=f'recharge-ai-task run --provider {provider}')
     selected = [t for t in targets if t.provider == provider]
     try:
         counts = statistics(selected, config, usage)

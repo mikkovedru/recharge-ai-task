@@ -165,8 +165,9 @@ class RecipientPanel(Gtk.Box):
         self.provider_filter = ProviderButtons(purpose="Filter this recipient list only; hidden actions remain enabled")
         self.provider_filter.connect("changed", self._filter_changed)
         self.heading_row.pack_start(self.heading, True, True, 0)
-        self.heading_row.pack_end(self.provider_filter, False, False, 0)
+
         self.pack_start(self.heading_row, False, False, 0)
+        self.pack_start(self.provider_filter, False, False, 0)
         self.default_prompt = LimitControl(self._defaults_changed)
         self.default_goal = LimitControl(self._defaults_changed)
         self.default_controls = Gtk.Grid(column_spacing=6, row_spacing=4)
