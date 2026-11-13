@@ -29,13 +29,17 @@ class RecipientReadiness:
 
 
 def recipient_readiness(target, config, usage, message, *, manual=False, ledger_error=""):
-    """Mirror allowance ordering and native Goal gates, including message fallback.
-
-    Protected/paused/running Goals are skipped, allowing an independently selected
-    message. Unreadable Goal/task state prevents that fallback because recovery
-    cannot establish a definitive skip. Message-only ignores those status gates.
-    """
+    """Preview each action independently; Goal handling never gates a message."""
     prompt, goal = target.signal_actions()
+    prompt_limit = effective_limit(target, "prompt", config) if prompt else 0
+    empty_message = prompt and not message.strip() and (prompt_limit is None or
+        usage.get((target.key, "prompt"), Usage()).used < prompt_limit)
+    if prompt and goal and not empty_message:
+        goal_preview = recipient_readiness(replace(target, send_prompt=False, send_goal=True),
+            config, usage, message, manual=manual, ledger_error=ledger_error)
+        message_preview = recipient_readiness(replace(target, send_prompt=True, send_goal=False),
+            config, usage, message, manual=manual, ledger_error=ledger_error)
+        return RecipientReadiness(goal_preview.actions + message_preview.actions)
     actions = [key for key, enabled in (("goal", goal), ("prompt", prompt)) if enabled]
     if not actions:
         return RecipientReadiness(())
@@ -56,10 +60,8 @@ def recipient_readiness(target, config, usage, message, *, manual=False, ledger_
     limits = {action: effective_limit(target, action, config) for action in actions}
     reached = {action for action, limit in limits.items() if limit is not None
                and usage.get((target.key, action), Usage()).used >= limit}
-    # The sender checks the Goal allowance before any Goal or message operation.
     if "goal" in reached:
-        return result([ActionReadiness(action, "blocked", "Goal limit reached" +
-            ("; message withheld while Resume goal is selected" if action == "prompt" else "; reset counts or change the limit"), "allowance") for action in actions])
+        return all_actions("blocked", "Goal limit reached; reset counts or change the limit", "allowance")
     values = {}
     if "prompt" in reached:
         values["prompt"] = ActionReadiness("prompt", "blocked", "Message limit reached; reset counts or change the limit", "allowance")

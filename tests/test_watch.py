@@ -385,3 +385,13 @@ def test_quota_read_failure_retries_at_configured_interval(monkeypatch,poll):
     assert waits==[poll,poll]
     assert state.progress['next_check_at']==100+2*poll
     assert state.progress['quota_snapshot'] is None and state.progress['quota_error']=='offline'
+
+
+def test_watch_counts_message_when_selected_goal_allowance_is_spent(monkeypatch):
+    from recharge_ai_task.config import AppConfig
+    target = replace(A, send_prompt=True, send_goal=True, goal_limit=0)
+    AppConfig().save()
+    state = watch.WatchState(startup_checked=True, pending=True)
+    run_snapshots(monkeypatch, [RuntimeError('offline')], selected=(target,), state=state)
+    assert state.progress['pending_messages'] == 1
+    assert state.progress['pending_goals'] == 0

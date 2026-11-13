@@ -66,7 +66,17 @@ def _send_thread(target, text):
     if not target.endpoint:
         raise RuntimeError("Desktop chat routing unavailable; open Codex and refresh targets")
     with DesktopIPC(target.endpoint, timeout=5) as desktop:
-        desktop.send(target.id, text, _owner_for_delivery(desktop, target))
+        owner = _owner_for_delivery(desktop, target)
+        # Goal activation can have started a turn even when its verification
+        # failed. Status lookup is advisory for the independent message choice.
+        try:
+            task = desktop.status_snapshot(target.id, owner).get("task")
+        except Exception:
+            task = None
+        if isinstance(task, dict) and task.get("type") == "active":
+            desktop.steer(target.id, text, owner)
+        else:
+            desktop.send(target.id, text, owner)
 
 
 def recover_target(target, text, *, manual=False, send_prompt=True, require_goal=False, enter_presses=1, key_delay=.12, actions=None):
@@ -270,22 +280,35 @@ def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12)
             if not prompt and not goal:
                 result = DeliveryResult(target, True, "Skipped — message limit reached" if withheld else "Skipped — no signals selected", skipped=True)
             elif goal and not budget.available("goal"):
-                result = DeliveryResult(target, True, "Skipped — Goal limit reached; message withheld. Disable Resume goal to send a message independently.", skipped=True)
+                result = DeliveryResult(target, True, "Skipped — Goal limit reached", skipped=True)
             elif prompt and not message.strip():
                 result = DeliveryResult(target, False, "Prompt message cannot be empty", retryable=False)
             elif goal:
-                result = recover_target(target, message, manual=manual, send_prompt=prompt,
-                    require_goal=True, enter_presses=enter_presses, key_delay=key_delay, actions=budget)
-                if result.skipped and prompt:
-                    # Preserve the independent message choice for protected or
-                    # missing goals. A failed/unconfirmed activation never falls through.
-                    sent = budget.perform("prompt", lambda: deliver_targets([target], budget.message,
-                        enter_presses=enter_presses, key_delay=key_delay)[0])
-                    result = DeliveryResult(target, sent.success,
-                        f"Goal: {result.detail}; Prompt: {sent.detail}", sent.retryable, sent.skipped, uncertain=sent.uncertain)
+                try:
+                    result = recover_target(target, message, manual=manual, send_prompt=prompt,
+                        require_goal=True, enter_presses=enter_presses, key_delay=key_delay, actions=budget)
+                except Exception as exc:
+                    result = DeliveryResult(target, False, str(exc), uncertain=isinstance(exc, DeliveryUncertain),
+                        retryable=not isinstance(exc, DeliveryUncertain))
+                # Save Goal uncertainty before the independent message attempt.
+                # A later message rejection must not change its own allowance to uncertain.
+                if result.uncertain and "goal" in budget.attempted - budget.completed:
+                    budget.mark_uncertain("goal", result.detail)
             else:
                 result = budget.perform("prompt", lambda: deliver_targets([target], budget.message,
                     enter_presses=enter_presses, key_delay=key_delay)[0])
+            if goal and prompt and "prompt" not in budget.attempted:
+                # Goal handling has finished, including skips, failures and unknown
+                # acknowledgements. Never repeat a message already attempted there.
+                try:
+                    sent = budget.perform("prompt", lambda: deliver_targets([target], budget.message,
+                        enter_presses=enter_presses, key_delay=key_delay)[0])
+                except Exception as exc:
+                    sent = DeliveryResult(target, False, str(exc), retryable=False, uncertain=isinstance(exc, DeliveryUncertain))
+                result = DeliveryResult(target, result.success and sent.success,
+                    f"Goal: {result.detail}; Message: {sent.detail}",
+                    result.retryable and sent.retryable, result.skipped and sent.skipped,
+                    uncertain=result.uncertain or sent.uncertain)
             if withheld:
                 result = replace(result, detail=result.detail + "; message limit reached")
         except Exception as exc:
@@ -294,7 +317,7 @@ def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12)
             result = replace(result, completed_actions=tuple(sorted(budget.completed)))
             if result.uncertain:
                 for action in budget.attempted - budget.completed:
-                    if budget.outcomes.get(action) != "uncertain":
+                    if budget.outcomes.get(action) not in {"uncertain", "failed", "skipped"}:
                         budget.mark_uncertain(action, result.detail)
             for action, enabled in (("goal", target.signal_actions()[1]), ("prompt", target.signal_actions()[0])):
                 if enabled and action not in budget.attempted and action not in budget.completed:

@@ -8,7 +8,7 @@ Each edit or explicit rearming creates a new `custom_prompt_once` token on the r
 
 The `custom_once` table records pending, sent, uncertain or failed outcomes. Its pending claim is updated in the same transaction as the matching allowance attempt. A pending claim from an exited process is treated as uncertain. Resetting counts preserves one-use consumption and finalizes abandoned pending claims as uncertain before removing allowance attempts. This also prevents reused attempt IDs from rearming an old custom message.
 
-The Goal and message actions remain independent. Failure before the message operation does not claim the custom text. An accepted message stays consumed if a subsequent Goal-state check fails.
+The Goal and message actions remain independent. A Goal failure does not claim the custom text by itself; the independently selected message is still attempted afterward and claims it through the normal message reservation. Only a failed or skipped message leaves the custom text available for retry. An accepted message stays consumed if a subsequent Goal-state check fails.
 
 ## Settings and concurrent edits
 

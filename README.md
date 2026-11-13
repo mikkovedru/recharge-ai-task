@@ -36,7 +36,7 @@ After updating from an older build, launch `/usr/bin/recharge-ai-task` once. It 
 ## Choose recipients and start monitoring
 
 1. Open your AI app and sign in. For Codex quota checks, install and sign in to [Codex CLI](https://github.com/openai/codex) with the corresponding account. Claude Code uses its subscription login. Muse Code requires a subscription and a working `muse usage --json` command (integration tested with 1.4.13).
-2. Open Recharge AI-task. Select the chats to receive recovery signals and enable **Send message**, **Resume goal** (Codex only), or both in **Recipients & actions**.
+2. Open Recharge AI-task. Select the chats to receive recovery signals and enable **Send message**, **Resume goal** (Codex only), or both in **Recipients & actions**. With both enabled, Goal handling finishes first, then the message is attempted even if Goal activation fails or is unconfirmed. Each action uses its own allowance.
 3. Review each recipient's message, grace period and signal allowances, then start monitoring. Provider filters change visibility; hidden recipients retain their plans.
 4. Recharge waits for exhausted quota to become usable, waits the grace period (60 seconds by default), and checks again before sending the selected actions. Monitor progress and failures in the provider status and activity log.
 

@@ -42,8 +42,7 @@ def statistics(targets, config, usage):
             uncertain += value.uncertain
             limit = effective_limit(target, action, config) if enabled else 0
             allowed[action] = enabled and (limit is None or value.used < limit)
-        # The sender withholds a selected message when its Goal allowance is spent.
-        messages += allowed["prompt"] and (not goal or allowed["goal"])
+        messages += allowed["prompt"]
         goals += allowed["goal"]
     return dict(recipients=len(targets), messages=messages, goals=goals,
                 used_messages=used_messages, used_goals=used_goals, uncertain=uncertain)

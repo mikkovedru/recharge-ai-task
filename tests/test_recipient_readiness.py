@@ -38,9 +38,10 @@ def test_paused_goal_can_resume_manually():
 
 
 @pytest.mark.parametrize('field', ['task_status', 'goal_status'])
-def test_unreadable_status_withholds_coupled_message(field):
+def test_unreadable_goal_status_does_not_withhold_message(field):
     actions = preview(replace(T, **{field: 'Unavailable'}))
-    assert all(a.state == 'uncertain' and a.issue == field for a in actions.values())
+    assert actions['goal'].state == 'uncertain' and actions['goal'].issue == field
+    assert actions['prompt'].ready
     assert preview(replace(T, send_goal=False, **{field: 'Unavailable'}))['prompt'].ready
 
 
@@ -49,10 +50,10 @@ def test_errors_and_new_statuses_still_allow_recovery(status):
     assert all(a.ready for a in preview(replace(T, task_status=status, goal_status=status)).values())
 
 
-def test_goal_limit_precedes_status_and_withholds_both_actions():
+def test_goal_limit_does_not_withhold_message():
     actions = preview(replace(T, goal_status='No goal'), AppConfig(goal_limit=0))
-    assert all(a.state == 'blocked' and a.issue == 'allowance' for a in actions.values())
-    assert 'message withheld' in actions['prompt'].reason
+    assert actions['goal'].state == 'blocked' and actions['goal'].issue == 'allowance'
+    assert actions['prompt'].ready
 
 
 def test_message_limit_does_not_withhold_a_resumable_goal():
@@ -78,7 +79,7 @@ def test_uncertain_attempts_explain_consumed_allowance_without_inventing_a_gate(
     assert all(a.state == 'uncertain' for a in preview(ledger_error='Disk unreadable').values())
 
 
-@pytest.mark.parametrize('target', [replace(T, endpoint=''), replace(T, endpoint='/wrong/ipc.sock'),
+@pytest.mark.parametrize('target', [replace(T, endpoint=''),
                                    replace(T, kind='window'), replace(T, kind='other')])
 def test_missing_or_invalid_routing_is_explained(target):
     assert all(a.state == 'blocked' and a.issue == 'routing' for a in preview(target).values())
@@ -95,3 +96,9 @@ def test_stopped_by_quota_is_ready_to_resume_without_becoming_active(manual):
     readiness = preview(target, manual=manual)
     assert readiness['goal'].ready
     assert target.goal_status == 'Stopped by quota'
+
+
+def test_goal_profile_mismatch_only_blocks_goal():
+    actions = preview(replace(T, endpoint='/wrong/ipc.sock'))
+    assert actions['goal'].state == 'blocked' and actions['goal'].issue == 'routing'
+    assert actions['prompt'].ready

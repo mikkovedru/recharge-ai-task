@@ -168,13 +168,14 @@ print(json.dumps({'success':result.success,'detail':result.detail}),flush=True)
             if process.poll() is None:process.kill();process.wait()
 
 
-def test_goal_failure_before_message_does_not_consume_custom(monkeypatch):
+def test_goal_failure_still_sends_and_consumes_custom(monkeypatch):
     target=replace(T,send_goal=True)
-    setup(monkeypatch,target)
+    sent=setup(monkeypatch,target)
     monkeypatch.setattr(delivery,'recover_target',lambda target,*a,**kw:delivery.DeliveryResult(target,False,'Goal failed'))
     assert not delivery.send_signals([target],'Default')[0].success
-    assert UsageLedger().once_state(T.key,T.custom_prompt_once) is None
-    assert effective_message(target,'Default')=='Custom once'
+    assert sent==['Custom once']
+    assert UsageLedger().once_state(T.key,T.custom_prompt_once)=='sent'
+    assert effective_message(target,'Default')=='Default'
 
 
 def test_accepted_message_stays_consumed_if_final_goal_check_fails(monkeypatch):

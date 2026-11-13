@@ -65,11 +65,14 @@ def test_concurrent_senders_cannot_exceed_allowance():
     assert not ledger.snapshot()
 
 
-def test_combined_goal_cap_withholds_message_and_prompt_cap_allows_goal(monkeypatch):
+def test_goal_cap_allows_message_and_prompt_cap_allows_goal(monkeypatch):
     AppConfig(goal_limit=0).save()
     target=replace(T,send_goal=True)
     monkeypatch.setattr(delivery,'recover_target',lambda *args,**kw:pytest.fail('Goal exceeded limit'))
-    assert delivery.send_signals([target],'Continue',manual=True)[0].skipped
+    sent=[]
+    monkeypatch.setattr(delivery,'_send_thread',lambda t,text:sent.append(text))
+    result=delivery.send_signals([target],'Continue',manual=True)[0]
+    assert result.success and not result.skipped and sent==['Continue']
     AppConfig(prompt_limit=0,goal_limit=1).save()
     calls=[]
     def recover(target,text,**kwargs):
@@ -94,7 +97,10 @@ def test_goal_success_survives_prompt_failure_without_repeating_goal(monkeypatch
     assert not delivery.send_signals([target],'Continue',manual=True)[0].success
     usage=UsageLedger().snapshot()
     assert usage[(target.key,'goal')].used==1 and (target.key,'prompt') not in usage
-    assert delivery.send_signals([target],'Continue',manual=True)[0].skipped
+    sent=[]
+    monkeypatch.setattr(delivery,'_send_thread',lambda t,text:sent.append(text))
+    result=delivery.send_signals([target],'Continue',manual=True)[0]
+    assert result.success and sent==['Continue']
 
 
 def test_goal_no_op_is_not_counted(monkeypatch):
@@ -163,7 +169,7 @@ def test_empty_ineligible_message_does_not_block_goal_or_watch():
     from recharge_ai_task.delivery_policy import invalid_messages
     target=replace(T,send_goal=True)
     assert invalid_messages([target],'',AppConfig(prompt_limit=0))==[]
-    assert invalid_messages([target],'',AppConfig(goal_limit=0))==[]
+    assert invalid_messages([target],'',AppConfig(goal_limit=0))==[target]
     assert invalid_messages([target],'',AppConfig())==[target]
     assert invalid_messages([replace(target,custom_prompt='Custom')],'',AppConfig())==[]
 
@@ -175,3 +181,45 @@ def test_message_only_is_not_suppressed_by_error_labels(monkeypatch,manual):
     target=replace(T,task_status='Error',goal_status='Error')
     assert delivery.send_signals([target],'Continue',manual=manual)[0].success
     assert sent==['Continue']
+
+
+@pytest.mark.parametrize('manual', [False, True])
+@pytest.mark.parametrize('outcome', ['accepted', 'skipped', 'rejected', 'uncertain', 'raised', 'raised_uncertain'])
+def test_message_attempt_follows_every_goal_outcome(monkeypatch, manual, outcome):
+    AppConfig(goal_limit=1, prompt_limit=1).save()
+    target = replace(T, send_goal=True)
+    order = []
+    def recover(t, text, **kwargs):
+        order.append('goal')
+        budget = kwargs['actions']
+        if outcome == 'accepted':
+            budget.perform('goal', lambda: None)
+            budget.confirm_goal()
+        if outcome in {'raised', 'raised_uncertain'}:
+            raise (DeliveryUncertain('Goal acknowledgement lost') if outcome == 'raised_uncertain' else RuntimeError('Goal rejected'))
+        return delivery.DeliveryResult(t, outcome in {'accepted', 'skipped'}, 'Goal ' + outcome,
+            skipped=outcome == 'skipped', uncertain=outcome == 'uncertain', retryable=outcome != 'uncertain')
+    monkeypatch.setattr(delivery, 'recover_target', recover)
+    monkeypatch.setattr(delivery, '_send_thread', lambda t, text: order.append('message'))
+    result = delivery.send_signals([target], 'Continue', manual=manual)[0]
+    assert order == ['goal', 'message']
+    assert 'prompt' in result.completed_actions
+    assert result.success == (outcome in {'accepted', 'skipped'})
+    assert not result.skipped
+    assert UsageLedger().usage(target.key, 'prompt') == Usage(1, 0)
+
+
+def test_uncertain_goal_does_not_make_rejected_message_uncertain(monkeypatch):
+    AppConfig(goal_limit=1, prompt_limit=1).save()
+    target = replace(T, send_goal=True)
+    def recover(t, text, **kwargs):
+        budget = kwargs['actions']
+        budget.perform('goal', lambda: None)
+        return delivery.DeliveryResult(t, False, 'Goal unconfirmed', retryable=False, uncertain=True)
+    monkeypatch.setattr(delivery, 'recover_target', recover)
+    monkeypatch.setattr(delivery, '_send_thread', lambda *a: (_ for _ in ()).throw(RuntimeError('Message rejected')))
+    result = delivery.send_signals([target], 'Continue')[0]
+    assert not result.success and result.uncertain
+    assert UsageLedger().usage(target.key, 'goal') == Usage(1, 1)
+    assert UsageLedger().usage(target.key, 'prompt') == Usage()
+    assert 'Message rejected' in result.detail and 'Goal unconfirmed' in result.detail

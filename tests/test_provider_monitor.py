@@ -67,10 +67,10 @@ def test_legacy_worker_observation_is_only_codex_by_default():
     assert observations(runtime)=={'claude':progress}
 
 
-def test_selected_goal_with_no_remaining_allowance_disables_its_paired_message():
+def test_goal_with_no_remaining_allowance_keeps_message_count():
     target=Target('thread','id','Chat',send_prompt=True,send_goal=True,goal_limit=1)
     counts=statistics([target],AppConfig(),{(target.key,'goal'):Usage(1,0)})
-    assert counts['messages']==counts['goals']==0
+    assert counts['messages']==1 and counts['goals']==0
 
 
 def test_near_limit_warning_matches_quota_threshold_colors():

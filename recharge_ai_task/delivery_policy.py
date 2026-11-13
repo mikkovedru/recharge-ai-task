@@ -249,22 +249,21 @@ def status_advice(target, *, manual=False):
     if not manual and (target.task_status == "Running" or target.task_status.startswith("Waiting for")):
         return "Automatic Goal skips running/waiting tasks" + ("; message still selected" if prompt else "")
     if target.goal_status == "Active":
-        return "Goal already active; no activation needed" + ("; message will be sent after verification" if prompt else "")
-    return "Goal state verified live before activation" + (" → then send message" if prompt else "")
+        return "Goal already active; no activation needed" + ("; message still sends" if prompt else "")
+    return "Goal state verified live before activation" + (" → then send message regardless of Goal outcome" if prompt else "")
 
 
 def planned_actions(target, config, usage, message, *, manual=False):
     """Readable preview from the latest snapshot; native delivery rechecks it."""
     prompt, goal = target.signal_actions()
     pl, gl = effective_limit(target, "prompt", config), effective_limit(target, "goal", config)
-    if goal and gl is not None and usage.get((target.key, "goal"), Usage()).used >= gl:
-        return "Withheld: Goal limit reached"
+    goal_blocked = goal and gl is not None and usage.get((target.key, "goal"), Usage()).used >= gl
     message_blocked = prompt and pl is not None and usage.get((target.key, "prompt"), Usage()).used >= pl
     prompt = prompt and not message_blocked
     if prompt and not message.strip():
         return "Withheld: message is empty"
-    reason = ""
-    if goal:
+    reason = "limit reached" if goal_blocked else ""
+    if goal and not reason:
         if target.goal_status in {"Blocked", "Budget limited", "Complete", "No goal"}:
             reason = target.goal_status.lower()
         elif not manual and target.goal_status == "Paused":
@@ -290,10 +289,8 @@ def invalid_messages(targets, default, config):
     usage = UsageLedger().snapshot()
     invalid = []
     for target in candidates:
-        pl, gl = effective_limit(target, "prompt", config), effective_limit(target, "goal", config)
+        pl = effective_limit(target, "prompt", config)
         if pl is not None and usage.get((target.key, "prompt"), Usage()).used >= pl:
-            continue
-        if target.signal_actions()[1] and gl is not None and usage.get((target.key, "goal"), Usage()).used >= gl:
             continue
         invalid.append(target)
     return invalid

@@ -115,8 +115,6 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
             prompt = prompt and allowed("prompt")
             goal_available = not goal or allowed("goal")
             goal = goal and goal_available
-            # Both requires the selected Goal allowance before the message.
-            prompt = prompt and goal_available
             recipients += bool(prompt or goal)
             messages += bool(prompt)
             goals += bool(goal)

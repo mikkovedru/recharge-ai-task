@@ -479,10 +479,11 @@ def test_goal_activation_precedes_prompt(monkeypatch):
     assert result.success and state["sent"] == ["Custom"]
 
 
-def test_goal_failure_does_not_fall_back_to_prompt(monkeypatch):
+def test_goal_failure_still_sends_selected_message(monkeypatch):
     state = install_recovery(monkeypatch, status="paused", task=None)
     result = delivery.send_signals([replace(TARGET, send_prompt=True, send_goal=True)], "Custom", manual=True)[0]
-    assert not result.success and not state["sent"]
+    assert not result.success and state["sent"] == ["Custom"]
+    assert result.completed_actions == ("prompt",)
 
 
 @pytest.mark.parametrize("prompt", [False, True])
@@ -713,3 +714,23 @@ def test_watch_retries_navigation_failure_with_unused_goal_allowance(monkeypatch
     assert worker.progress['phase']=='retry_pending' and worker.progress['pending_goals']==1
     assert [e['status'] for e in ActivityLog().read() if e['action']=='goal']==['attempting','failed']*2
     assert state['sent']==[]
+
+
+def test_uncertain_goal_still_steers_message_into_active_turn(monkeypatch):
+    from recharge_ai_task.delivery_policy import Usage, UsageLedger
+    state = install_recovery(monkeypatch, status='paused', task='active')
+    original = delivery.DesktopIPC.status_snapshot
+    calls = []
+    def snapshot(self, thread, owner):
+        calls.append('snapshot')
+        if len(calls) == 2:
+            raise RuntimeError('Read failed after activation')
+        return original(self, thread, owner)
+    monkeypatch.setattr(delivery.DesktopIPC, 'status_snapshot', snapshot)
+    target = replace(TARGET, send_goal=True, send_prompt=True)
+    result = delivery.send_signals([target], 'Continue', manual=True)[0]
+    assert not result.success and result.uncertain and not result.retryable
+    assert state['resumes'] == 1 and state['steered'] == ['Continue']
+    assert result.completed_actions == ('prompt',)
+    assert UsageLedger().usage(target.key, 'goal') == Usage(1, 1)
+    assert UsageLedger().usage(target.key, 'prompt') == Usage(1, 0)

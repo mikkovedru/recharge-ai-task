@@ -348,7 +348,7 @@ class TargetPicker(Gtk.Window):
         self.send_row = Gtk.Box(spacing=8)
         self.send_row.pack_start(self.summary, True, True, 0)
         self.send_button = WrappingButton(label="Send now", valign=Gtk.Align.END)
-        self.send_button.set_tooltip_text("Send now acts immediately, even with monitoring off, and may resume paused goals. If both actions are selected, Goal activation is verified before sending the message.")
+        self.send_button.set_tooltip_text("Send now acts immediately, even with monitoring off, and may resume paused goals. If both actions are selected, Goal is attempted first; the message is then attempted even if Goal fails or is unconfirmed. Each action has its own allowance.")
         self.send_button.connect("clicked", self.send)
         self.buttons.append(self.send_button)
         box.pack_start(self.send_row, False, False, 0)
@@ -429,7 +429,7 @@ class TargetPicker(Gtk.Window):
         for button,key,modifiers,tip in (
             (self.refresh_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK,"Refresh chats and their statuses (Ctrl+R)"),
             (self.quota_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK,"Check quota now and wake the active monitor; the grace period still applies (Ctrl+Shift+R)"),
-            (self.send_button,Gdk.KEY_Return,Gdk.ModifierType.CONTROL_MASK,"Send now acts immediately, even with monitoring off, and may resume paused goals. If both actions are selected, Goal activation is verified first. Recipient limits still apply (Ctrl+Enter)"),
+            (self.send_button,Gdk.KEY_Return,Gdk.ModifierType.CONTROL_MASK,"Send now acts immediately, even with monitoring off, and may resume paused goals. Goal is attempted first, then the selected message even if Goal fails or is unconfirmed. Each action has its own allowance (Ctrl+Enter)"),
             (self.settings_button,Gdk.KEY_comma,Gdk.ModifierType.CONTROL_MASK,"Open program settings (Ctrl+,)")):
             button.add_accelerator("clicked",group,key,modifiers,Gtk.AccelFlags.VISIBLE)
             button.set_tooltip_text(tip)
