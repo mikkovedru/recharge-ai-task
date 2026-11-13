@@ -4,7 +4,7 @@ from .config import AppConfig
 
 
 class WindowLayout:
-    def __init__(self, window, namespace="dashboard", *, version=1):
+    def __init__(self, window, namespace="dashboard", *, version=1, reset_size_on_version_change=False):
         self.window, self.namespace = window, namespace
         self.version = version
         self.regions = {}
@@ -14,6 +14,8 @@ class WindowLayout:
             self.saved = {}
         if self.saved.get("layout_version") != version:
             self.saved = dict(self.saved, panes={})
+            if reset_size_on_version_change:
+                self.saved.pop("size", None)
         size = self.saved.get("size")
         if not (isinstance(size, list) and len(size) == 2 and all(type(v) is int and 200 <= v <= 10000 for v in size)):
             size = list(window.get_default_size())

@@ -28,9 +28,6 @@ class SettingsDialog(Gtk.Dialog):
         cancel_button=self.get_widget_for_response(Gtk.ResponseType.CANCEL)
         cancel_button.set_tooltip_text("Close without saving settings (Escape)")
         self.connect("key-press-event",self._dialog_keys)
-        self.set_default_size(620, 620)
-        self.window_layout = WindowLayout(self, "settings")
-        self.connect("destroy", self.window_layout.close)
         config = AppConfig.load()
         self.original_color_theme = config.color_theme
         apply_color_theme(config.color_theme)
@@ -142,6 +139,20 @@ class SettingsDialog(Gtk.Dialog):
         self.error = Gtk.Label(xalign=0)
         self.error.set_line_wrap(True)
         grid.attach(self.error, 0, len(rows) + 2, 2, 1)
+        # Measure visible content at the intended width; a fixed square default
+        # hid most settings after the provider fields were added. Keep scrolling
+        # available when the monitor cannot accommodate the full natural height.
+        grid.show_all()
+        self.get_action_area().show_all()
+        screen = self.get_screen()
+        parent_window = parent.get_window() if parent is not None else None
+        monitor = screen.get_monitor_at_window(parent_window) if parent_window else screen.get_primary_monitor()
+        area = screen.get_monitor_workarea(monitor)
+        width = min(max(760, grid.get_preferred_width()[1]), max(200, area.width - 16))
+        height = grid.get_preferred_height_for_width(width)[1] + self.get_action_area().get_preferred_height()[1] + 12
+        self.set_default_size(width, min(height, max(200, area.height - 48)))
+        self.window_layout = WindowLayout(self, "settings", version=2, reset_size_on_version_change=True)
+        self.connect("destroy", self.window_layout.close)
         self.show_all()
 
     def _explain_provider(self, *_):

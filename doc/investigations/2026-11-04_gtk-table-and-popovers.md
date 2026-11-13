@@ -33,3 +33,7 @@ The unchecked custom-message editor remains a readable, copyable default preview
 ## Native pointer test isolation
 
 On 2026-11-14, native hover/click checks on the shared desktop observed the pointer outside the requested fixture window after xdotool had moved it. Several pointer assertions failed there and passed in a separate Xephyr display with Metacity. The source of the pointer movement was not established; this does not prove a widget hit-area defect. When pointer results disagree with widget geometry, compare actual pointer coordinates and the active window before changing the UI. A temporary nested X server with its own window manager and session bus isolates native pointer checks; allocate the display with -displayfd rather than assuming a fixed unused number, wait for startup and stop the test-owned server/window manager afterward.
+
+## Content-sized Settings defaults
+
+Adding provider executable/argument rows outgrew the old 620 by 620 Settings default. The dialog now measures the visible grid at its intended width, adds the action-button height and caps its default dimensions to the monitor workarea. The scroller remains unconstrained so small screens and manual resizing stay usable. Settings layout version 2 discards the old small saved size once while preserving later deliberate sizes; other window layouts retain their existing version behavior. Native resize/reopen checks must let the timed WindowLayout restoration settle before simulating a later user resize.
