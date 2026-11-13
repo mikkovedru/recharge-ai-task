@@ -93,7 +93,8 @@ try:
     p.message_buffer.set_text('tiny');pump(w)
     assert not row.preview_toggle.get_visible() and not row.preview.get_visible()
     p.provider_filter.set_active_id('muse');pump(w)
-    assert p.empty_label.get_visible() and not p.reset.get_sensitive()
+    assert p.provider_filter.get_active_id()=='all' and not p.empty_label.get_visible()
+    assert not p.provider_filter.buttons['muse'].get_parent().get_visible()
     assert len(w.selected)==2
 finally:w.destroy()
 ''')

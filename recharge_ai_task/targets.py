@@ -74,6 +74,7 @@ class Inventory:
     providers: tuple[str, ...] = ()
     provider_warnings: dict[str, list[str]] = field(default_factory=dict)
     installed_providers: tuple[str, ...] | None = None
+    provider_details: dict[str, str] = field(default_factory=dict)
 
 
 def codex_home():

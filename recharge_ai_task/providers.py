@@ -1,5 +1,6 @@
 """Automatic local provider detection, independent from the list's display filter."""
 import os
+import subprocess
 from pathlib import Path
 
 from .config import AppConfig, PROVIDERS, TERMINAL_PROVIDERS
@@ -36,7 +37,7 @@ def installed_providers(config=None):
     return result
 
 
-def discover_all_targets():
+def discover_all_targets(*, check_versions=False):
     available = installed_providers()
     installed = []
     for provider, executable in available.items():
@@ -49,6 +50,21 @@ def discover_all_targets():
             except Exception:
                 pass
     result = Inventory(providers=tuple(available), installed_providers=tuple(installed))
+    if check_versions:
+        for provider in PROVIDERS:
+            executable = available.get(provider)
+            if executable:
+                try:
+                    probe = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=8, check=True)
+                    version = (probe.stdout or probe.stderr).strip().splitlines()
+                    detail = version[0][:240] if version else "Version unavailable: command returned no version"
+                except Exception as exc:
+                    detail = f"Version unavailable: {exc}"
+                result.provider_details[provider] = f"Executable: {executable}\n{detail}"
+            else:
+                result.provider_details[provider] = ("Supported desktop app detected; CLI version unavailable" if provider in installed else
+                    "No installed executable or supported running app detected" +
+                    ("; saved local history is available" if provider in available else ""))
     for provider in available:
         try:
             inventory = discover_targets(provider)
@@ -62,3 +78,8 @@ def discover_all_targets():
     # Provider identity is part of each non-Codex key. Never deduplicate by title.
     result.targets = list({target.key: target for target in result.targets}.values())
     return result
+
+
+def check_providers():
+    """Explicit read-only installation/version and chat inventory refresh."""
+    return discover_all_targets(check_versions=True)

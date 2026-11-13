@@ -117,6 +117,17 @@ class ProviderButtons(Gtk.FlowBox):
             count = len(providers) if key == 'all' else providers.count(key)
             button.caption.set_text(f'{PROVIDER_NAMES[key]} ({count})')
             button.get_accessible().set_name(f'{PROVIDER_NAMES[key]}: {count} recipients')
+        self.set_visible_providers(providers)
+
+    def set_visible_providers(self, providers):
+        """Keep All available and hide the complete FlowBox slot for empty categories."""
+        visible = {'all', *providers}
+        for key, button in self.buttons.items():
+            slot = button.get_parent()
+            slot.set_no_show_all(key not in visible)
+            slot.set_visible(key in visible)
+        if self.get_active_id() not in visible:
+            self.set_active_id(self.fallback)
 
     def _changed(self, button):
         if button.get_active():
@@ -127,12 +138,15 @@ class ProviderButtons(Gtk.FlowBox):
 
     def set_active_id(self, key):
         selected = key if key in self.buttons else self.fallback
-        if not self.buttons[selected].get_sensitive():
+        if not self.buttons[selected].get_sensitive() or self.buttons[selected].get_parent().get_no_show_all():
             selected = self.fallback
         self.buttons[selected].set_active(True)
 
     def _keys(self, _button, event, key):
-        keys = list(self.buttons)
+        keys = [key for key, button in self.buttons.items()
+                if button.get_sensitive() and not button.get_parent().get_no_show_all()]
+        if not keys:
+            return False
         if event.keyval in (Gdk.KEY_Home, Gdk.KEY_End):
             index = 0 if event.keyval == Gdk.KEY_Home else len(keys) - 1
         elif event.keyval in (Gdk.KEY_Left, Gdk.KEY_Up, Gdk.KEY_Right, Gdk.KEY_Down):

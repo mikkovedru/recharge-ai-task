@@ -31,7 +31,7 @@ from .muse import fetch_muse_quota
 from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target
-from .providers import discover_all_targets as discover_targets
+from .providers import discover_all_targets as discover_targets, check_providers
 from .status_display import BORDER_COLORS, COLORS, overview_status_level, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
 from .status_log import StatusLog
 from .status_help import StatusInfoButton, status_markup
@@ -54,6 +54,8 @@ class TargetPicker(Gtk.Window):
         self.quota_errors = {}
         self.quota_checked = {}
         self.provider_notices = {}
+        self.provider_details = {}
+        self.provider_check_busy = False
         apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
         self.preferences = {t.key: t for t in self.config.all_targets()}
@@ -157,6 +159,13 @@ class TargetPicker(Gtk.Window):
         summary.pack_start(checks, False, False, 0)
         summary.pack_start(self.quota_label, False, False, 0)
         self.monitor_tabs = ProviderMonitor(summary)
+        self.providers_button = Gtk.Button(label="Check providers")
+        self.providers_button.set_tooltip_text("Check provider installations, executable versions, chats and statuses, and refresh supported quotas. Does not start monitoring or send signals (Ctrl+Alt+R)")
+        self.providers_button.set_image(Gtk.Image.new_from_icon_name("view-refresh-symbolic", Gtk.IconSize.BUTTON))
+        self.providers_button.set_always_show_image(True)
+        self.providers_button.connect("clicked", self.refresh_providers)
+        self.monitor_tabs.set_action_widget(self.providers_button, Gtk.PackType.END)
+        self.providers_button.show_all()
         self.quota_scroller = self.monitor_tabs.get_nth_page(0)
         self.quota_card = card(None, self.monitor_tabs)
         self.quota_card.set_valign(Gtk.Align.START)
@@ -299,7 +308,7 @@ class TargetPicker(Gtk.Window):
         self.inventory_status.set_tooltip_text("Chat statuses refresh every 15 seconds. Send message sends only the message; Resume goal resumes without a prompt. Resume goal is available for chat IDs. Task state comes from Codex's live desktop owner when available; goal state also uses the saved goal database. Windows do not identify a fixed chat. Unavailable means the state could not be read.")
         self.buttons = []
         self.list_toolbar = Gtk.Box(spacing=8)
-        self.refresh_button = Gtk.Button(label="Refresh")
+        self.refresh_button = WrappingButton(label="Check chats and statuses")
         self.refresh_button.connect("clicked", self.refresh)
         self.copy_button = WrappingButton(label="Copy link / ID")
         self.copy_button.connect("clicked", self.copy_row)
@@ -426,8 +435,10 @@ class TargetPicker(Gtk.Window):
         group=Gtk.AccelGroup()
         self.add_accel_group(group)
         self.accelerators=group
+        self.providers_button.add_accelerator("clicked", group, Gdk.KEY_r,
+            Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.MOD1_MASK, Gtk.AccelFlags.VISIBLE)
         for button,key,modifiers,tip in (
-            (self.refresh_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK,"Refresh chats and their statuses (Ctrl+R)"),
+            (self.refresh_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK,"Check chats and statuses (Ctrl+R)"),
             (self.quota_button,Gdk.KEY_r,Gdk.ModifierType.CONTROL_MASK|Gdk.ModifierType.SHIFT_MASK,"Check quota now and wake the active monitor; the grace period still applies (Ctrl+Shift+R)"),
             (self.send_button,Gdk.KEY_Return,Gdk.ModifierType.CONTROL_MASK,"Send now acts immediately, even with monitoring off, and may resume paused goals. Goal is attempted first, then the selected message even if Goal fails or is unconfirmed. Each action has its own allowance (Ctrl+Enter)"),
             (self.settings_button,Gdk.KEY_comma,Gdk.ModifierType.CONTROL_MASK,"Open program settings (Ctrl+,)")):
@@ -844,10 +855,15 @@ class TargetPicker(Gtk.Window):
             checked_at=self.quota_checked.get(provider), runtime=self.runtime,
             installed=provider in self.installed_providers, now=time.time(), usage_error=usage_error)
             for provider in PROVIDERS}
+        for provider, status in statuses.items():
+            status['installation'] = self.provider_details.get(provider, '')
         self.monitor_tabs.update(statuses, self.quota_interval)
+        self.provider_filter.set_visible_providers(self.installed_providers)
         for provider, status in statuses.items():
             detail = status["selection"] + "\n" + (status["error"] or status["notices"] or
                 ("Monitoring on" if status["monitored"] else "Monitoring off"))
+            if provider in self.provider_details:
+                detail = self.provider_details[provider] + "\n" + detail
             self.provider_filter.set_status(provider, status["state"], detail, installed=provider in self.installed_providers)
         states = [status["state"] for status in statuses.values()]
         level = next((level for level in ("error", "warning", "enabled") if level in states), "off")
@@ -1117,6 +1133,8 @@ class TargetPicker(Gtk.Window):
         threading.Thread(target=worker, daemon=True).start()
 
     def _apply_inventory(self, inventory):
+        if inventory.provider_details:
+            self.provider_details = inventory.provider_details
         providers = tuple(dict.fromkeys((*inventory.providers, *(t.provider for t in inventory.targets), *(t.provider for t in self.selected.values()))))
         self.installed_providers = (inventory.installed_providers if inventory.installed_providers is not None else
             inventory.providers or tuple({target.provider for target in inventory.targets}))
@@ -1160,6 +1178,46 @@ class TargetPicker(Gtk.Window):
         self.inventory_status.set_text(f"{len(inventory.targets)} targets · Status refreshed {time.strftime('%H:%M:%S')} · Every 15 seconds"
             + (f" · {len(inventory.warnings)} warning(s); see provider tabs or program log" if inventory.warnings else ""))
         self._summary()
+
+    def refresh_providers(self, *_):
+        if self.closed or self.provider_check_busy or self.busy:
+            return
+        self.provider_check_busy = True
+        self.providers_button.set_sensitive(False)
+        self.providers_button.set_label("Checking providers…")
+        # Serialize with a chat refresh so an older inventory cannot overwrite
+        # newly detected installations when the two workers finish out of order.
+        def start():
+            if self.closed:
+                return False
+            if self.discovery_busy:
+                return True
+            self.discovery_busy = True
+            def show(inventory, error):
+                self.discovery_busy = False
+                self.provider_check_busy = False
+                self.providers_button.set_sensitive(True)
+                self.providers_button.set_label("Check providers")
+                if error:
+                    self._message("Provider check failed: " + error, "error")
+                else:
+                    self._apply_inventory(inventory)
+                    self._message("Provider installations, versions and chats checked.")
+                    # The explicit action also wakes existing provider workers.
+                    # Existing grace periods and independent schedules still apply.
+                    def quotas():
+                        if self.closed:
+                            return False
+                        if self.quota_busy or self.runtime is None and self.runtime_busy:
+                            return True
+                        self.refresh_quota(self.providers_button)
+                        return False
+                    if quotas():
+                        GLib.timeout_add(100, quotas)
+            self._background(check_providers, show)
+            return False
+        if start():
+            GLib.timeout_add(100, start)
 
     def refresh(self, *_, automatic=False):
         if self.closed or self.discovery_busy or self.busy:

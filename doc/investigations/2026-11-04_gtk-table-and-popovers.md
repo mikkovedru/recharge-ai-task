@@ -29,3 +29,7 @@ Ignore inferior-child crossings and check the current pointer against both ancho
 ## Inherited message preview
 
 The unchecked custom-message editor remains a readable, copyable default preview. It is non-editable, hides its editing cursor and uses the theme's background and foreground colors for a passive tint. The checked editor restores its native appearance. Avoid opacity or fixed light/dark colors, which can reduce contrast or conflict with the active GTK theme.
+
+## Native pointer test isolation
+
+On 2026-11-14, native hover/click checks on the shared desktop observed the pointer outside the requested fixture window after xdotool had moved it. Several pointer assertions failed there and passed in a separate Xephyr display with Metacity. The source of the pointer movement was not established; this does not prove a widget hit-area defect. When pointer results disagree with widget geometry, compare actual pointer coordinates and the active window before changing the UI. A temporary nested X server with its own window manager and session bus isolates native pointer checks; allocate the display with -displayfd rather than assuming a fixed unused number, wait for startup and stop the test-owned server/window manager afterward.

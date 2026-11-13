@@ -83,6 +83,10 @@ class ProviderMonitor(Gtk.Notebook):
         escape=GLib.markup_escape_text
         for provider, status in statuses.items():
             level=status['state']
+            installed = status['installed']
+            # Keep the pages readable, including their installation explanation.
+            # Only the tab caption is passive when the provider is absent.
+            self.tab_headers[provider].set_sensitive(installed)
             title=escape(NAMES[provider])
             notice=self.tab_notices[provider]
             notice.update(level)
@@ -96,8 +100,11 @@ class ProviderMonitor(Gtk.Notebook):
                     notice.icon.get_style_context().add_provider(css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
                     notice.color_css=css
                     notice.notice_color=color
-            self.tab_labels[provider].get_accessible().set_name(NAMES[provider]+': '+level)
+            self.tab_labels[provider].get_accessible().set_name(NAMES[provider]+': '+(level if installed else 'not installed'))
             tooltip=status['selection']+'\n'+(status['error'] or status['notices'] or ('Monitoring on' if status['monitored'] else 'Monitoring off'))
+            installation = status.get('installation', '')
+            if installation:
+                tooltip = installation + '\n' + tooltip
             if self.tab_headers[provider].get_tooltip_text()!=tooltip:
                 self.tab_headers[provider].set_tooltip_text(tooltip)
             if status.get('terminal_only'):
@@ -106,9 +113,13 @@ class ProviderMonitor(Gtk.Notebook):
                        'Install the provider CLI and sign in first.' if not status['installed'] else
                        'Provider detected. Terminal waits and continuations run in the wrapped session.',
                        'Dashboard recipient counts, quota percentages and delivery statistics are not available for this integration.']
+                if installation:
+                    lines.insert(1, escape(installation))
                 update_selectable_markup(self.pages[provider], '\n'.join(lines))
                 continue
             lines=[f'<b>{title}</b> · Plan: '+escape(status['plan']), escape(status['availability'])]
+            if installation:
+                lines.insert(1, escape(installation))
             if status['error']:
                 lines.append(f'<span foreground="{colors["error"]}">'+escape(status['error'])+'</span>')
             if status['notices']:
