@@ -53,3 +53,5 @@ Metadata inspection, archive extraction, AppStream/desktop validation, installat
 After installation of the corrected package on the owner's Mint system, the generated override was absent, Cinnamon selected the dpkg-owned launcher and its native helper opened the expected removal confirmation for `recharge-ai-task`. That check canceled before removal. The owner separately reported successful removal through Synaptic. Neither observation is a completed native Cinnamon uninstall test.
 
 The reusable lesson is to retain the failed inference and the correction, not merely the final configuration. Operational facts in a release guide do not replace the rationale needed to prevent the same misunderstanding on another package or installer.
+
+The owner’s wording, scope preferences and release acceptance criteria are maintained in [Debian release requirements](../requirements/2026-11-14_debian-release-requirements.md). These complement the failure analysis above and must be checked when packaging or descriptions change.
