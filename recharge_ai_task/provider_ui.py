@@ -30,10 +30,12 @@ class ProviderNotice(Gtk.Box):
 class ProviderButtons(Gtk.FlowBox):
     __gsignals__ = {'changed': (GObject.SignalFlags.RUN_FIRST, None, ())}
 
-    def __init__(self, *, active='all', purpose='Filter visible items; saved recipients and monitoring stay unchanged', include_all=True):
+    def __init__(self, *, active='all', purpose='Filter visible items; saved recipients and monitoring stay unchanged', include_all=True, compact=False):
         super().__init__()
         self.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.set_min_children_per_line(4)
+        self.set_min_children_per_line(len(PROVIDER_NAMES) if compact else 4)
+        if compact:
+            self.set_halign(Gtk.Align.START)
         self.set_max_children_per_line(len(PROVIDER_NAMES))
         self.set_row_spacing(2)
         self.set_column_spacing(2)
@@ -52,10 +54,13 @@ class ProviderButtons(Gtk.FlowBox):
             button = Gtk.RadioButton.new_with_label_from_widget(group, caption)
             group = group or button
             button.set_mode(False)
+            if compact:
+                button.set_halign(Gtk.Align.START)
             label = button.get_child()
             button.caption = label
             button.remove(label)
             content = Gtk.Box(spacing=3)
+            content.set_halign(Gtk.Align.CENTER)
             button.status_image = Gtk.Image()
             button.status_image.set_no_show_all(True)
             button.status_image.set_pixel_size(14)

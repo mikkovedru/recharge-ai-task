@@ -151,6 +151,7 @@ class RecipientPanel(Gtk.Box):
                 color: @theme_text_color; box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
             .recipient-row:selected .recipient-title { color: @theme_text_color; opacity: 1; }
             .recipient-row button { padding: 3px; }
+            flowbox.recipient-heading > flowboxchild { padding: 0; }
             button.recipient-info { background-image: none; background-color: @theme_base_color;
                 border: 1px solid alpha(@theme_text_color, .5); border-radius: 4px; }
             button.recipient-info, button.recipient-info image { color: @theme_text_color; }
@@ -158,16 +159,21 @@ class RecipientPanel(Gtk.Box):
             button.recipient-info:focus { box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
         """)
         self.get_style_context().add_provider_for_screen(self.get_screen(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        self.heading_row = Gtk.Box(spacing=8)
-        self.heading = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END, hexpand=True)
+        self.heading_row = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
+            column_spacing=8, row_spacing=4, min_children_per_line=1, max_children_per_line=2)
+        self.heading_row.get_style_context().add_class("recipient-heading")
+        self.heading = Gtk.Label(xalign=0)
         self.heading.set_markup("<b>Recipients &amp; actions</b>")
         self.heading.set_tooltip_text("Recipients & actions")
-        self.provider_filter = ProviderButtons(purpose="Filter this recipient list only; hidden actions remain enabled")
+        self.provider_filter = ProviderButtons(compact=True, purpose="Filter this recipient list only; hidden actions remain enabled")
         self.provider_filter.connect("changed", self._filter_changed)
-        self.heading_row.pack_start(self.heading, True, True, 0)
+        # Treat the complete tab group as one item: it moves below the heading
+        # only when both items' natural widths cannot fit together.
+        for widget in (self.heading, self.provider_filter):
+            self.heading_row.add(widget)
+            widget.get_parent().set_can_focus(False)
 
         self.pack_start(self.heading_row, False, False, 0)
-        self.pack_start(self.provider_filter, False, False, 0)
         self.default_prompt = LimitControl(self._defaults_changed)
         self.default_goal = LimitControl(self._defaults_changed)
         self.default_controls = Gtk.Grid(column_spacing=6, row_spacing=4)

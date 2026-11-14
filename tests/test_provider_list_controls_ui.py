@@ -16,7 +16,8 @@ target_ui.fetch_claude_quota=lambda:Quota('Claude',RateWindow(20,300,9999999999)
 target_ui.fetch_muse_quota=lambda _:Quota('Muse',RateWindow(30,300,9999999999),None,False)
 w=make();p=w.recipient_panel
 try:
-    assert p.heading.get_parent() is p.heading_row and p.provider_filter.get_parent() is p
+    assert p.heading.get_parent().get_parent() is p.heading_row
+    assert p.provider_filter.get_parent().get_parent() is p.heading_row
     assert set(p.provider_filter.buttons)=={'all','codex','claude','muse','gemini','antigravity','opencode'}
     assert [button.caption.get_text() for button in p.provider_filter.buttons.values()]==['All (4)','Codex (2)','Claude (1)','Muse (1)','Gemini (0)','Antigravity (0)','OpenCode (0)']
     assert [column.get_title() for column in w.table.get_columns()[:2]]==['Provider','Project']
