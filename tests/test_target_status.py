@@ -87,9 +87,26 @@ def test_live_status_overrides_unloaded_metadata(monkeypatch, tmp_path, snapshot
     assert bool(inventory.warnings) == snapshot_error
 
 
+INVALID_STATUS_STATES = {
+    "runtime-list": {"threadRuntimeStatus": []},
+    "runtime-missing-type": {"threadRuntimeStatus": {}},
+    "runtime-type-list": {"threadRuntimeStatus": {"type": []}},
+    "runtime-unknown-type": {"threadRuntimeStatus": {"type": "futureTask"}},
+    "flags-string": {"threadRuntimeStatus": {"type": "active", "activeFlags": "waitingOnApproval"}},
+    "flags-nested-list": {"threadRuntimeStatus": {"type": "active", "activeFlags": [["waitingOnApproval"]]}},
+    "flags-empty-item": {"threadRuntimeStatus": {"type": "active", "activeFlags": [" "]}},
+    "goal-list": {"threadGoal": []},
+    "goal-missing-status": {"threadGoal": {}},
+    "goal-status-list": {"threadGoal": {"status": []}},
+    "goal-unknown-status": {"threadGoal": {"status": "futureGoal"}},
+    "completed-goal-invalid": {"completedThreadGoal": {"status": "futureComplete"}},
+}
+
+
 @pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="Requires Unix sockets")
-@pytest.mark.parametrize("variant", ["live", "complete", "no-goal", "wrong-version", "wrong-identity", "timeout", "oversize"])
-def test_snapshot_is_pinned_read_only_and_always_detaches(tmp_path, variant):
+@pytest.mark.parametrize("version", [11, 12, 13, 99, 1000])
+@pytest.mark.parametrize("variant", ["live", "quota-stopped", "complete", "no-goal", "wrong-version", "wrong-identity", "timeout", "oversize", *INVALID_STATUS_STATES])
+def test_snapshot_is_pinned_read_only_and_always_detaches(tmp_path, variant, version):
     path = str(tmp_path / "ipc.sock")
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(path)
@@ -120,19 +137,25 @@ def test_snapshot_is_pinned_read_only_and_always_detaches(tmp_path, variant):
                 follow = recv()
                 assert follow["params"]["following"] is True
                 state = {"id": "chosen", "hostId": "local", "threadRuntimeStatus": {"type": "active"},
-                         "threadGoal": {"status": "paused", "objective": "Secret"}, "turns": [{"text": "Secret history"}]}
-                snapshot = {"type": "broadcast", "method": "thread-stream-state-changed", "version": 11,
+                         "threadGoal": {"status": "paused", "objective": "Secret", "futureGoalField": "Secret"},
+                         "turns": [{"text": "Secret history"}], "futureStateField": {"private": "Secret"}}
+                snapshot = {"type": "broadcast", "method": "thread-stream-state-changed", "version": version,
                             "sourceClientId": "owner", "params": {"hostId": "local", "conversationId": "chosen",
-                            "change": {"type": "snapshot", "conversationState": state}}}
+                            "futureEnvelopeField": "Secret",
+                            "change": {"type": "snapshot", "conversationState": state, "futureChangeField": "Secret"}}}
                 # Unrelated owner and conversation messages must never supply state.
                 send({**snapshot, "sourceClientId": "other-owner", "version": 99})
                 send({**snapshot, "params": {**snapshot["params"], "conversationId": "other-chat"}})
-                if variant == "complete":
+                if variant == "quota-stopped":
+                    state["threadRuntimeStatus"] = {"type": "systemError"}
+                    state["threadGoal"] = {"status": "usageLimited", "objective": "Secret"}
+                elif variant == "complete":
                     state["threadGoal"] = None
                     state["completedThreadGoal"] = {"status": "complete"}
                 elif variant == "no-goal": state["threadGoal"] = None
-                elif variant == "wrong-version": snapshot["version"] = 99
+                elif variant == "wrong-version": snapshot["version"] = 0
                 elif variant == "wrong-identity": state["id"] = "other-chat"
+                elif variant in INVALID_STATUS_STATES: state.update(INVALID_STATUS_STATES[variant])
                 if variant == "oversize": connection.sendall(struct.pack("<I", 65*1024*1024))
                 elif variant != "timeout": send(snapshot)
                 recv()  # The observer unsubscribes even when validation fails.
@@ -143,15 +166,78 @@ def test_snapshot_is_pinned_read_only_and_always_detaches(tmp_path, variant):
     worker = threading.Thread(target=peer, daemon=True)
     worker.start()
     with DesktopIPC(path, timeout=.5) as desktop:
-        if variant in {"wrong-version", "wrong-identity", "timeout", "oversize"}:
-            with pytest.raises((ValueError, TimeoutError)):
+        if variant in {"wrong-version", "wrong-identity", "timeout", "oversize"} or variant in INVALID_STATUS_STATES:
+            match = "schema v0 is incompatible: version is int 0; expected a positive integer" if variant == "wrong-version" else None
+            with pytest.raises((ValueError, TimeoutError), match=match) as error:
                 desktop.status_snapshot("chosen", "owner")
+            if variant in INVALID_STATUS_STATES:
+                detail = str(error.value)
+                assert f"schema v{version} is incompatible:" in detail
+                assert "params.change.conversationState." in detail and "expected" in detail
+                assert "Refresh chats/statuses" in detail and "report this diagnostic" in detail
+                assert "Secret" not in detail
         else:
             value = desktop.status_snapshot("chosen", "owner")
-            assert value == {"task": {"type": "active"}, "goal": {"live": "paused", "complete": "complete", "no-goal": None}[variant], "goal_available": True, "goal_current": variant == "live"}
+            assert value == {"task": {"type": "systemError" if variant == "quota-stopped" else "active"}, "goal": {"live": "paused", "quota-stopped": "usageLimited", "complete": "complete", "no-goal": None}[variant], "goal_available": True, "goal_current": variant in {"live", "quota-stopped"}}
             assert "Secret" not in json.dumps(value)
     worker.join(3)
     assert not worker.is_alive() and not errors, errors
     assert [m["method"] for m in received] == ["initialize", "thread-stream-following-changed", "thread-stream-following-changed"]
     assert all(m["targetClientIds"] == ["owner"] for m in received[1:])
     assert received[-1]["params"] == {"hostId": "local", "conversationId": "chosen", "following": False}
+
+
+@pytest.mark.parametrize("version", [None, True, False, 0, -1, "13", 13.0, [], {}])
+def test_snapshot_requires_an_explicit_integer_version_and_detaches(version):
+    desktop = DesktopIPC("unused", timeout=.5)
+    sent = []
+    desktop._write = sent.append
+    desktop._message = lambda *a, **kw: {
+        "type": "broadcast", "method": "thread-stream-state-changed",
+        "version": version, "sourceClientId": "owner",
+        "params": {"hostId": "local", "conversationId": "chosen"}}
+    with pytest.raises(ValueError, match="version is .*; expected a positive integer"):
+        desktop.status_snapshot("chosen", "owner")
+    assert [value["params"]["following"] for value in sent] == [True, False]
+
+
+@pytest.mark.parametrize("params,detail", [
+    (None, "params"),
+    ({}, "params.conversationId"),
+    ({"conversationId": "chosen"}, "params.hostId"),
+    ({"hostId": "local", "conversationId": "chosen", "change": []}, "params.change"),
+    ({"hostId": "local", "conversationId": "chosen", "change": {}}, "params.change.type"),
+])
+def test_malformed_snapshot_envelopes_fail_visibly_and_detach(params, detail):
+    desktop = DesktopIPC("unused", timeout=.5)
+    sent = []
+    desktop._write = sent.append
+    desktop._message = lambda *a, **kw: {
+        "type": "broadcast", "method": "thread-stream-state-changed",
+        "version": 13, "sourceClientId": "owner", "params": params}
+    with pytest.raises(ValueError, match=f"schema v13 is incompatible: {detail} is"):
+        desktop.status_snapshot("chosen", "owner")
+    assert [value["params"]["following"] for value in sent] == [True, False]
+
+
+@pytest.mark.parametrize("fields,expected", [
+    ({}, {"task": None, "goal": None, "goal_available": False, "goal_current": False}),
+    ({"threadRuntimeStatus": None, "threadGoal": None, "completedThreadGoal": None},
+        {"task": None, "goal": None, "goal_available": True, "goal_current": False}),
+    ({"threadRuntimeStatus": {"type": "active", "activeFlags": None}},
+        {"task": {"type": "active", "activeFlags": []}, "goal": None, "goal_available": False, "goal_current": False}),
+    ({"threadRuntimeStatus": {"type": "active", "activeFlags": ["waitingOnApproval"], "new": "Secret"}},
+        {"task": {"type": "active", "activeFlags": ["waitingOnApproval"]}, "goal": None, "goal_available": False, "goal_current": False}),
+])
+def test_future_snapshot_preserves_optional_null_fields_and_known_waiting_flags(fields, expected):
+    desktop = DesktopIPC("unused", timeout=.5)
+    sent = []
+    desktop._write = sent.append
+    desktop._message = lambda *a, **kw: {
+        "type": "broadcast", "method": "thread-stream-state-changed",
+        "version": 1000, "sourceClientId": "owner",
+        "params": {"hostId": "local", "conversationId": "chosen",
+            "change": {"type": "snapshot", "conversationState": {
+                "id": "chosen", "hostId": "local", **fields}}}}
+    assert desktop.status_snapshot("chosen", "owner") == expected
+    assert [value["params"]["following"] for value in sent] == [True, False]

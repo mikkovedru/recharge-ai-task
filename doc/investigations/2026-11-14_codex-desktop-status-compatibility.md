@@ -1,0 +1,21 @@
+# Codex desktop status compatibility
+
+## Observed failure and confirmed cause
+
+On 2026-11-14, Goal recovery failed with `Unsupported Codex desktop status version` before native Goal activation. The adapter accepted only revision 11 of the private `thread-stream-state-changed` broadcast. A read-only observation of the selected chat in the installed desktop build `26.1111.21308` confirmed revision 13. Its owner identity, host and conversation IDs, snapshot envelope, `threadRuntimeStatus`, `threadGoal` and `completedThreadGoal` fields retain the structure consumed by Recharge. This is an external private-protocol revision change, separate from the policy that sends a selected message after every Goal outcome.
+
+The live chat was already active when inspected; the earlier quota-stopped state was not reproduced against that existing chat. Inspection subscribed to its status and immediately unsubscribed. It sent no prompt and performed no Goal action. Only schema metadata and status values were recorded; conversation history and objectives were discarded.
+
+## Structural compatibility boundary
+
+[The desktop adapter](../../recharge_ai_task/codex_ipc.py) accepts any positive integer snapshot revision when the fields it consumes remain compatible. It ignores additive fields at every level. A revision bump alone no longer interrupts status observation or Goal recovery. Versions 11 and 13 retain the observed status structure; simulated revisions 12, 99 and 1000 verify compatibility with additional unrelated fields.
+
+Compatibility depends on the selected desktop owner, local host and exact conversation identities, a snapshot object, and well-formed runtime and Goal fields. Runtime types and Goal statuses must be recognized before the observation can authorize Goal recovery. Optional missing/null runtime state remains unavailable; missing/null Goal fields preserve absent or uncached Goal information. Missing/null `activeFlags` remains valid, while supplied flags must form a list of nonempty strings. Unknown task or Goal enum values fail observation visibly instead of being treated as idle or resumable. This adapter boundary leaves the separate native backend recovery policy unchanged.
+
+The reader retains its frame-size bound and always unsubscribes. Shape errors identify the observed revision, exact offending field, actual type or bounded escaped status scalar, expected shape or recognized values, and refresh/update/report guidance. Missing fields are distinguished from null or wrong types. Diagnostics do not dump objects, history, objectives or arbitrary string contents. Timeouts identify the observed revision and missing snapshot response. These messages make an incompatible future field change actionable without rejecting harmless additions.
+
+## Verification and limits
+
+Socket-level regression tests cover revisions 11, 12, 13, 99 and 1000 with additive fields; active, quota-stopped, completed and absent Goals; malformed runtime/Goal fields and flags; unrelated owners and conversations; invalid identities and revision values; timeouts; oversized frames; and unconditional detachment. Diagnostics are checked for revision, field, expected shape, remediation and exclusion of private fixture contents. Recovery tests exercise the real snapshot adapter before and after synthetic native activation for manual and automatic quota recovery, including future revisions and refusal to activate on unknown runtime/Goal enums. The post-fix live read-only check successfully extracted the selected chat's current status from revision 13.
+
+No adapter can infer the semantics of arbitrary renamed or retyped fields in advance. Additive future revisions are supported; incompatible consumed fields remain visible errors until their meaning is understood. A real quota-stop/resume/send cycle was deliberately not performed on the existing user chat. Synthetic recovery tests verify that stopped-by-quota snapshots permit native Goal recovery without mutating existing work. Opt-in tests that launch a real backend are separate from this regression coverage. [Target selection documentation](../../docs/target-selection.md) describes the user-facing status and recovery rules.

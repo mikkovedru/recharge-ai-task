@@ -8,7 +8,7 @@ import sys
 import pytest
 
 from recharge_ai_task import goal_control, target_delivery as delivery
-from recharge_ai_task.codex_ipc import DeliveryUncertain
+from recharge_ai_task.codex_ipc import DeliveryUncertain, DesktopIPC
 from recharge_ai_task.goal_control import NativeGoals
 from recharge_ai_task.targets import Target
 
@@ -145,6 +145,43 @@ def test_quota_goal_uses_native_activation_and_normal_text(monkeypatch):
     assert result.success and "verified" in result.detail
     assert state["resumes"] == 1 and state["sent"] == ["Continue"]
     assert state["goal"]["status"] == "active"
+
+
+@pytest.mark.parametrize("version", [11, 12, 13, 99, 1000])
+@pytest.mark.parametrize("manual", [False, True])
+@pytest.mark.parametrize("unknown_status", [None, "task", "goal"])
+def test_quota_recovery_consumes_compatible_desktop_snapshots(monkeypatch, version, manual, unknown_status):
+    state = install_recovery(monkeypatch)
+    follows = []
+
+    def snapshot(self, thread, owner):
+        # Exercise the real private-protocol adapter, including the post-resume
+        # snapshot, without connecting to or changing an existing user chat.
+        observer = DesktopIPC("unused", timeout=.5)
+        observer.client_id = "observer"
+        observer._write = follows.append
+        observer._message = lambda *a, **kw: {
+            "type": "broadcast", "method": "thread-stream-state-changed",
+            "version": version, "sourceClientId": owner,
+            "params": {"hostId": "local", "conversationId": thread,
+                "change": {"type": "snapshot", "revision": 1,
+                    "conversationState": {"id": thread, "hostId": "local",
+                        "threadRuntimeStatus": {"type": "futureTask" if unknown_status == "task" else "systemError"},
+                        "threadGoal": {**state["goal"], "status": "futureGoal"} if unknown_status == "goal" else state["goal"],
+                        "futureStateField": "Ignored"}}}}
+        return observer.status_snapshot(thread, owner)
+
+    monkeypatch.setattr(delivery.DesktopIPC, "status_snapshot", snapshot)
+    result = delivery.recover_target(TARGET, "Continue", manual=manual)
+    if unknown_status:
+        assert not result.success and "is incompatible" in result.detail
+        assert not state["resumes"] and not state["sent"]
+        assert [message["params"]["following"] for message in follows] == [True, False]
+        return
+    assert result.success and "verified" in result.detail
+    assert state["resumes"] == 1 and state["sent"] == ["Continue"]
+    assert state["goal"]["status"] == "active"
+    assert [message["params"]["following"] for message in follows] == [True, False, True, False]
 
 
 @pytest.mark.parametrize("status", ["paused", "blocked", "budgetLimited", "complete"])

@@ -15,6 +15,76 @@ import uuid
 from pathlib import Path
 
 
+# Snapshot revision numbers can change when unrelated fields are added. Check
+# the small status subset we consume instead of blocking on a revision bump.
+TASK_STATUSES = frozenset({"active", "idle", "notLoaded", "systemError", "error"})
+GOAL_STATUSES = frozenset({"active", "paused", "blocked", "usageLimited", "usage_limited",
+    "budgetLimited", "budget_limited", "complete", "systemError", "error"})
+_MISSING = object()
+
+
+def _status_schema_error(version, field, expected, actual=_MISSING, *, show_value=False):
+    revision = str(version) if type(version) is int else "missing" if version is _MISSING else "invalid"
+    if actual is _MISSING:
+        description = "missing"
+    elif actual is None:
+        description = "null"
+    elif isinstance(actual, str):
+        # Only status enums and revisions can disclose a bounded scalar. Other
+        # strings might contain unrelated conversation data; report their type.
+        description = "string"
+        if show_value:
+            description += " " + ascii(actual[:80]) + (" (truncated)" if len(actual) > 80 else "")
+    elif type(actual) in {bool, int, float}:
+        description = f"{type(actual).__name__} {actual!r}"
+    elif isinstance(actual, list):
+        description = f"list ({len(actual)} items)"
+    elif isinstance(actual, dict):
+        description = "object"
+    else:
+        description = type(actual).__name__
+    return ValueError(f"Codex desktop status schema v{revision} is incompatible: {field} is {description}; "
+        f"expected {expected}. Refresh chats/statuses and update Recharge AI-task if needed. "
+        "If this persists, report this diagnostic and your Codex desktop version.")
+
+
+def _snapshot_status_fields(state, version):
+    runtime = state.get("threadRuntimeStatus")
+    task = None
+    if runtime is not None:
+        path = "params.change.conversationState.threadRuntimeStatus"
+        if not isinstance(runtime, dict):
+            raise _status_schema_error(version, path, "an object or null", runtime)
+        kind = runtime.get("type", _MISSING)
+        if not isinstance(kind, str) or kind not in TASK_STATUSES:
+            raise _status_schema_error(version, path + ".type", "one of " + ", ".join(sorted(TASK_STATUSES)), kind, show_value=True)
+        flags = runtime.get("activeFlags")
+        if flags is not None and not isinstance(flags, list):
+            raise _status_schema_error(version, path + ".activeFlags", "a list of nonempty strings, null, or an omitted field", flags)
+        for index, flag in enumerate(flags or []):
+            if not isinstance(flag, str) or not flag.strip():
+                raise _status_schema_error(version, f"{path}.activeFlags[{index}]", "a nonempty string", flag)
+        task = {"type": runtime["type"]}
+        if "activeFlags" in runtime:
+            task["activeFlags"] = flags or []
+    for name in ("threadGoal", "completedThreadGoal"):
+        value = state.get(name)
+        if value is None:
+            continue
+        path = "params.change.conversationState." + name
+        if not isinstance(value, dict):
+            raise _status_schema_error(version, path, "an object or null", value)
+        status = value.get("status", _MISSING)
+        if not isinstance(status, str) or status not in GOAL_STATUSES:
+            raise _status_schema_error(version, path + ".status", "one of " + ", ".join(sorted(GOAL_STATUSES)), status, show_value=True)
+    goal = state.get("threadGoal") or state.get("completedThreadGoal")
+    # Do not retain conversation histories, prompts, objectives or new fields.
+    return {"task": task,
+        "goal": goal["status"] if goal is not None else None,
+        "goal_available": "threadGoal" in state or "completedThreadGoal" in state,
+        "goal_current": isinstance(state.get("threadGoal"), dict)}
+
+
 class DeliveryUncertain(RuntimeError):
     """A request may have been accepted; do not automatically repeat it."""
 
@@ -95,8 +165,8 @@ class DesktopIPC:
     def status_snapshot(self, thread_id, owner):
         """Observe the owner's current state, then detach. Never resume a chat.
 
-        Snapshot version 11 is private desktop IPC. Validate the owner and chat
-        identity, retain only status fields, and fail visibly on incompatibility.
+        Accept additive changes at any positive revision. Validate the owner,
+        chat identity and consumed fields; incompatible shapes fail visibly.
         """
         def follow(enabled):
             self._write(dict(type="broadcast", method="thread-stream-following-changed",
@@ -104,6 +174,7 @@ class DesktopIPC:
                 params={"hostId": "local", "conversationId": thread_id, "following": enabled}))
         follow(True)
         deadline = time.monotonic() + self.timeout
+        version = _MISSING
         try:
             while time.monotonic() < deadline:
                 # Desktop snapshots include history; use a bounded larger frame.
@@ -112,26 +183,41 @@ class DesktopIPC:
                         message.get("method") != "thread-stream-state-changed" or
                         message.get("sourceClientId") != owner):
                     continue
-                params = message.get("params", {})
+                version = message.get("version", _MISSING)
+                params = message.get("params", _MISSING)
+                if not isinstance(params, dict):
+                    raise _status_schema_error(version, "params", "an object", params)
+                for field in ("conversationId", "hostId"):
+                    value = params.get(field, _MISSING)
+                    if not isinstance(value, str) or not value.strip():
+                        raise _status_schema_error(version, "params." + field, "a nonempty string", value)
                 if params.get("conversationId") != thread_id or params.get("hostId") != "local":
                     continue
-                if message.get("version") != 11:
-                    raise ValueError("Unsupported Codex desktop status version")
-                change = params.get("change", {})
+                if type(version) is not int or version <= 0:
+                    raise _status_schema_error(version, "version", "a positive integer", version, show_value=True)
+                change = params.get("change", _MISSING)
+                if not isinstance(change, dict):
+                    raise _status_schema_error(version, "params.change", "an object", change)
+                kind = change.get("type", _MISSING)
+                if not isinstance(kind, str) or not kind.strip():
+                    raise _status_schema_error(version, "params.change.type", "a nonempty change-type string", kind)
                 if change.get("type") != "snapshot":
                     continue
-                state = change.get("conversationState")
-                if not isinstance(state, dict) or state.get("id") != thread_id or state.get("hostId") != "local":
-                    raise ValueError("Invalid Codex desktop status identity")
-                runtime = state.get("threadRuntimeStatus")
-                goal = state.get("threadGoal") or state.get("completedThreadGoal")
-                # Do not retain conversation histories, prompts, or objectives.
-                return {"task": {k: runtime[k] for k in ("type", "activeFlags") if k in runtime}
-                            if isinstance(runtime, dict) else None,
-                        "goal": goal.get("status") if isinstance(goal, dict) else None,
-                        "goal_available": "threadGoal" in state or "completedThreadGoal" in state,
-                        "goal_current": isinstance(state.get("threadGoal"), dict)}
+                state = change.get("conversationState", _MISSING)
+                if not isinstance(state, dict):
+                    raise _status_schema_error(version, "params.change.conversationState", "an object", state)
+                for field, expected in (("id", thread_id), ("hostId", "local")):
+                    actual = state.get(field, _MISSING)
+                    if actual != expected:
+                        label = "the selected conversation ID" if field == "id" else "the local host ID"
+                        raise _status_schema_error(version, "params.change.conversationState." + field, label, actual)
+                return _snapshot_status_fields(state, version)
             raise TimeoutError("Codex desktop status timed out")
+        except TimeoutError as exc:
+            revision = str(version) if type(version) is int else "not observed"
+            raise TimeoutError(f"Codex desktop status snapshot timed out (schema revision: {revision}); "
+                "expected params.change.type=snapshot from the selected chat owner. "
+                "Refresh chats/statuses and check that the chat is open in Codex desktop.") from exc
         finally:
             try:
                 follow(False)
