@@ -21,7 +21,11 @@ class ProviderMonitor(Gtk.Notebook):
         self.set_scrollable(True)
         self.get_style_context().add_class('provider-monitor')
         self.compact_css=Gtk.CssProvider()
-        self.compact_css.load_from_data(b'notebook.provider-monitor > header > tabs > tab { padding: 4px 5px; min-width: 0; }')
+        self.compact_css.load_from_data(b'''
+            notebook.provider-monitor > header > tabs > tab { padding: 4px 5px; min-width: 0; }
+            .provider-tab-passive { background-color: alpha(@theme_fg_color, .07); border-radius: 3px; padding: 1px 3px; }
+            .provider-tab-passive label { font-style: italic; }
+        ''')
         self.get_style_context().add_provider_for_screen(self.get_screen(),self.compact_css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.connect('destroy',lambda *_:Gtk.StyleContext.remove_provider_for_screen(self.get_screen(),self.compact_css))
         self.set_hexpand(True)
@@ -44,7 +48,6 @@ class ProviderMonitor(Gtk.Notebook):
             self.selection_labels.append(label)
             label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
             label.set_width_chars(1)
-            label.set_max_width_chars(60)
             body.pack_start(label,False,False,0)
             tab=Gtk.Label(label=caption)
             header=Gtk.Box(spacing=3)
@@ -87,6 +90,16 @@ class ProviderMonitor(Gtk.Notebook):
             # Keep the pages readable, including their installation explanation.
             # Only the tab caption is passive when the provider is absent.
             self.tab_headers[provider].set_sensitive(installed)
+            context = self.tab_headers[provider].get_style_context()
+            if installed:
+                context.remove_class('provider-tab-passive')
+            else:
+                context.add_class('provider-tab-passive')
+            # A text marker also distinguishes absent providers without relying
+            # on theme-dependent disabled colors or color perception.
+            caption = NAMES[provider] + (' —' if not installed else '')
+            if self.tab_labels[provider].get_text() != caption:
+                self.tab_labels[provider].set_text(caption)
             title=escape(NAMES[provider])
             notice=self.tab_notices[provider]
             notice.update(level)
@@ -107,19 +120,17 @@ class ProviderMonitor(Gtk.Notebook):
                 tooltip = installation + '\n' + tooltip
             if self.tab_headers[provider].get_tooltip_text()!=tooltip:
                 self.tab_headers[provider].set_tooltip_text(tooltip)
+            installation = escape(' · '.join(installation.splitlines()))
             if status.get('terminal_only'):
-                lines=[f'<b>{title}</b> · Wrapped terminal', escape(status['notices']),
+                lines=[f'<b>{title}</b> · Wrapped terminal' + (' · '+installation if installation else ''),
                        '<b>Start:</b> '+escape(status['command']),
-                       'Install the provider CLI and sign in first.' if not status['installed'] else
-                       'Provider detected. Terminal waits and continuations run in the wrapped session.',
-                       'Dashboard recipient counts, quota percentages and delivery statistics are not available for this integration.']
-                if installation:
-                    lines.insert(1, escape(installation))
+                       escape(status['notices'])]
+                if not installed:
+                    lines.append('Install the provider CLI and sign in first.')
                 update_selectable_markup(self.pages[provider], '\n'.join(lines))
                 continue
-            lines=[f'<b>{title}</b> · Plan: '+escape(status['plan']), escape(status['availability'])]
-            if installation:
-                lines.insert(1, escape(installation))
+            lines=[f'<b>{title}</b> · Plan: '+escape(status['plan']) + (' · '+installation if installation else ''),
+                   escape(status['availability'])+' · '+escape(status['freshness'])+f' · refresh every {poll_seconds}s']
             if status['error']:
                 lines.append(f'<span foreground="{colors["error"]}">'+escape(status['error'])+'</span>')
             if status['notices']:
@@ -130,8 +141,7 @@ class ProviderMonitor(Gtk.Notebook):
                 if threshold:text=f'<span foreground="{colors[threshold]}">{text}</span>'
                 lines.append(text+' · '+escape(timing))
             if not status['installed']:lines.append('Provider not detected')
-            lines += [escape(status['freshness'])+f' · automatic refresh every {poll_seconds}s',
-                      '<b>Next check:</b> '+escape(status['check'])+' · '+escape(status['check_detail']),
+            lines += ['<b>Next check:</b> '+escape(status['check'])+' · '+escape(status['check_detail']),
                       '<b>Recovery:</b> '+escape(status['recovery'])+' · '+escape(status['countdown']),
                       escape(status['actions']),escape(status['selection']),escape(status['stats'])]
             update_selectable_markup(self.pages[provider], '\n'.join(lines))

@@ -2,6 +2,10 @@
 
 Recharge has independent `gemini` and `antigravity` providers. Gemini runs the `gemini` executable; Antigravity runs `agy`, the interactive CLI, rather than the IDE launcher. Each has its own executable path and argument list. OpenCode remains last in provider ordering. The implementation is in [google_ai.py](../../recharge_ai_task/google_ai.py), with PTY execution in [wrapper.py](../../recharge_ai_task/wrapper.py).
 
+## Why keep two Google providers?
+
+Both tools are from Google and overlap in their workflows. Google's [Gemini CLI migration guide](https://antigravity.google/docs/cli/gcli-migration/) describes Antigravity's compatibility with existing Gemini CLI rules and its conversion of extensions, skills and MCP configuration. Compatibility does not make the installations interchangeable: `gemini` and `agy` have separate startup commands, configuration layouts and usage views. Recharge retains separate provider identities so selecting one launches the executable and arguments the user configured for that tool. Combining them solely by company would make that selection ambiguous and could apply settings to the wrong process. This distinction concerns integrations, not a claim that their Google account quotas are independent.
+
 ## Supported behavior and capability boundaries
 
 Run `recharge-ai-task run --provider gemini` or `recharge-ai-task run --provider antigravity`. Install the provider separately and complete its own sign-in and workspace-trust setup. Explicit paths use `--gemini PATH` and `--antigravity PATH`; environment overrides are `GEMINI_CLI_PATH` and `ANTIGRAVITY_CLI_PATH`. Antigravity's documented CLI locations include `~/.local/bin/agy` and `%LOCALAPPDATA%/agy/bin`; npm-installed Gemini can use the Windows npm command directory.

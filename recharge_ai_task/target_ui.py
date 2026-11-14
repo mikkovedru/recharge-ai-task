@@ -1054,9 +1054,6 @@ class TargetPicker(Gtk.Window):
         if self.closed:
             return False
         self._render_overview()
-        if not self.active_providers:
-            self.quota_label.set_text("No installed AI providers found" if not self.discovery_busy else "Discovering installed AI providers…")
-            return True
         colors = status_colors(self.quota_label)
         def window_text(window):
             label = window.label or ("5-hour" if window.window_duration_mins == 300 else "Weekly" if window.window_duration_mins == 10080 else f"{window.window_duration_mins}-minute")
@@ -1073,18 +1070,22 @@ class TargetPicker(Gtk.Window):
             level = "error" if window.used_percent >= 100 else "warning" if window.used_percent >= 85 else None
             return (f'<span foreground="{colors[level]}">{text}</span>' if level else text) + suffix
         lines = []
-        for provider in self.active_providers or tuple(self.quotas):
+        for provider in PROVIDERS:
+            title = '• <b>' + GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider)) + '</b>'
+            if provider not in self.installed_providers:
+                lines.append(title + ': not detected · see provider tab')
+                continue
             if provider in TERMINAL_PROVIDERS:
-                lines.append(GLib.markup_escape_text(PROVIDER_LABELS[provider]+": wrapped terminal · see provider tab"))
+                lines.append(title + ': wrapped terminal · see provider tab')
                 continue
             quota = self.quotas.get(provider)
             if quota is None:
-                lines.append(GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider) + ": quota unavailable"))
+                lines.append(title + ': quota unavailable · see provider tab')
                 continue
-            lines.append("<b>" + GLib.markup_escape_text(PROVIDER_LABELS.get(provider, provider)) + "</b>" + (" · last known quota" if self.quota_errors.get(provider) else "") + " · " +
+            lines.append(title + (" · last known quota" if self.quota_errors.get(provider) else "") + " · " +
                          " · ".join(window_text(w) for w in quota_windows(quota)))
             if quota.has_credits or quota.unlimited_credits:
-                lines.append("Additional credits are available" + (" · backend still reports a limit" if quota.rate_limit_reached or quota.spend_control_reached else " · usable without waiting for the included window reset"))
+                lines[-1] += " · Additional credits are available" + (" · backend still reports a limit" if quota.rate_limit_reached or quota.spend_control_reached else " · usable without waiting for the included window reset")
         lines.append(f"Quota checked per provider · automatic refresh every {self.quota_interval}s" + (" · Latest refresh failed · see provider tabs" if self.quota_error else ""))
         update_selectable_markup(self.quota_label, "\n".join(lines))
         return True
