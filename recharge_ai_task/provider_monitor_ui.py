@@ -124,6 +124,7 @@ class ProviderMonitor(Gtk.Notebook):
             if status.get('terminal_only'):
                 lines=[f'<b>{title}</b> · Wrapped terminal' + (' · '+installation if installation else ''),
                        '<b>Start:</b> '+escape(status['command']),
+                       *[escape(line) for line in status.get('terminal_observations', [])],
                        escape(status['notices'])]
                 if not installed:
                     lines.append('Install the provider CLI and sign in first.')

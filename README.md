@@ -96,3 +96,5 @@ Settings and logs are local, normally under `~/.recharge-ai-task/` (Windows: `%U
 Based on [Autumnpoem/codex-autocontinue](https://github.com/Autumnpoem/codex-autocontinue).
 
 Recharge AI-task adds the multi-provider dashboard, recipient controls, quota monitoring, tray integration and verified delivery paths maintained here.
+
+Google/OpenCode provider tabs also show live Recharge-wrapped terminal sessions, detected reset/grace countdowns, native-retry ownership, typing cancellations and sent continuation counts. These are process-scoped observations, not account-wide quota measurements; unwrapped terminals and direct IDE chat delivery are outside this view.

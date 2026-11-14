@@ -172,7 +172,7 @@ def wait_for_muse_recovery(pty, stop, executable, config, user_input):
     return False
 
 
-def wait_for_opencode_reset(pty, stop, wake_at, watcher, grace_seconds, user_input):
+def wait_for_opencode_reset(pty, stop, wake_at, watcher, grace_seconds, user_input, observation=None):
     """Proxy output while respecting manual input and OpenCode's own retry loop."""
     while not stop.is_set() and pty.isalive():
         if user_input.is_set() or watcher.native_retry:
@@ -189,6 +189,8 @@ def wait_for_opencode_reset(pty, stop, wake_at, watcher, grace_seconds, user_inp
             detected = watcher.feed(data)
             if detected:
                 wake_at = max(wake_at, detected[0] + grace_seconds)
+                if observation:
+                    observation.update("waiting", wake_at)
                 watcher.reset()
         stop.wait(.05)
     return False
@@ -254,6 +256,8 @@ def run_wrapper(config: WrapperConfig) -> int:
         watcher = MuseLimitWatcher()
     else:
         watcher = ClaudeLimitWatcher() if config.provider == "claude" else LimitWatcher()
+    from .terminal_status import TerminalObservation
+    observation = TerminalObservation(config.provider) if config.provider in ("gemini", "antigravity", "opencode") else None
     stop = StopEvent()
     user_input = threading.Event()
     goal_resume_pending = config.goal_mode
@@ -271,6 +275,8 @@ def run_wrapper(config: WrapperConfig) -> int:
             sys.stdout.write(data)
             sys.stdout.flush()
             detected = watcher.feed(data)
+            if observation and getattr(watcher, "native_retry", False):
+                observation.update("native")
             if detected:
                 handle_limit(detected)
 
@@ -331,7 +337,10 @@ def run_wrapper(config: WrapperConfig) -> int:
 
         try:
             if config.provider in ("gemini", "antigravity", "opencode"):
-                ready = wait_for_opencode_reset(pty, stop, wake_at, watcher, config.grace_seconds, user_input)
+                observation.update("waiting", wake_at)
+                ready = wait_for_opencode_reset(pty, stop, wake_at, watcher, config.grace_seconds, user_input, observation)
+                if ready is None:
+                    observation.update("cancelled" if user_input.is_set() else "native")
                 if ready is None:
                     return
             elif config.provider == "claude":
@@ -349,6 +358,8 @@ def run_wrapper(config: WrapperConfig) -> int:
             if config.provider == "claude":
                 watcher.reset()
             _submit(pty, prompt, config.enter_presses, config.key_delay, carriage_return=config.provider in ("claude", "gemini", "antigravity", "opencode"))
+            if observation:
+                observation.update("continued")
             _log(f"[recharge-ai-task] {t('cli.auto_continue_sent')}")
         finally:
             if config.provider in ("gemini", "antigravity", "opencode"):
@@ -362,6 +373,8 @@ def run_wrapper(config: WrapperConfig) -> int:
 
         def write(self, data):
             user_input.set()
+            if observation:
+                observation.update("cancelled" if waiting_for_reset else "running")
             pty.write(data)
 
     stdin_pty = InputProxy() if config.provider in ("claude", "muse", "gemini", "antigravity", "opencode") else pty
@@ -381,6 +394,8 @@ def run_wrapper(config: WrapperConfig) -> int:
     reader_thread.join(timeout=2)
     stdin_thread.join(timeout=1)
 
+    if observation:
+        observation.close()
     try:
         return pty.exitstatus or 0
     except Exception:

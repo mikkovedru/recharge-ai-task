@@ -56,7 +56,11 @@ def provider_status(provider, *, targets, config, usage, quota=None, error='', n
         else:
             from .google_ai import limitation
             LIMITATION = limitation(provider)
-        return dict(provider=provider, terminal_only=True, state='off', installed=installed,
+        from .terminal_status import live_observations, observation_lines
+        sessions = live_observations(provider)
+        level = 'warning' if any(s['state'] in ('waiting', 'native') for s in sessions) else 'enabled' if sessions else 'off'
+        return dict(provider=provider, terminal_only=True, state=level, installed=installed or bool(sessions),
+                    terminal_observations=observation_lines(sessions, now),
                     enabled=False, monitored=False, selection='Wrapped interactive terminals only; no dashboard recipients.',
                     error='', notices=LIMITATION, command=f'recharge-ai-task run --provider {provider}')
     selected = [t for t in targets if t.provider == provider]

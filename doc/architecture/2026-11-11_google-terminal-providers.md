@@ -30,3 +30,9 @@ Live signed-in Gemini/Antigravity quota exhaustion and native Windows PTY operat
 - [Antigravity setup](https://antigravity.google/docs/getting-started?tab=cli) identifies the `agy` CLI and its installation locations.
 - [Antigravity CLI reference](https://antigravity.google/docs/cli/reference/) distinguishes interactive startup from print, ACP and remote modes.
 - [Antigravity usage panel](https://antigravity.google/docs/cli/commands/usage) explains its interactive model-group quota view.
+
+## Live wrapped-terminal observations — 2026-11-14
+
+The provider tabs now show observations from live Recharge-wrapped sessions: running, waiting for a detected reset plus grace, native-retry ownership, manual cancellation and sent continuations. Each wrapper writes an atomic, private record scoped to its Recharge profile and process creation identity. Multiple terminals remain separate; the dashboard ignores dead/reused PIDs, malformed records and symlinks. Normal exit removes the record. No prompts, API keys or terminal transcripts are stored. Observation failures must not interrupt continuation.
+
+These records describe the last observed terminal event, not fresh account-wide quota or successful task completion. They also cannot see terminals launched outside Recharge. This closes part of the dashboard visibility gap without inventing quota percentages. Remaining quota adapters and direct session delivery have explicit acceptance requirements in the [integration requirements](../requirements/2026-11-14_google-opencode-integration.md).
