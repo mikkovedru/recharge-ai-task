@@ -35,6 +35,8 @@ class WindowLayout:
 
     def pane(self, key, first, second, *, horizontal=False, position=200, resize_second=True):
         pane = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL if horizontal else Gtk.Orientation.VERTICAL)
+        # All user-resizable dividers share the native theme and handle size.
+        pane.get_style_context().add_class("workspace-divider")
         pane.set_wide_handle(True)
         pane.pack1(first, resize=True, shrink=not horizontal)
         pane.pack2(second, resize=resize_second, shrink=not horizontal)

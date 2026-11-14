@@ -76,7 +76,8 @@ try:
             w.resize(width,height);pump(w)
             heights=[widget.get_allocated_height() for widget in (w.monitoring_card,w.quota_card,w.logo_link)]
             assert heights[0]<110 and heights[2]==w.settings_button.get_allocated_width(),heights
-            assert heights[1]<250 and w.monitor_tabs.get_n_pages()==4,heights
+            assert heights[1]==w.overview_split.get_child1().get_allocated_height(),heights
+            assert w.monitor_tabs.get_n_pages()==len(target_ui.PROVIDERS)+1
             assert w.logo.get_allocated_width()==w.settings_button.get_allocated_width()
             assert pos(w.quota_heading,w)[1]==pos(w.send_time_label,w)[1]
             assert w.send_time_label.get_tooltip_text()==w.send_time_label.get_text()

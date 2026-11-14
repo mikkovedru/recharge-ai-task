@@ -168,7 +168,6 @@ class TargetPicker(Gtk.Window):
         self.providers_button.show_all()
         self.quota_scroller = self.monitor_tabs.get_nth_page(0)
         self.quota_card = card(None, self.monitor_tabs)
-        self.quota_card.set_valign(Gtk.Align.START)
         self.quota_button = Gtk.Button(label="Check quota now")
         self.quota_button.connect("clicked", self.refresh_quota)
         self.settings_button = Gtk.Button(label="Settings…")
@@ -188,7 +187,6 @@ class TargetPicker(Gtk.Window):
         self.brand_area.pack_start(self.settings_button, False, False, 0)
 
         dashboard_row.pack_end(self.brand_area, False, False, 0)
-        box.pack_start(dashboard_row, False, False, 0)
         self.selection_help = Gtk.Label(xalign=0)
         self.selection_help.set_markup("<b>Automatic quota recovery</b> · Choose Send message, Resume goal, or both for each recipient. "
             "Choices and message text save automatically for future quota recovery. Editing them sends nothing now.")
@@ -415,7 +413,16 @@ class TargetPicker(Gtk.Window):
         self.right_workspace = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.right_workspace.pack_start(self.recipient_frame, True, True, 0)
         self.workspace_split = self.window_layout.pane("chat_recipients", self.left_workspace, self.right_workspace, horizontal=True, position=.50)
-        box.pack_start(self.workspace_split, True, True, 0)
+        self.overview_split = self.window_layout.pane("provider_overview", dashboard_row, self.workspace_split,
+                                                     position=250)
+        self.overview_split.child_set_property(dashboard_row, "resize", False)
+        self.overview_split.child_set_property(dashboard_row, "shrink", False)
+        self.overview_split.child_set_property(self.workspace_split, "shrink", False)
+        self.recipient_panel.split.child_set_property(self.recipient_panel.list_scroller, "shrink", False)
+        self.overview_split.set_has_tooltip(True)
+        self.overview_split.connect("query-tooltip", self._overview_divider_tooltip)
+        self.overview_split.get_accessible().set_name("Provider overview height divider")
+        box.pack_start(self.overview_split, True, True, 0)
         self.default_editor.connect("resized", self._resize_default_message)
         self._install_shortcuts()
         self.logo_link.match_width(self.settings_button, GdkPixbuf.Pixbuf.new_from_file(str(asset_path("logo-lockup.png"))))
@@ -820,6 +827,16 @@ class TargetPicker(Gtk.Window):
             .overview-error {{ color: {colors['error']}; }}
             .overview-compact {{ font-size: .9em; }}
         """.encode())
+
+    @staticmethod
+    def _overview_divider_tooltip(pane, _x, y, keyboard, tooltip):
+        first, second = pane.get_child1(), pane.get_child2()
+        start = first.get_allocated_height()
+        end = pane.get_allocated_height() - second.get_allocated_height()
+        if not keyboard and not start <= y < end:
+            return False
+        tooltip.set_text("Resize the provider overview vertically by dragging the divider (F8, then Up / Down; Enter to keep, Esc to cancel)")
+        return True
 
     @staticmethod
     def _overview_label(label, text, level, *, bold=False):
