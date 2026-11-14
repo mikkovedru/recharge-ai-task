@@ -84,6 +84,15 @@ def nodes(node, depth=0):
             yield from nodes(child, depth+1)
 
 
+def role_nodes(node, role):
+    finder = getattr(node, "find_roles", None)
+    if finder is not None:
+        matches = finder((role,))
+        if matches is not None:
+            return matches
+    return (item for item in nodes(node) if item.getRoleName() == role)
+
+
 class FocusChanged(RuntimeError):
     """Stop native navigation if its verified desktop loses focus."""
 
@@ -102,7 +111,7 @@ def active_window(pid):
 
 
 def focus_codex(pid):
-    """Acquire focus once; subsequent focus loss must never trigger a retry."""
+    """Acquire the verified desktop; callers bound when acquisition is allowed."""
     try:
         return active_window(pid)
     except FocusChanged:
@@ -208,8 +217,8 @@ def wait_for(check, timeout=CONTROL_WAIT_SECONDS, *, control="native control"):
 
 
 def sidebar_rows(frame):
-    return [node for node in nodes(frame) if node.getRoleName() == "push button"
-            and any("sidebar-item" in value for value in node.getAttributes())]
+    return [node for node in role_nodes(frame, "push button")
+            if any("sidebar-item" in value for value in node.getAttributes())]
 
 
 def current_chat_id(pid):
@@ -232,7 +241,7 @@ def row_chat_id(pid, row):
     if bounds.width <= 0 or bounds.height <= 0:
         raise RuntimeError("The selected Codex chat is not visible in its sidebar")
     def named(parent, role, name):
-        matches = [node for node in nodes(parent) if node.getRoleName() == role and node.name == name
+        matches = [node for node in role_nodes(parent, role) if node.name == name
                    and node.getState().contains(Atspi.StateType.SHOWING)]
         return matches[0] if len(matches) == 1 else None
     action = None
@@ -312,6 +321,10 @@ def show_chat(target, pid):
     focus_codex(pid)
     link = "codex://threads/" + quote(target.id, safe="")
     subprocess.run(["xdg-open", link], check=True, capture_output=True, timeout=8)
+    # URI handlers can acknowledge dispatch while another window is foreground.
+    # Acquire again at this explicit transition, before any identity/menu action.
+    # Later focus loss still aborts rather than repeatedly interrupting the user.
+    focus_codex(pid)
     # xdg-open acknowledges dispatch, not completed navigation. Re-read the
     # active frame and sidebar after loading/project expansion on every pass.
     deadline = time.monotonic() + NAVIGATION_SECONDS
@@ -350,7 +363,12 @@ def show_chat(target, pid):
                 # canonical selection; its label alone never authorizes a Goal.
                 time.sleep(.1)
                 break
-        except (InterruptedError, AccessibilityUnavailable, AccessibilityTimeout, FocusChanged):
+        except FocusChanged as exc:
+            raise FocusChanged(f"Codex lost foreground focus while verifying chat {target.id}. "
+                f"Navigation stopped after {max(0, NAVIGATION_SECONDS - (deadline - time.monotonic())):.1f}s "
+                f"for desktop PID {pid}. Keep the intended Codex window in front until Goal activation finishes, "
+                "then retry; no Goal action sent") from exc
+        except (InterruptedError, AccessibilityUnavailable, AccessibilityTimeout):
             raise
         except Exception as exc:
             last_error = str(exc)
@@ -379,8 +397,8 @@ def resume_goal(target, expected, pid):
             current = goals.get(target.id)
             if current is None or any(current.get(k) != expected.get(k) for k in ("threadId", "createdAt", "objective", "status", "tokenBudget")):
                 raise RuntimeError("Goal changed before native activation; no Goal action sent")
-        buttons = [node for node in nodes(frame) if node.getRoleName() == "push button"
-                   and node.name == "Resume goal" and node.getState().contains(Atspi.StateType.SHOWING)
+        buttons = [node for node in role_nodes(frame, "push button")
+                   if node.name == "Resume goal" and node.getState().contains(Atspi.StateType.SHOWING)
                    and node.getState().contains(Atspi.StateType.ENABLED)]
         if len(buttons) != 1:
             raise RuntimeError("The selected chat has no unique native Resume goal button; no Goal action sent")
@@ -393,8 +411,8 @@ def resume_goal(target, expected, pid):
         deadline = time.monotonic()+ACTIVATION_CONFIRMATION_SECONDS
         while time.monotonic() < deadline:
             frame = visible_frame(pid)
-            if any(node.getRoleName() == "push button" and node.name == "Pause goal"
-                   and node.getState().contains(Atspi.StateType.SHOWING) for node in nodes(frame)):
+            if any(node.name == "Pause goal" and node.getState().contains(Atspi.StateType.SHOWING)
+                   for node in role_nodes(frame, "push button")):
                 if current_chat_id(pid) != target.id:
                     raise RuntimeError("Chat changed after native Goal activation")
                 return

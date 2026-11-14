@@ -771,3 +771,25 @@ def test_uncertain_goal_still_steers_message_into_active_turn(monkeypatch):
     assert result.completed_actions == ('prompt',)
     assert UsageLedger().usage(target.key, 'goal') == Usage(1, 1)
     assert UsageLedger().usage(target.key, 'prompt') == Usage(1, 0)
+
+
+@pytest.mark.parametrize('initial_task,task_after_navigation', [('active','active'),('active','idle'),('idle','idle')])
+def test_goal_only_manual_recovery_handles_pause_stop_race_without_touching_turn(monkeypatch,initial_task,task_after_navigation):
+    state=install_recovery(monkeypatch,status='paused',task=initial_task)
+    original=delivery.DesktopIPC
+    snapshots=[]
+    class Desktop(original):
+        def status_snapshot(self,thread,owner):
+            snapshots.append(True)
+            task=initial_task if len(snapshots)==1 else task_after_navigation
+            return {'task':{'type':task},'goal':state['desktop_goal']}
+        def resume_goal(self,target,expected):
+            # A delayed pause can finish stopping the turn during navigation.
+            super().resume_goal(target,expected)
+        def send(self,*args):pytest.fail('Goal-only recovery started a new prompt turn')
+        def steer(self,*args):pytest.fail('Goal-only recovery steered the existing turn')
+    monkeypatch.setattr(delivery,'DesktopIPC',Desktop)
+    result=delivery.recover_target(TARGET,'',manual=True,send_prompt=False)
+    assert result.success and state['resumes']==1
+    assert state['goal']['status']=='active' and len(snapshots)==2
+    assert state['goal']['tokenBudget']==GOAL['tokenBudget']

@@ -119,7 +119,7 @@ def test_navigation_never_retries_or_reacquires_after_focus_loss(monkeypatch, st
     monkeypatch.setattr(ui, '_title_candidate', lambda *_: True)
     monkeypatch.setattr(ui, 'row_chat_id', lost)
     with pytest.raises(ui.FocusChanged): ui.show_chat(Target('thread', 'chosen', 'Fixture'), 123)
-    assert calls == ['focus', 'deeplink', 'lost']
+    assert calls == ['focus', 'deeplink', 'focus', 'lost']
 
 
 def test_native_focus_acquisition_and_loss_between_two_applications(monkeypatch):
@@ -181,7 +181,18 @@ Gtk.main()
                 return SimpleNamespace(returncode=0)
             return run(args, **kwargs)
         monkeypatch.setattr(ui.subprocess, 'run', dispatch)
-        with pytest.raises(ui.FocusChanged):
+        # Dispatch can move focus: the helper must reclaim its verified window
+        # at that transition before inspecting controls.
+        assert ui.show_chat(target, chosen.pid) == chosen_xid
+        assert opened == [['xdg-open', 'codex://threads/synthetic-fixture']]
+        assert ui.active_window(chosen.pid) == chosen_xid
+        opened.clear()
+        # A subsequent real focus loss during discovery still stops the action.
+        def lose_during_discovery(pid):
+            ui.focus_codex(other.pid)
+            return ui.active_window(pid)
+        monkeypatch.setattr(ui, 'visible_frame', lose_during_discovery)
+        with pytest.raises(ui.FocusChanged, match='while verifying chat'):
             ui.show_chat(target, chosen.pid)
         assert opened == [['xdg-open', 'codex://threads/synthetic-fixture']]
         assert ui.active_window(other.pid) == other_xid

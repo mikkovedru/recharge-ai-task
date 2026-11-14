@@ -198,6 +198,29 @@ class Accessible:
     def getRoleName(self):
         return Atspi.role_get_name(self.call(ACCESSIBLE, "GetRole")[0])
 
+    def find_roles(self, roles):
+        """Let the verified app find controls without fetching its whole tree."""
+        values = [int(Atspi.Role.__enum_values__[value]) for value in Atspi.Role.__enum_values__
+                  if Atspi.role_get_name(value) in roles]
+        if len(values) != len(set(roles)):
+            return None
+        bits = [0] * 4
+        for value in values:
+            bits[value // 32] |= 1 << (value % 32)
+        bits = [value if value < 2**31 else value - 2**32 for value in bits]
+        all_items, any_item = int(Atspi.CollectionMatchType.ALL), int(Atspi.CollectionMatchType.ANY)
+        rule = ([0, 0], all_items, {}, all_items, bits, any_item, [], all_items, False)
+        try:
+            references = self.call("org.a11y.atspi.Collection", "GetMatches",
+                "((aiia{ss}iaiiasib)uib)", (rule, int(Atspi.CollectionSortOrder.CANONICAL), 0, True))[0]
+        except GLib.Error as exc:
+            if any(exc.matches(Gio.dbus_error_quark(), code) for code in
+                   (Gio.DBusError.UNKNOWN_METHOD, Gio.DBusError.UNKNOWN_INTERFACE, Gio.DBusError.NOT_SUPPORTED)):
+                return None
+            raise
+        return [Accessible(self.bus, owner, path) for owner, path in references
+                if owner and path != "/org/a11y/atspi/null"]
+
     def getAttributes(self):
         return [f"{key}:{value}" for key, value in self.call(ACCESSIBLE, "GetAttributes")[0].items()]
 

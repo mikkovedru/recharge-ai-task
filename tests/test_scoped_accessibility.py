@@ -70,6 +70,8 @@ try:
         yield node
         for child in node:yield from nodes(child)
     button=next(n for n in nodes(frame) if n.getRoleName()=='push button')
+    matches=frame.find_roles(('push button',))
+    assert matches is not None and len(matches)==1 and matches[0].path==button.path
     assert button.name=='Fixture action'
     assert button.getState().contains(Atspi.StateType.ENABLED)
     assert button.parent.getRoleName()=='frame'
@@ -326,3 +328,43 @@ finally:
     result = subprocess.run(['dbus-run-session', '--', sys.executable, '-c', source],
         env=dict(os.environ, XDG_RUNTIME_DIR=str(tmp_path)), capture_output=True, text=True, timeout=25)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_collection_query_is_scoped_and_uses_role_bitsets():
+    from recharge_ai_task.scoped_accessibility import Accessible
+    from gi.repository import Atspi
+    calls=[]
+    def call(owner,path,interface,method,signature,args):
+        calls.append((owner,path,interface,method,signature,args))
+        return ([(':1.codex','/button'),(':1.codex','/menu')],)
+    bus=SimpleNamespace(owner=':1.codex',call=call)
+    root=Accessible(bus,':1.codex','/frame')
+    matches=root.find_roles(('push button','menu'))
+    assert [node.path for node in matches]==['/button','/menu']
+    owner,path,interface,method,signature,args=calls[0]
+    assert (owner,path,interface,method)==(':1.codex','/frame','org.a11y.atspi.Collection','GetMatches')
+    assert signature=='((aiia{ss}iaiiasib)uib)'
+    rule,sortby,count,traverse=args
+    for role in (Atspi.Role.PUSH_BUTTON,Atspi.Role.MENU):
+        assert rule[4][int(role)//32] & (1<<(int(role)%32))
+    assert count==0 and traverse and not rule[-1]
+
+
+def test_collection_query_rejects_foreign_application_references():
+    from recharge_ai_task.scoped_accessibility import Accessible
+    bus=SimpleNamespace(owner=':1.codex',call=lambda *a:([(':1.shell','/foreign')],))
+    with pytest.raises(RuntimeError,match='left the verified'):
+        Accessible(bus,':1.codex','/frame').find_roles(('push button',))
+
+
+def test_collection_falls_back_only_for_unsupported_methods():
+    from recharge_ai_task.scoped_accessibility import Accessible
+    from gi.repository import GLib,Gio
+    bus=SimpleNamespace(owner=':1.codex')
+    for code in (Gio.DBusError.UNKNOWN_METHOD,Gio.DBusError.UNKNOWN_INTERFACE,Gio.DBusError.NOT_SUPPORTED):
+        def unsupported(*a):raise GLib.Error.new_literal(Gio.dbus_error_quark(),'unsupported',code)
+        bus.call=unsupported
+        assert Accessible(bus,':1.codex','/frame').find_roles(('push button',)) is None
+    def failed(*a):raise GLib.Error.new_literal(Gio.dbus_error_quark(),'failed',Gio.DBusError.FAILED)
+    bus.call=failed
+    with pytest.raises(GLib.Error):Accessible(bus,':1.codex','/frame').find_roles(('push button',))

@@ -443,3 +443,43 @@ def test_request_timeout_is_not_reconnected_or_retried_as_navigation(monkeypatch
     with pytest.raises(ui.AccessibilityTimeout, match='GetChildren'):
         ui.show_chat(TARGET, 123)
     assert calls == [True]
+
+
+def test_uri_dispatch_reacquires_verified_foreground_before_reading_identity(monkeypatch):
+    navigation_clock(monkeypatch)
+    order=[];frame=Node('Frame','frame')
+    monkeypatch.setattr(ui,'focus_codex',lambda pid:order.append(('focus',pid)) or 1)
+    monkeypatch.setattr(ui.subprocess,'run',lambda args,**kwargs:order.append(('dispatch',args[0])))
+    monkeypatch.setattr(ui,'visible_frame',lambda pid:order.append(('frame',pid)) or frame)
+    monkeypatch.setattr(ui,'current_chat_id',lambda pid:'chosen')
+    assert ui.show_chat(TARGET,123) is frame
+    assert order[:3]==[('focus',123),('dispatch','xdg-open'),('focus',123)]
+    assert order[3][0]=='frame'
+
+
+def test_later_focus_loss_reports_navigation_context_without_reacquiring(monkeypatch):
+    navigation_clock(monkeypatch)
+    focuses=[]
+    monkeypatch.setattr(ui,'focus_codex',lambda pid:focuses.append(pid) or 1)
+    def lost(_):raise ui.FocusChanged('Another application has focus; no Goal action sent')
+    monkeypatch.setattr(ui,'visible_frame',lost)
+    with pytest.raises(ui.FocusChanged,match=r'verifying chat chosen.*desktop PID 123.*Keep the intended Codex'):
+        ui.show_chat(TARGET,123)
+    assert focuses==[123,123]
+
+
+def test_control_queries_do_not_walk_conversation_when_collection_is_available():
+    class Frame(Node):
+        def __iter__(self):pytest.fail('Traversed conversation instead of querying controls')
+        def find_roles(self,roles):
+            assert roles==('push button',)
+            return [button]
+    button=Node('Resume goal')
+    assert list(ui.role_nodes(Frame('Frame','frame'),'push button'))==[button]
+
+
+def test_control_queries_fall_back_when_collection_is_unavailable():
+    class Frame(Node):
+        def find_roles(self,roles):return None
+    button=Node('Resume goal')
+    assert list(ui.role_nodes(Frame('Frame','frame',[button]),'push button'))==[button]

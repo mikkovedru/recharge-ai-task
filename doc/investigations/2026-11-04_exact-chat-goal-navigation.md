@@ -36,3 +36,6 @@ Identity verification now uses an already exposed Chat actions button directly, 
 Live inspection also saw the registered frame initially expose no web content, then populate its full sidebar on later reads. Registration alone therefore cannot prove that web controls are ready. The exact cause and duration of that transient state were not established. Chromium's [accessibility overview](https://chromium.googlesource.com/chromium/src.git/+/HEAD/docs/accessibility/overview.md#command-line-options) notes that the flag without an explicit mode starts complete but permits runtime mode changes. This is relevant context, not proof of this transient's cause.
 
 The corrected complete recovery path was checked against the real chat up to the Resume action, intercepting that action before execution. Clipboard restoration ran, and the backend Goal status was unchanged. This covers native button, canonical chat and backend Goal verification; it does not verify actual live activation or post-activation continuation.
+
+
+The [2026-11-14 focus and paused-turn investigation](2026-11-14_native-goal-focus-and-paused-turns.md) adds foreground acquisition after URI dispatch, direct control queries and verified live Goal activation. It supersedes the single-acquisition description above; later focus loss still aborts.
