@@ -14,6 +14,18 @@ class WrappingButton(Gtk.Button):
                     return result
         return None
 
+    def do_get_preferred_width(self):
+        minimum, natural = Gtk.Button.do_get_preferred_width(self)
+        if not getattr(self, "compact_natural_width", False):
+            return minimum, natural
+        label = self._label(self.get_child())
+        if label is None:
+            return minimum, natural
+        words = label.get_text().split()
+        word_width = max((label.create_pango_layout(word).get_pixel_size()[0] for word in words), default=0)
+        inset = max(0, minimum - label.get_preferred_width()[0])
+        return minimum, min(natural, max(minimum, word_width + inset))
+
     def do_get_request_mode(self):
         return Gtk.SizeRequestMode.HEIGHT_FOR_WIDTH
 

@@ -52,3 +52,50 @@ try:
         surface.write_to_png('/tmp/2026-11-06_usage-'+('dark' if dark else 'light')+'.png')
 finally:w.destroy()
 ''')
+
+
+def test_recipient_action_toolbar_wraps_and_keeps_button_heights():
+    run_gui(r'''
+w=make();p=w.recipient_panel
+try:
+    buttons=(w.send_button,p.reset_all,p.reset)
+    for theme,dark in (('Adwaita',False),('Adwaita',True),('Mint-X',False)):
+        Gtk.Settings.get_default().set_property('gtk-theme-name',theme)
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
+        for width,height in ((1920,1080),(1120,820)):
+            w.resize(width,height);pump(w,.5)
+            for position in (int(width*.35),int(width*.70)):
+                w.workspace_split.set_position(position);pump(w,.5)
+                assert len({button.get_allocated_height() for button in buttons})==1, [(b.get_allocated_width(),b.get_allocated_height()) for b in buttons]
+                for button in buttons:
+                    x,y=pos(button,p.actions)
+                    assert x>=0 and x+button.get_allocated_width()<=p.actions.get_allocated_width()
+                w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
+                surface.write_to_png("/tmp/recharge-actions-%s-%s-%s-%s.png" % (theme,dark,width,position))
+                assert max(pos(button,p.editor)[1]+button.get_allocated_height() for button in buttons) < pos(p.editor.get_children()[1],p.editor)[1]
+                children=p.actions.get_children()
+                natural=sum(child.get_preferred_width()[1] for child in children)+2*p.actions.get_column_spacing()
+                if p.actions.get_allocated_width()>=natural:
+                    assert len({pos(button,p.actions)[1] for button in buttons})==1
+                    style=children[0].get_style_context();pad=style.get_padding(children[0].get_state_flags());border=style.get_border(children[0].get_state_flags())
+                    assert p.actions.get_allocated_height() <= buttons[0].get_allocated_height()+pad.top+pad.bottom+border.top+border.bottom+2, (p.actions.get_allocated_height(),buttons[0].get_allocated_height(),pad,border)
+    if os.environ.get('RECHARGE_AI_TASK_POINTER_TESTS')=='1':
+        click(p.reset_all,w)
+        p.reset.grab_focus();pump(w)
+        assert w.get_focus() is p.reset
+        subprocess.run(['xdotool','key','space'],check=True);pump(w)
+    # Exercise the same toolbar below the normal editor's minimum width.
+    fixture=Gtk.Window();p.actions.reparent(fixture);fixture.set_default_size(250,300);fixture.show_all();pump(w,.5)
+    assert len({pos(button,p.actions)[1] for button in buttons})>1
+    assert len({button.get_allocated_height() for button in buttons})==1
+    narrow_height=buttons[0].get_allocated_height()
+    fixture.resize(650,300);pump(w,.5)
+    assert len({pos(button,p.actions)[1] for button in buttons})==1
+    assert len({button.get_allocated_height() for button in buttons})==1
+    assert buttons[0].get_allocated_height()<=narrow_height
+    p.actions.reparent(p.editor);fixture.destroy()
+    p.list.select_all();pump(w)
+    assert p.reset.get_label().startswith('Reset current recipients')
+    assert p.reset._label(p.reset).get_line_wrap()
+finally:w.destroy()
+''')

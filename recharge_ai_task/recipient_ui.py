@@ -4,11 +4,23 @@ from uuid import uuid4
 from gi.repository import GLib, Gtk, Pango
 
 from .provider_ui import ProviderButtons, PROVIDER_NAMES
+from .wrapping_button import WrappingButton
 from .config import AppConfig
 from .resizable_editor import ResizableEditor
 from .delivery_policy import Usage, UsageLedger, effective_limit, effective_message
 from .recipient_readiness import recipient_readiness
 from .status_display import status_colors
+
+
+class ActionFlowBoxChild(Gtk.FlowBoxChild):
+    """Request height for the width GTK actually assigns to the action."""
+    def do_get_preferred_height_for_width(self, width):
+        button = self.get_child()
+        allocated = button.get_allocated_width()
+        return button.get_preferred_height_for_width(allocated if allocated > 1 else width)
+
+    def do_get_preferred_height(self):
+        return self.do_get_preferred_height_for_width(self.get_allocated_width())
 
 
 class LimitControl(Gtk.Box):
@@ -181,11 +193,8 @@ class RecipientPanel(Gtk.Box):
         for row, (caption, control) in enumerate((("Reactivate goals", self.default_goal), ("Send messages", self.default_prompt)), 1):
             self.default_controls.attach(Gtk.Label(label=caption, xalign=0), 0, row, 1, 1)
             self.default_controls.attach(control, 1, row, 1, 1)
-        self.reset_all = Gtk.Button(label="Reset counts for all")
+        self.reset_all = WrappingButton(label="Reset counts for all")
         self.reset_all.set_tooltip_text("Reset message and Goal allowances for every recipient (Enter / Space)")
-        self.reset_all.set_valign(Gtk.Align.CENTER)
-        self.reset_all.set_halign(Gtk.Align.END)
-        self.reset_all.set_hexpand(False)
         self.reset_all.connect("clicked", self._reset_all)
         self.default_controls.set_tooltip_text("Manual and automatic sends share each recipient's allowance. Counts survive restarts. Zero stops an action; use the reset buttons to renew allowances.")
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.MULTIPLE)
@@ -210,11 +219,20 @@ class RecipientPanel(Gtk.Box):
         actions.set_max_children_per_line(3)
         actions.set_min_children_per_line(1)
         actions.set_homogeneous(False)
-        self.reset = Gtk.Button(label="Reset current recipient's counts")
+        self.reset = WrappingButton(label="Reset current recipient's counts")
         self.reset.set_tooltip_text("Reset both used allowances for this recipient. This never sends anything.")
         self.reset.connect("clicked", self._reset)
-        for button in (picker.send_button, self.reset_all, self.reset):
-            actions.add(button)
+        self._action_height_update = 0
+        self.action_buttons = (picker.send_button, self.reset_all, self.reset)
+        for button in self.action_buttons:
+            button.compact_natural_width = True
+            button.set_valign(Gtk.Align.CENTER)
+            if button is not picker.send_button:
+                self._wrap_reset_label(button)
+            child = ActionFlowBoxChild()
+            child.add(button)
+            actions.add(child)
+            button.connect("size-allocate", self._queue_action_heights)
         self.editor.pack_start(actions, False, False, 0)
         overrides = Gtk.Grid(column_spacing=6, row_spacing=4)
         self.prompt_limit = LimitControl(self._editor_changed, inherit=True, off=True)
@@ -711,9 +729,33 @@ class RecipientPanel(Gtk.Box):
             self.picker.update_recipient(replace(target, custom_prompt=self.message_buffer.get_text(*self.message_buffer.get_bounds(), True),
                 custom_prompt_once=str(uuid4()) if self.once.get_active() else ""))
 
+    def _queue_action_heights(self, *_):
+        if not self._action_height_update:
+            self._action_height_update = GLib.idle_add(self._update_action_heights)
+
+    def _update_action_heights(self):
+        self._action_height_update = 0
+        # FlowBox sizes each row independently. Measure the captions at their
+        # allocated widths so buttons on different rows still match.
+        height = max(WrappingButton.do_get_preferred_height_for_width(button, max(1, button.get_allocated_width()))[0]
+                     for button in self.action_buttons)
+        for button in self.action_buttons:
+            if button.get_size_request().height != height:
+                button.set_size_request(-1, height)
+        return GLib.SOURCE_REMOVE
+
+    @staticmethod
+    def _wrap_reset_label(button):
+        label = WrappingButton._label(button)
+        label.set_line_wrap(True)
+        label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        label.set_max_width_chars(16)
+        label.set_justify(Gtk.Justification.CENTER)
+
     def _update_reset_help(self):
         count = len(self.selected_keys)
         self.reset.set_label(f"Reset current recipients' ({count}) counts" if count > 1 else "Reset current recipient's counts")
+        self._wrap_reset_label(self.reset)
         for button, all_recipients in ((self.reset, False), (self.reset_all, True)):
             button.set_tooltip_text(self._reset_help(all_recipients))
             if not getattr(button, "reset_help_connected", False):

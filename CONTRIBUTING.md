@@ -41,6 +41,7 @@ pytest tests/ -v
 2. Add or update tests for behavior changes.
 3. Run `pytest tests/ -v` before submitting.
 4. Update `README.md` if user-facing behavior changes.
+5. For dashboard changes, follow the [information and control review gate](doc/architecture/2026-11-14_dashboard-information-and-controls.md), including actual-theme reference comparisons and information-retention checks.
 
 ## Release targets
 
