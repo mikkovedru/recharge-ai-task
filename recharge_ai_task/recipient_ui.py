@@ -5,6 +5,7 @@ from gi.repository import GLib, Gtk, Pango
 
 from .provider_ui import ProviderButtons, PROVIDER_NAMES
 from .wrapping_button import WrappingButton
+from .transfer_arrow import TransferButton
 from .config import AppConfig
 from .resizable_editor import ResizableEditor
 from .delivery_policy import Usage, UsageLedger, effective_limit, effective_message
@@ -159,6 +160,10 @@ class RecipientPanel(Gtk.Box):
             .recipient-passive { background-color: mix(@theme_base_color, @theme_bg_color, .55); }
             .recipient-passive .recipient-title, .recipient-passive .recipient-preview {
                 color: mix(@theme_text_color, @theme_base_color, .20); opacity: 1; }
+            .recipient-actions-off .recipient-title { font-style: italic; }
+            .recipient-passive-badge { background-color: alpha(@theme_fg_color, .12);
+                color: @theme_text_color; border: 1px solid alpha(@theme_fg_color, .4);
+                border-radius: 4px; padding: 1px 5px; font-weight: bold; }
             .recipient-row:selected { background-color: mix(@theme_base_color, @theme_selected_bg_color, .24);
                 color: @theme_text_color; box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
             .recipient-row:selected .recipient-title { color: @theme_text_color; opacity: 1; }
@@ -223,6 +228,12 @@ class RecipientPanel(Gtk.Box):
         self.reset.set_tooltip_text("Reset both used allowances for this recipient. This never sends anything.")
         self.reset.connect("clicked", self._reset)
         self._action_height_update = 0
+        self.transfer = TransferButton()
+        self.transfer.set_sensitive(False)
+        self.transfer.connect("clicked", picker.transfer_recipient)
+        send_group = Gtk.Box(spacing=6)
+        send_group.pack_start(self.transfer, False, False, 0)
+        send_group.pack_start(picker.send_button, True, True, 0)
         self.action_buttons = (picker.send_button, self.reset_all, self.reset)
         for button in self.action_buttons:
             button.compact_natural_width = True
@@ -230,7 +241,7 @@ class RecipientPanel(Gtk.Box):
             if button is not picker.send_button:
                 self._wrap_reset_label(button)
             child = ActionFlowBoxChild()
-            child.add(button)
+            child.add(send_group if button is picker.send_button else button)
             actions.add(child)
             button.connect("size-allocate", self._queue_action_heights)
         self.editor.pack_start(actions, False, False, 0)
@@ -351,6 +362,11 @@ class RecipientPanel(Gtk.Box):
                     row.provider.set_tooltip_text("Provider: " + PROVIDER_NAMES[target.provider])
                     row.title.set_hexpand(True)
                     header.pack_start(row.title, True, True, 0)
+                    row.passive_badge = Gtk.Label(label="\u23f8 Passive", valign=Gtk.Align.START)
+                    row.passive_badge.get_style_context().add_class("recipient-passive-badge")
+                    row.passive_badge.set_tooltip_text("Goal and Message are off. This chat stays in Recipients & actions; nothing will be sent.")
+                    row.passive_badge.set_no_show_all(True)
+                    header.pack_start(row.passive_badge, False, False, 0)
                     header.pack_start(row.provider, False, False, 0)
                     row.allowance_box = Gtk.Box(spacing=6)
                     row.allowance.set_hexpand(True)
@@ -404,6 +420,12 @@ class RecipientPanel(Gtk.Box):
                 row.title.set_tooltip_text(caption)
                 row.set_tooltip_text("\n".join(part for part in (caption, target.cwd, target.instance) if part))
                 prompt, goal = target.signal_actions()
+                row.passive_badge.set_visible(not (prompt or goal))
+                context = row.get_style_context()
+                if prompt or goal:
+                    context.remove_class("recipient-actions-off")
+                else:
+                    context.add_class("recipient-actions-off")
                 pl, gl = effective_limit(target, "prompt", config), effective_limit(target, "goal", config)
                 pu, gu = usage.get((key, "prompt"), Usage()), usage.get((key, "goal"), Usage())
                 message = effective_message(target, self.picker._prompt_text())

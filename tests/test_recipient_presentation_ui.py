@@ -17,7 +17,9 @@ try:
     assert not row.preview.get_visible() and 'Default:' not in row.allowance.get_text()
     assert p.reset.get_label()=="Reset current recipient's counts"
     assert p.reset_all.get_label()=='Reset counts for all'
-    assert [child.get_child() for child in p.reset.get_parent().get_parent().get_children()] == [w.send_button, p.reset_all, p.reset]
+    groups=[child.get_child() for child in p.actions.get_children()]
+    assert groups[0].get_children()==[p.transfer,w.send_button]
+    assert groups[1:]==[p.reset_all,p.reset]
     assert pos(w.send_button,w)[0]<pos(p.reset_all,w)[0]
     normal=Gtk.Label(label='∞')
     plain_height=normal.get_layout().get_pixel_extents()[0].height

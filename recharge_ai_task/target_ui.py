@@ -16,6 +16,7 @@ from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 from .brand_ui import ProjectLogo
 from .table_layout import TableLayout
 from .wrapping_button import WrappingButton
+from .transfer_arrow import TransferArrow
 from .window_layout import WindowLayout
 from .theme_ui import apply_color_theme, install_readability
 from .resizable_editor import ResizableEditor
@@ -221,7 +222,7 @@ class TargetPicker(Gtk.Window):
         self.technical_toggle.connect("toggled", self.toggle_technical_columns)
         filter_toolbar.pack_end(self.technical_toggle, False, False, 0)
         box.pack_start(search_row, False, False, 0)
-        self.store = Gtk.ListStore(bool, str, str, str, str, str, str, str, str, str, str, str, bool, str, str, float, str, str)
+        self.store = Gtk.ListStore(bool, str, str, str, str, str, str, str, str, str, str, str, bool, str, str, float, str, str, bool)
         self.filtered = self.store.filter_new()
         self.filtered.set_visible_func(self._visible)
         self.provider_filter.connect("changed", self._provider_filter_changed)
@@ -240,7 +241,7 @@ class TargetPicker(Gtk.Window):
         self.table.connect_after("draw", self._draw_recipient_divider)
         self.table.set_has_tooltip(True)
         self.table.connect("query-tooltip", self._tooltip)
-        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at", leading_column="provider", selected_columns=(0, 12))
+        self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at", leading_column="provider", selected_columns=(18,))
         for label, index, action in (("Send message", 0, "send_prompt"), ("Resume goal", 12, "send_goal")):
             checkbox = Gtk.CellRendererToggle()
             checkbox.connect("toggled", self._toggle, action)
@@ -251,8 +252,7 @@ class TargetPicker(Gtk.Window):
                 "Resume the native goal without a message. Automatic recovery respects intentional pauses; Send now may resume a paused goal. Window recipients cannot identify a fixed goal.")
             header.show()
             column.set_widget(header)
-            if action == "send_goal":
-                column.set_cell_data_func(checkbox, self._goal_cell)
+            column.set_cell_data_func(checkbox, self._action_cell, index)
             self.table.append_column(column)
             self.table_layout.register(action, column, index, 95)
         columns = [("Provider", 16, 90), ("Title", 1, 230), ("Last active", 14, 155), ("Task status", 10, 125), ("Goal status", 11, 105),
@@ -267,11 +267,8 @@ class TargetPicker(Gtk.Window):
         for name, index, width in columns:
             renderer = Gtk.CellRendererText()
             column = Gtk.TreeViewColumn(name, renderer, text=index)
-            if index == 16:
-                column.set_cell_data_func(renderer, lambda _c, cell, model, iterator, _d:
-                    cell.set_property("text", {"codex": "Codex", "claude": "Claude", "muse": "Muse Code"}.get(model[iterator][16], model[iterator][16])))
+            column.set_cell_data_func(renderer, self._chat_cell, index)
             if index in (10, 11):
-                column.set_cell_data_func(renderer, self._status_cell, index)
                 header = Gtk.Box(spacing=5)
                 header.pack_start(Gtk.Label(label=name), False, False, 0)
                 info = StatusInfoButton(goal=index == 11)
@@ -520,7 +517,9 @@ class TargetPicker(Gtk.Window):
                 tooltip.set_text(status_tooltip(row[index],goal=index == 11))
             table.set_tooltip_cell(tooltip, path, column, None)
             return True
-        tooltip.set_text(f"{row[1]}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}\nDouble-click or Enter to add this item to Recipients & actions. Action checkboxes stay unchanged.")
+        membership = ("Passive recipient — Goal and Message are off." if row[18] and not (row[0] or row[12]) else
+                      "Recipient — actions are enabled." if row[18] else "Not in Recipients & actions.")
+        tooltip.set_text(f"{row[1]}\n{membership}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}\nDouble-click or Enter to add this item to Recipients & actions. Action checkboxes stay unchanged.")
         table.set_tooltip_row(tooltip, path)
         return True
 
@@ -537,6 +536,37 @@ class TargetPicker(Gtk.Window):
         elif level != "normal":
             renderer.set_property("foreground", colors[level])
         renderer.set_property("markup", markup)
+
+    def _passive_cell(self, renderer, row):
+        passive = row[18] and not (row[0] or row[12])
+        renderer.set_property("cell-background-set", passive)
+        if passive:
+            context = self.table.get_style_context()
+            found, color = context.lookup_color("theme_bg_color")
+            if found:
+                renderer.set_property("cell-background-rgba", color)
+        if isinstance(renderer, Gtk.CellRendererText):
+            renderer.set_property("style", Pango.Style.ITALIC if passive else Pango.Style.NORMAL)
+        return passive
+
+    def _chat_cell(self, column, renderer, model, iterator, index):
+        row = model[iterator]
+        passive = self._passive_cell(renderer, row)
+        if index in (10, 11):
+            self._status_cell(column, renderer, model, iterator, index)
+            return
+        renderer.set_property("foreground-set", False)
+        text = row[index]
+        if index == 16:
+            text = {"codex": "Codex", "claude": "Claude", "muse": "Muse Code"}.get(text, text)
+        if index == 1 and passive:
+            text = "⏸ Passive · " + text
+        renderer.set_property("text", text)
+
+    def _action_cell(self, column, renderer, model, iterator, index):
+        self._passive_cell(renderer, model[iterator])
+        if index == 12:
+            self._goal_cell(column, renderer, model, iterator, None)
 
     def _message(self, text, level="normal", *, provider=None):
         self.status.write(text, level, provider=provider)
@@ -561,7 +591,7 @@ class TargetPicker(Gtk.Window):
     def _draw_recipient_divider(self, table, cr):
         selected_seen = False
         for row in self.filtered:
-            if row[0] or row[12]:
+            if row[18]:
                 selected_seen = True
             elif selected_seen:
                 bounds = table.get_background_area(row.path, self.title_column)
@@ -642,7 +672,7 @@ class TargetPicker(Gtk.Window):
         # Locate by identity. A checkbox change can reorder the source model.
         for row in self.store:
             if row[17] == target.key:
-                self.store.set(row.iter, [0, 12], [target.send_prompt, target.send_goal])
+                self.store.set(row.iter, [0, 12, 18], [target.send_prompt, target.send_goal, target.key in self.selected])
                 break
         self._preferences_changed()
         self._main_selection_changed()
@@ -810,6 +840,7 @@ class TargetPicker(Gtk.Window):
         self.watch_button.set_sensitive(not self.busy and not self.runtime_busy and (not stopping or restarting) and not runtime.get("cli_running", False))
         self.watch_button.set_tooltip_text("Monitor each selected recipient using its own provider's quota; the list filter does not change recipients")
         self.send_button.set_sensitive(not self.busy and any(any(t.signal_actions()) for t in self.selected.values()))
+        self._update_recipient_transfer()
         notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or ""
         if notice and notice != self._runtime_notice and hasattr(self, "status"):
             self._message(notice, "error" if runtime.get("watch_error") else "warning" if runtime.get("watch_pause_reason") else "normal")
@@ -1190,7 +1221,7 @@ class TargetPicker(Gtk.Window):
                 target.id, str(target.pid or ""), target.instance, target.deeplink, target.cwd,
                 target.owner_id, target.task_status, target.goal_status, choice.send_goal if choice else False, target.project_name,
                 datetime.fromtimestamp(target.last_active_at).astimezone().strftime("%Y-%m-%d %H:%M:%S") if target.last_active_at else "Unknown",
-                target.last_active_at or 0.0, target.provider, target.key]
+                target.last_active_at or 0.0, target.provider, target.key, key in self.selected]
             iterator = rows.get(key)
             if iterator is None:
                 self.store.append(values)
@@ -1304,6 +1335,7 @@ class TargetPicker(Gtk.Window):
         GLib.idle_add(sync)
 
     def _main_selection_changed(self, *_):
+        self._update_recipient_transfer()
         if not hasattr(self, "recipient_panel") or self.recipient_panel.updating or not self.recipient_panel.rows:
             return
         try:
@@ -1311,6 +1343,41 @@ class TargetPicker(Gtk.Window):
         except ValueError:
             return
         self.recipient_panel.select_recipient(target.key if target.key in self.selected else None, preserve_selection=True)
+
+    def _update_recipient_transfer(self):
+        if not hasattr(self, "recipient_panel"):
+            return
+        button = self.recipient_panel.transfer
+        try:
+            target = self._row_target()
+        except ValueError:
+            button.set_sensitive(False)
+            button.set_tooltip_text("Choose a chat in the main list to add or remove it (Enter / Space)")
+            button.get_accessible().set_name("Add or remove selected chat")
+            return
+        member = target.key in self.selected
+        icon = "go-previous-symbolic" if member else "go-next-symbolic"
+        if button.get_image().get_icon_name()[0] != icon:
+            button.set_image(TransferArrow(icon))
+        action = "Remove from" if member else "Add to"
+        button.get_accessible().set_name(action + " Recipients & actions")
+        detail = ("Both actions will be turned off; custom text, limits and counts are retained." if member else
+                  "Goal and Message will stay off. Nothing is sent.")
+        button.set_tooltip_text(f"{action} Recipients & actions: {target.title}. {detail} (Enter / Space)")
+        button.set_sensitive(not self.busy)
+
+    def transfer_recipient(self, *_):
+        if self.busy:
+            return
+        try:
+            target = self._row_target()
+        except ValueError:
+            return
+        if target.key in self.selected:
+            self.remove_recipient(target.key)
+        else:
+            self.update_recipient(replace(target, send_prompt=False, send_goal=False))
+            self.recipient_panel.select_recipient(target.key)
 
     def highlight_recipient(self, key):
         """Reveal the same stable recipient identity without changing its actions."""

@@ -22,6 +22,8 @@ Green denotes available/ready or enabled states, yellow denotes warnings/waiting
 
 ## Shared controls
 
+Recipient membership is independent of enabled actions. The main model stores membership separately from the Goal/Message checkboxes; both its pinned sort group and separator use that field. A passive recipient remains pinned and saved, with an explicit Passive label and italic title in both lists. Task and Goal status keep their actual provider values and colors. The transfer arrow acts on the selected main-list stable identity: add with both actions off, or remove through the existing removal path while retaining preferences and counts. The arrow and Send now form one toolbar group so they cannot wrap apart.
+
 The three recipient action buttons have wrapping captions and a shared measured height, including when the toolbar itself wraps. GTK's actual allocated widths and theme insets determine caption height. Whole buttons move to another row only after the compact captions cannot fit, and widening must shrink both buttons and their row again. Hard-coded height allowances and a fixed wide caption request must not determine the row break.
 
 Resizable panes use the existing native themed divider through the common factory. The [shared-divider contract and actual-theme rendering checks](2026-11-14_shared-pane-dividers.md) document that invariant. New panes inherit their peers' grip pattern, dimensions and hover/focus behavior; an overview-only drawing is not a valid substitute.

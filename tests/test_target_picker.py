@@ -20,6 +20,7 @@ import time
 # Keep GUI tests offline and startup changes confined to this test directory.
 autostart.autostart_target = lambda: config_dir() / "test.desktop"
 target_ui.discover_codex = lambda _: "codex"
+target_ui.installation_details = lambda: {}
 current_quota = Quota("test", RateWindow(42,300,int(time.time())+3600), RateWindow(23,10080,int(time.time())+86400),False)
 target_ui.fetch_quota = lambda _: current_quota
 runtime = {"desktop_watch": False, "launched_at_startup": True}
@@ -120,7 +121,8 @@ def check():
         assert siblings[siblings.index(toolbar)-2] is window.table.get_parent()
         assert "Save selection" not in [button.get_label() for button in window.buttons]
         assert window.send_row.get_children() == [window.summary]
-        assert window.send_button.get_parent().get_parent() is window.recipient_panel.reset_all.get_parent().get_parent()
+        assert window.send_button.is_ancestor(window.recipient_panel.actions)
+        assert window.recipient_panel.reset_all.is_ancestor(window.recipient_panel.actions)
         assert window.compose_group.get_children() == [window.default_group.get_parent(), window.send_row]
         assert window.recipient_panel.default_controls.get_parent() is window.default_group.get_parent()
         assert window.main_split.get_child1() is window.list_area
