@@ -7,7 +7,11 @@ import pytest
 
 
 BOOT = r'''
-import os,time,subprocess,cairo,gi
+import os,time,subprocess
+from pathlib import Path
+fixture_config=os.environ.get('RECHARGE_AI_TASK_CONFIG_DIR')
+assert fixture_config and Path(fixture_config).resolve() not in {Path.home()/'.recharge-ai-task',Path.home()/'.codex-charge'}, 'Native UI fixtures require an explicit isolated RECHARGE_AI_TASK_CONFIG_DIR'
+import cairo,gi
 from dataclasses import replace
 gi.require_version('Gtk','3.0')
 from gi.repository import Gtk,Gdk
