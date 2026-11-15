@@ -28,3 +28,14 @@ def test_explicit_check_reports_versions_without_losing_chats(monkeypatch, failu
     assert ('Version unavailable' if failure else 'Codex 1.2.3') in checked.provider_details['codex']
     assert 'saved local history' in checked.provider_details['muse']
     assert 'No installed executable' in checked.provider_details['claude']
+
+
+def test_installation_details_without_chat_discovery_retains_path_on_version_failure(monkeypatch):
+    monkeypatch.setattr(providers,'installed_providers',lambda:{'codex':'/custom/codex'})
+    monkeypatch.setattr(providers,'discover_targets',lambda *a:pytest.fail('Version check discovered chats'))
+    def failed(*a,**kw):raise TimeoutError('fixture timeout')
+    monkeypatch.setattr(providers.subprocess,'run',failed)
+    details=providers.installation_details()
+    assert 'Executable: /custom/codex' in details['codex']
+    assert 'Version unavailable: fixture timeout' in details['codex']
+    assert set(details)==set(providers.PROVIDERS)

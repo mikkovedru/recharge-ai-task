@@ -23,6 +23,7 @@ target_ui.fetch_quota=lambda _:Quota('test',RateWindow(40,300,9999999999),None,F
 a=Target('thread','a','Goal recipient',instance='/fixture',endpoint='/fixture/ipc/ipc.sock',project_name='Work',send_prompt=False,send_goal=True,task_status='Idle',goal_status='Usage limited',custom_prompt='Custom')
 b=replace(a,id='b',title='Message recipient',send_prompt=True,send_goal=False,custom_prompt=None)
 target_ui.discover_targets=lambda:Inventory([a,b])
+target_ui.installation_details=lambda:{}
 runtime=dict(desktop_watch=False,per_target_signals=True,recipient_policies=True,one_use_messages=True,quota_blocked_start=True,launched_at_startup=True)
 commands=[]
 def control(command='status',**kw):
@@ -35,7 +36,7 @@ target_ui.tray_control.request=control
 AppConfig(desktop_targets=[a.to_dict(),b.to_dict()],continue_prompt='Default').save()
 def pump(w,delay=.22):
     end=time.monotonic()+delay
-    while time.monotonic()<end or any(getattr(w,key,False) for key in ('busy','discovery_busy','runtime_busy','quota_busy','activity_busy')):
+    while time.monotonic()<end or any(getattr(w,key,False) for key in ('busy','discovery_busy','runtime_busy','quota_busy','activity_busy','installation_busy')):
         while Gtk.events_pending():Gtk.main_iteration_do(False)
         time.sleep(.002)
 def make():

@@ -15,6 +15,50 @@ def update_selectable_markup(label, markup):
         label.select_region(start, end)
 
 
+class ProviderDetails(Gtk.Box):
+    """Visible provider fields, grouped into two columns when there is room."""
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=8)
+        self.identity = self._label()
+        self.alerts = self._label()
+        self.quota = self._label()
+        self.automation = self._label()
+        self.labels = (self.identity, self.alerts, self.quota, self.automation)
+        self.pack_start(self.identity, False, False, 0)
+        self.pack_start(self.alerts, False, False, 0)
+        self.columns = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
+            column_spacing=20, row_spacing=8, min_children_per_line=1, max_children_per_line=2)
+        self.columns.get_style_context().add_class('provider-details-columns')
+        for label in (self.quota, self.automation):
+            section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            section.set_size_request(300, -1)
+            section.pack_start(label, False, False, 0)
+            self.columns.add(section)
+            section.get_parent().set_can_focus(False)
+        self.pack_start(self.columns, False, False, 0)
+        self.alerts.set_no_show_all(True)
+
+    @staticmethod
+    def _label():
+        label = Gtk.Label(xalign=0, yalign=0, wrap=True, selectable=True)
+        label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        label.set_width_chars(1)
+        label.set_max_width_chars(1)
+        label.set_hexpand(True)
+        label.set_valign(Gtk.Align.START)
+        return label
+
+    def update(self, identity, quota, automation, alerts=''):
+        for label, value in ((self.identity, identity), (self.quota, quota),
+                             (self.automation, automation), (self.alerts, alerts)):
+            update_selectable_markup(label, value)
+        self.alerts.set_visible(bool(alerts))
+
+    def get_text(self):
+        """Return the same information that is visibly presented in the page."""
+        return '\n'.join(label.get_text() for label in self.labels if label.get_text())
+
+
 class ProviderMonitor(Gtk.Notebook):
     def __init__(self, summary):
         super().__init__()
@@ -25,6 +69,7 @@ class ProviderMonitor(Gtk.Notebook):
             notebook.provider-monitor > header > tabs > tab { padding: 4px 5px; min-width: 0; }
             .provider-tab-passive { background-color: alpha(@theme_fg_color, .07); border-radius: 3px; padding: 1px 3px; }
             .provider-tab-passive label { font-style: italic; }
+            .provider-details-columns > flowboxchild { padding: 0; }
         ''')
         self.get_style_context().add_provider_for_screen(self.get_screen(),self.compact_css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.connect('destroy',lambda *_:Gtk.StyleContext.remove_provider_for_screen(self.get_screen(),self.compact_css))
@@ -41,14 +86,11 @@ class ProviderMonitor(Gtk.Notebook):
                 for child in widget.get_children():
                     register_labels(child)
         register_labels(summary)
-        self.append_page(self._scroll(summary), Gtk.Label(label='All'))
+        self.all_tab = Gtk.Label(label='All')
+        self.append_page(self._scroll(summary), self.all_tab)
         for provider, caption in NAMES.items():
-            body=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5,margin=8)
-            label=Gtk.Label(xalign=0,yalign=0,wrap=True,selectable=True)
-            self.selection_labels.append(label)
-            label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            label.set_width_chars(1)
-            body.pack_start(label,False,False,0)
+            body = ProviderDetails()
+            self.selection_labels.extend(body.labels)
             tab=Gtk.Label(label=caption)
             header=Gtk.Box(spacing=3)
             notice=ProviderNotice()
@@ -58,7 +100,7 @@ class ProviderMonitor(Gtk.Notebook):
             self.append_page(self._scroll(body),header)
             self.tab_notices[provider]=notice
             self.tab_headers[provider]=header
-            self.pages[provider]=label
+            self.pages[provider]=body
             self.tab_labels[provider]=tab
         self.connect('switch-page', self._clear_selection)
 
@@ -84,6 +126,15 @@ class ProviderMonitor(Gtk.Notebook):
     def update(self, statuses, poll_seconds):
         colors=status_colors(self)
         escape=GLib.markup_escape_text
+        def tone(text, level='normal'):
+            value = escape(text)
+            return f'<span foreground="{colors[level]}">{value}</span>' if level in colors else value
+        active_states = [status['state'] for status in statuses.values() if status['installed']]
+        overall = next((state for state in ('error', 'warning', 'enabled') if state in active_states), 'off')
+        all_markup = tone('All', 'success' if overall == 'enabled' else overall)
+        if self.all_tab.get_label() != all_markup:
+            self.all_tab.set_markup(all_markup)
+        self.all_tab.get_accessible().set_name('All providers: '+overall)
         for provider, status in statuses.items():
             level=status['state']
             installed = status['installed']
@@ -95,11 +146,10 @@ class ProviderMonitor(Gtk.Notebook):
                 context.remove_class('provider-tab-passive')
             else:
                 context.add_class('provider-tab-passive')
-            # A text marker also distinguishes absent providers without relying
-            # on theme-dependent disabled colors or color perception.
-            caption = NAMES[provider] + (' —' if not installed else '')
-            if self.tab_labels[provider].get_text() != caption:
-                self.tab_labels[provider].set_text(caption)
+            caption = NAMES[provider]
+            caption_markup = tone(caption, ('success' if level == 'enabled' else level) if installed else 'normal')
+            if self.tab_labels[provider].get_label() != caption_markup:
+                self.tab_labels[provider].set_markup(caption_markup)
             title=escape(NAMES[provider])
             notice=self.tab_notices[provider]
             notice.update(level)
@@ -121,28 +171,46 @@ class ProviderMonitor(Gtk.Notebook):
             if self.tab_headers[provider].get_tooltip_text()!=tooltip:
                 self.tab_headers[provider].set_tooltip_text(tooltip)
             installation = escape(' · '.join(installation.splitlines()))
+            page = self.pages[provider]
+            identity = f'<b>{title}</b>'
             if status.get('terminal_only'):
-                lines=[f'<b>{title}</b> · Wrapped terminal' + (' · '+installation if installation else ''),
-                       '<b>Start:</b> '+escape(status['command']),
-                       *[escape(line) for line in status.get('terminal_observations', [])],
-                       escape(status['notices'])]
+                identity += ' · Wrapped terminal'
+                if installation:
+                    identity += ' · '+installation
+                observed = status.get('terminal_observations', [])
+                observations = '\n'.join(tone(line, 'warning' if level == 'warning' else 'success' if level == 'enabled' else 'normal') for line in observed)
+                instructions = '<b>Start:</b> '+escape(status['command'])+'\n'+escape(status['notices'])
                 if not installed:
-                    lines.append('Install the provider CLI and sign in first.')
-                update_selectable_markup(self.pages[provider], '\n'.join(lines))
+                    instructions += '\nInstall the provider CLI and sign in first.'
+                page.update(identity, '<b>Wrapped sessions</b>\n'+observations, instructions)
                 continue
-            lines=[f'<b>{title}</b> · Plan: '+escape(status['plan']) + (' · '+installation if installation else ''),
-                   escape(status['availability'])+' · '+escape(status['freshness'])+f' · refresh every {poll_seconds}s']
+            identity += ' · Plan: '+escape(status['plan'])
+            if installation:
+                identity += ' · '+installation
+            availability_level = ('error' if status['error'] else 'warning' if status['availability'] == 'Quota unavailable'
+                                  else 'error' if status['availability'] == 'Quota exhausted' else 'success')
+            quota = [tone(status['availability'], availability_level)+' · '+escape(status['freshness'])]
+            for name, used, timing in status['windows']:
+                quota.append(tone(f'{name}: {used:g}% used', 'error' if used >= 100 else 'warning' if used >= 85 else 'normal')+' · '+escape(timing))
+            if status.get('credits'):
+                quota.append(tone(status['credits'], 'success'))
+            check_level = ('error' if status['check'] == 'Needs attention' else 'warning' if status['check'] in
+                           ('Unavailable', 'Checking…', 'Updating…', 'Waiting', 'Waiting…') else 'success' if status['monitored'] else 'normal')
+            quota.append('<b>Next check:</b> '+tone(status['check'], check_level)+' · '+escape(status['check_detail'])+f' · refresh every {poll_seconds}s')
+            recovery_level = ('success' if status['recovery'].startswith('Send:') else 'warning' if
+                              status['recovery'].startswith(('Forecast:', 'Waiting', 'Schedule unavailable', 'Updating')) else
+                              'error' if status['recovery'] == 'Monitoring needs attention' else 'normal')
+            automation = ['<b>Recovery:</b> '+tone(status['recovery'], recovery_level)+' · '+escape(status['countdown'])]
+            # A zero pending batch repeats "No send scheduled"; actual pending
+            # action counts remain visible separately from remaining allowance.
+            if status['actions'] != '0 messages · 0 Goal activations':
+                automation.append(escape(status['actions']))
+            automation += [escape(status['selection']), escape(status['stats'])]
+            alerts = []
             if status['error']:
-                lines.append(f'<span foreground="{colors["error"]}">'+escape(status['error'])+'</span>')
+                alerts.append(tone(status['error'], 'error'))
             if status['notices']:
-                lines.append(f'<span foreground="{colors["warning"]}">'+escape(status['notices'])+'</span>')
-            for name,used,timing in status['windows']:
-                text=escape(f'{name}: {used:g}% used')
-                threshold='error' if used>=100 else 'warning' if used>=85 else None
-                if threshold:text=f'<span foreground="{colors[threshold]}">{text}</span>'
-                lines.append(text+' · '+escape(timing))
-            if not status['installed']:lines.append('Provider not detected')
-            lines += ['<b>Next check:</b> '+escape(status['check'])+' · '+escape(status['check_detail']),
-                      '<b>Recovery:</b> '+escape(status['recovery'])+' · '+escape(status['countdown']),
-                      escape(status['actions']),escape(status['selection']),escape(status['stats'])]
-            update_selectable_markup(self.pages[provider], '\n'.join(lines))
+                alerts.append(tone(status['notices'], 'warning'))
+            if not installed:
+                alerts.append('Provider not detected')
+            page.update(identity, '\n'.join(quota), '\n'.join(automation), '\n'.join(alerts))

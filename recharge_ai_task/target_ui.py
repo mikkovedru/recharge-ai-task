@@ -31,7 +31,7 @@ from .muse import fetch_muse_quota
 from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target
-from .providers import discover_all_targets as discover_targets, check_providers
+from .providers import discover_all_targets as discover_targets, check_providers, installation_details
 from .status_display import BORDER_COLORS, COLORS, overview_status_level, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
 from .status_log import StatusLog
 from .status_help import StatusInfoButton, status_markup
@@ -54,7 +54,10 @@ class TargetPicker(Gtk.Window):
         self.quota_errors = {}
         self.quota_checked = {}
         self.provider_notices = {}
-        self.provider_details = {}
+        self.provider_details = {provider: 'Checking executable and version…' for provider in PROVIDERS}
+        self.installation_busy = False
+        self.installation_generation = 0
+        self.inventory_seen = False
         self.provider_check_busy = False
         apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
@@ -435,6 +438,7 @@ class TargetPicker(Gtk.Window):
                         GLib.timeout_add_seconds(15, self.refresh_statuses)]
         self._configure_quota_poll(self.config.poll_seconds)
         self.refresh()
+        self.refresh_installation_details()
         self.poll_runtime()
         self.refresh_quota()
 
@@ -1119,6 +1123,7 @@ class TargetPicker(Gtk.Window):
             self._configure_quota_poll(config.poll_seconds)
             self._reload_saved_settings()
             self.refresh()
+            self.refresh_installation_details()
             self.refresh_quota()
             self._render_runtime()
 
@@ -1151,11 +1156,16 @@ class TargetPicker(Gtk.Window):
         threading.Thread(target=worker, daemon=True).start()
 
     def _apply_inventory(self, inventory):
+        previous_installations = self.installed_providers
+        seen = self.inventory_seen
+        self.inventory_seen = True
         if inventory.provider_details:
             self.provider_details = inventory.provider_details
         providers = tuple(dict.fromkeys((*inventory.providers, *(t.provider for t in inventory.targets), *(t.provider for t in self.selected.values()))))
         self.installed_providers = (inventory.installed_providers if inventory.installed_providers is not None else
             inventory.providers or tuple({target.provider for target in inventory.targets}))
+        if seen and previous_installations != self.installed_providers and not inventory.provider_details and not self.installation_busy:
+            self.refresh_installation_details()
         if providers != self.active_providers:
             self.active_providers = providers
             self.refresh_quota()
@@ -1197,10 +1207,28 @@ class TargetPicker(Gtk.Window):
             + (f" · {len(inventory.warnings)} warning(s); see provider tabs or program log" if inventory.warnings else ""))
         self._summary()
 
+    def refresh_installation_details(self):
+        """Populate visible executable/version metadata independently at startup."""
+        self.installation_generation += 1
+        generation = self.installation_generation
+        self.installation_busy = True
+        def show(details, error):
+            if self.closed or generation != self.installation_generation:
+                return
+            self.installation_busy = False
+            if error:
+                self.provider_details = {provider: 'Installation information unavailable: '+error for provider in PROVIDERS}
+            else:
+                self.provider_details.update(details or {})
+            self._render_provider_views()
+        self._background(installation_details, show)
+
     def refresh_providers(self, *_):
         if self.closed or self.provider_check_busy or self.busy:
             return
         self.provider_check_busy = True
+        self.installation_generation += 1
+        self.installation_busy = False
         self.providers_button.set_sensitive(False)
         self.providers_button.set_label("Checking providers…")
         # Serialize with a chat refresh so an older inventory cannot overwrite

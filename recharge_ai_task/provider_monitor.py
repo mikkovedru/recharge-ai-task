@@ -105,4 +105,6 @@ def provider_status(provider, *, targets, config, usage, quota=None, error='', n
         availability='Quota unavailable' if error or quota is None else 'Quota exhausted' if quota_blocked(quota) else 'Quota available',
         error=error, notices=notices, freshness=freshness, check=check, check_detail=check_detail,
         recovery=recovery, countdown=countdown, actions=actions, selection=details, stats=stats,
-        monitored=bool(scoped and scoped.get('desktop_watch')), installed=installed)
+        monitored=bool(scoped and scoped.get('desktop_watch')), installed=installed,
+        credits=('Additional credits are available' + (' · backend still reports a limit' if quota.rate_limit_reached or quota.spend_control_reached else
+                 ' · usable without waiting for the included window reset')) if quota and (quota.has_credits or quota.unlimited_credits) else '')

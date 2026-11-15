@@ -2,6 +2,7 @@
 import os
 import subprocess
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 from .config import AppConfig, PROVIDERS, TERMINAL_PROVIDERS
 from .targets import Inventory, discover_targets, codex_home, discover_windows
@@ -51,20 +52,7 @@ def discover_all_targets(*, check_versions=False):
                 pass
     result = Inventory(providers=tuple(available), installed_providers=tuple(installed))
     if check_versions:
-        for provider in PROVIDERS:
-            executable = available.get(provider)
-            if executable:
-                try:
-                    probe = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=8, check=True)
-                    version = (probe.stdout or probe.stderr).strip().splitlines()
-                    detail = version[0][:240] if version else "Version unavailable: command returned no version"
-                except Exception as exc:
-                    detail = f"Version unavailable: {exc}"
-                result.provider_details[provider] = f"Executable: {executable}\n{detail}"
-            else:
-                result.provider_details[provider] = ("Supported desktop app detected; CLI version unavailable" if provider in installed else
-                    "No installed executable or supported running app detected" +
-                    ("; saved local history is available" if provider in available else ""))
+        result.provider_details = installation_details(available, installed)
     for provider in available:
         try:
             inventory = discover_targets(provider)
@@ -78,6 +66,39 @@ def discover_all_targets(*, check_versions=False):
     # Provider identity is part of each non-Codex key. Never deduplicate by title.
     result.targets = list({target.key: target for target in result.targets}.values())
     return result
+
+
+def installation_details(available=None, installed=None):
+    """Read installations and versions once without waiting for chat discovery."""
+    available = installed_providers() if available is None else available
+    if installed is None:
+        installed = set()
+        for provider, executable in available.items():
+            if executable:
+                installed.add(provider)
+            elif provider not in ('muse', *TERMINAL_PROVIDERS):
+                try:
+                    if discover_windows(provider):
+                        installed.add(provider)
+                except Exception:
+                    pass
+    installed = set(installed)
+    def one(provider):
+        executable = available.get(provider)
+        if executable:
+            try:
+                probe = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=8, check=True)
+                version = (probe.stdout or probe.stderr).strip().splitlines()
+                detail = version[0][:240] if version else "Version unavailable: command returned no version"
+            except Exception as exc:
+                detail = f"Version unavailable: {exc}"
+            return provider, f"Executable: {executable}\n{detail}"
+        return provider, ("Supported desktop app detected; CLI version unavailable" if provider in installed else
+            "No installed executable or supported running app detected" +
+            ("; saved local history is available" if provider in available else ""))
+    # A slow CLI does not delay every other provider or the chat inventory.
+    with ThreadPoolExecutor(max_workers=len(PROVIDERS)) as pool:
+        return dict(pool.map(one, PROVIDERS))
 
 
 def check_providers():

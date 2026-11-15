@@ -44,7 +44,7 @@ try:
     click(w.monitor_tabs.tab_labels['claude'],w)
     assert w.monitor_tabs.get_current_page()==2
     assert w.monitor_tabs.pages['claude'].get_mapped()
-    assert not w.monitor_tabs.pages['claude'].get_selection_bounds()[0]
+    assert not any(label.get_selection_bounds()[0] for label in w.monitor_tabs.pages['claude'].labels)
     header=w.monitor_tabs.tab_headers['claude']
     assert error in header.get_tooltip_text() and not w.monitor_tabs.get_tooltip_text()
     assert not w.monitor_tabs.tab_labels['claude'].get_tooltip_text()
@@ -75,9 +75,9 @@ try:
     pump(w);w.monitor_tabs.grab_focus();pump(w)
     subprocess.run(['xdotool','key','ctrl+Page_Down'],check=True);pump(w)
     assert w.monitor_tabs.get_current_page()==3
-    assert not w.monitor_tabs.pages['muse'].get_selection_bounds()[0]
+    assert not any(label.get_selection_bounds()[0] for label in w.monitor_tabs.pages['muse'].labels)
     pump(w,1.2)
-    assert not w.monitor_tabs.pages['muse'].get_selection_bounds()[0]
+    assert not any(label.get_selection_bounds()[0] for label in w.monitor_tabs.pages['muse'].labels)
     click(w.monitor_tabs.get_tab_label(w.monitor_tabs.get_nth_page(0)),w)
     assert not w.quota_label.get_selection_bounds()[0]
     pump(w,1.2)
