@@ -13,7 +13,7 @@ w=make();p=w.recipient_panel
 try:
     w.update_recipient(replace(w.selected[b.key], send_prompt=False, send_goal=False));pump(w)
     assert b.key in p.rows and p.rows[b.key].get_style_context().has_class('target-passive')
-    assert 'No actions selected' in p.rows[b.key].plan.get_text()
+    assert 'Goal and Message are off' in p.rows[b.key].plan.get_text()
     assert b.key in {t.key for t in AppConfig.load().chosen_targets()}
     assert b.key not in {t.key for t in AppConfig.load().targets()}
     w._apply_inventory(Inventory([a,b]));pump(w)

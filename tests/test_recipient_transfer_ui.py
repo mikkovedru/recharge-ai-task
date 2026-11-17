@@ -36,8 +36,8 @@ try:
                 iterator=next(r.iter for r in model if r[17]==key)
                 column.cell_set_cell_data(model,iterator,False,False)
                 assert cell.get_property('cell-background-set')==passive
-                assert cell.get_property('style')==(Pango.Style.ITALIC if passive else Pango.Style.NORMAL)
-                assert ('⏸ Passive · ' in cell.get_property('text'))==passive
+                assert cell.get_property('style')==Pango.Style.NORMAL
+                assert cell.get_property('text')==w.targets[key].title
             for key in ('task_status','goal_status'):
                 status_column=w.table_layout.columns[key][0]
                 iterator=next(r.iter for r in model if r[17]==b.key)

@@ -28,6 +28,22 @@ class RecipientReadiness:
         return any(action.ready for action in self.actions)
 
 
+def target_health(target, readiness):
+    """A running Goal is healthy even though it needs no activation now."""
+    if not readiness.actions:
+        return False
+    for action in readiness.actions:
+        if action.warning:
+            return False
+        if action.ready:
+            continue
+        running = (target.goal_status == "Active" and target.task_status in {"Running", "Idle", "Waiting for input"}
+                   and action.issue in {"goal_status", "task_status"})
+        if not running:
+            return False
+    return True
+
+
 def recipient_readiness(target, config, usage, message, *, manual=False, ledger_error=""):
     """Preview each action independently; Goal handling never gates a message."""
     prompt, goal = target.signal_actions()

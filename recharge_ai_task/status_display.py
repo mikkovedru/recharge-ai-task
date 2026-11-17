@@ -5,6 +5,23 @@ from math import ceil
 COLORS = {"success": "#137333", "warning": "#8a6200", "error": "#b3261e"}
 BORDER_COLORS = {"success": "#198038", "warning": "#e0b400", "error": "#c62828"}
 DARK_COLORS = {"success": "#73d99b", "warning": "#ffd166", "error": "#ff8a80"}
+TARGET_BORDER_BACKING = "#000000"
+
+
+def target_border_colors(widget):
+    return {**status_colors(widget), "warning": "#ffd43b"}
+
+
+def draw_target_border(cr, widget, y, height, level, *, inset=0):
+    """Paint a four-pixel state stripe with one-pixel contrast keylines."""
+    y += inset
+    height = max(0, height - 2 * inset)
+    cr.save()
+    for color, x, width in ((TARGET_BORDER_BACKING, 0, 6), (target_border_colors(widget)[level], 1, 4)):
+        cr.set_source_rgb(*(int(color[index:index+2], 16)/255 for index in (1, 3, 5)))
+        cr.rectangle(x, y, width, height)
+        cr.fill()
+    cr.restore()
 
 
 def status_colors(widget):

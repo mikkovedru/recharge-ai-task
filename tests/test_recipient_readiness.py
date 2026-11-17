@@ -6,6 +6,7 @@ import pytest
 from recharge_ai_task.config import AppConfig
 from recharge_ai_task.delivery_policy import Usage
 from recharge_ai_task.recipient_readiness import recipient_readiness
+from recharge_ai_task.recipient_readiness import target_health
 from recharge_ai_task.targets import Target
 
 T = Target('thread', 'fixture', 'Fixture', instance='/fixture', endpoint='/fixture/ipc/ipc.sock',
@@ -14,6 +15,22 @@ T = Target('thread', 'fixture', 'Fixture', instance='/fixture', endpoint='/fixtu
 
 def preview(target=T, config=None, usage=None, message='Continue', **kwargs):
     return {a.action: a for a in recipient_readiness(target, config or AppConfig(), usage or {}, message, **kwargs).actions}
+
+
+@pytest.mark.parametrize('changes,healthy', [
+    ({},True),
+    ({'send_prompt':False,'send_goal':False},False),
+    ({'goal_status':'Active','task_status':'Running'},True),
+    ({'goal_status':'Active','task_status':'Idle'},True),
+    ({'goal_status':'Paused'},False),
+    ({'goal_limit':0},False),
+    ({'endpoint':''},False),
+    ({'goal_status':'Unavailable'},False),
+])
+def test_target_health_distinguishes_running_from_blocked(changes,healthy):
+    target=replace(T,**changes)
+    readiness=recipient_readiness(target,AppConfig(),{},'Continue')
+    assert target_health(target,readiness)==healthy
 
 
 @pytest.mark.parametrize('status', ['Paused', 'Blocked', 'Budget limited', 'Complete', 'No goal'])

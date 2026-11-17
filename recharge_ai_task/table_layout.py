@@ -98,7 +98,7 @@ class TableLayout:
 
     @staticmethod
     def _wrap(column, _spec, renderer):
-        width = max(1, (column.get_width() or column.get_fixed_width()) - 6)
+        width = max(1, (column.get_width() or column.get_fixed_width()) - 2*renderer.get_property("xpad") - 2)
         if renderer.get_property("wrap-width") != width:
             renderer.set_property("wrap-width", width)
             column.queue_resize()

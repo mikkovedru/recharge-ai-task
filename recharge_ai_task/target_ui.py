@@ -36,6 +36,7 @@ from .providers import discover_all_targets as discover_targets, check_providers
 from .status_display import BORDER_COLORS, COLORS, overview_status_level, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
 from .status_log import StatusLog
 from .status_help import StatusInfoButton, status_markup
+from .status_display import draw_target_border
 from .activity import target_label
 from .branding import asset_path, set_window_icon
 
@@ -239,6 +240,7 @@ class TargetPicker(Gtk.Window):
         self.table.get_style_context().add_class("target-table")
         self.table.get_style_context().add_provider(density_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.table.connect_after("draw", self._draw_recipient_divider)
+        self.table.connect_after("draw", self._draw_target_borders)
         self.table.set_has_tooltip(True)
         self.table.connect("query-tooltip", self._tooltip)
         self.table_layout = TableLayout(self.table, self.store, self.config.table_layout, self._message, default_sort="last_active_at", leading_column="provider", selected_columns=(18,))
@@ -293,6 +295,10 @@ class TargetPicker(Gtk.Window):
         for index,info in self.status_info.items():
             info.bind_column(self.table_layout.columns["goal_status" if index==11 else "task_status"][0])
         self.table_layout.restore()
+        self.table.connect("columns-changed", self._first_column_padding)
+        for column in self.table.get_columns():
+            column.connect("notify::visible", self._first_column_padding)
+        self._first_column_padding()
         if (self.config.table_layout or {}).get("leading_column") != "provider":
             self.table.move_column_after(self.table_layout.columns["project_name"][0], self.table_layout.columns["provider"][0])
         self._provider_column_visibility()
@@ -403,6 +409,10 @@ class TargetPicker(Gtk.Window):
         self.recipient_panel.default_controls.set_valign(Gtk.Align.START)
         self.recipient_panel.set_border_width(8)
         self.recipient_frame = Gtk.Frame()
+        self.recipient_frame.get_style_context().add_class("target-watch-frame")
+        self.recipient_frame.get_style_context().add_class("target-watch-frame")
+        self.recipient_frame.set_shadow_type(Gtk.ShadowType.NONE)
+        self.recipient_frame.connect_after("draw", self._draw_target_watch_frame)
         self.recipient_frame.get_accessible().set_name("Target actions and overrides")
         self.recipient_frame.add(self.recipient_panel)
         self.main_split = self.window_layout.pane("targets", self.list_area, self.message_area, position=.50)
@@ -546,7 +556,7 @@ class TargetPicker(Gtk.Window):
             if found:
                 renderer.set_property("cell-background-rgba", color)
         if isinstance(renderer, Gtk.CellRendererText):
-            renderer.set_property("style", Pango.Style.ITALIC if passive else Pango.Style.NORMAL)
+            renderer.set_property("style", Pango.Style.NORMAL)
         return passive
 
     def _chat_cell(self, column, renderer, model, iterator, index):
@@ -559,9 +569,39 @@ class TargetPicker(Gtk.Window):
         text = row[index]
         if index == 16:
             text = {"codex": "Codex", "claude": "Claude", "muse": "Muse Code"}.get(text, text)
-        if index == 1 and passive:
-            text = "⏸ Passive · " + text
         renderer.set_property("text", text)
+
+    def _draw_target_borders(self, table, cr):
+        panel = getattr(self, "recipient_panel", None)
+        if panel is None:
+            return False
+        for row in self.filtered:
+            chosen = panel.rows.get(row[17])
+            if not row[18] or chosen is None:
+                continue
+            bounds = table.get_background_area(row.path, None)
+            _x, y = table.convert_bin_window_to_widget_coords(0, bounds.y)
+            header = table.convert_bin_window_to_widget_coords(0, 0)[1]
+            top = max(header, y + 2)
+            bottom = y + bounds.height - 2
+            if bottom > top:
+                # The stripe belongs to the row, so it scrolls with its padded cells.
+                cr.save()
+                cr.translate(_x, 0)
+                draw_target_border(cr, table, top, bottom-top, chosen.health_level)
+                cr.restore()
+        return False
+
+    def _draw_target_watch_frame(self, frame, cr):
+        if (self.runtime or {}).get("desktop_watch"):
+            return False
+        color = Gdk.RGBA()
+        color.parse(status_colors(frame)["error"])
+        cr.set_source_rgba(color.red, color.green, color.blue, 1)
+        cr.set_line_width(2)
+        cr.rectangle(1, 1, frame.get_allocated_width()-2, frame.get_allocated_height()-2)
+        cr.stroke()
+        return False
 
     def _action_cell(self, column, renderer, model, iterator, index):
         self._passive_cell(renderer, model[iterator])
@@ -626,6 +666,16 @@ class TargetPicker(Gtk.Window):
 
     def _provider_column_visibility(self):
         self.table_layout.columns["provider"][0].set_visible(self.provider_filter.get_active_id() == "all")
+
+    def _first_column_padding(self, *_):
+        first = next((column for column in self.table.get_columns() if column.get_visible()), None)
+        for column in self.table.get_columns():
+            for cell in column.get_cells():
+                padding = 10 if column is first else 2
+                if cell.get_property("xpad") != padding:
+                    cell.set_padding(padding, 1)
+                    if isinstance(cell, Gtk.CellRendererText):
+                        self.table_layout._wrap(column, None, cell)
 
     @staticmethod
     def _goal_cell(_column, renderer, model, iterator, _data):
@@ -841,6 +891,10 @@ class TargetPicker(Gtk.Window):
         self.watch_button.set_tooltip_text("Monitor each selected target using its own provider's quota; the list filter does not change targets")
         self.send_button.set_sensitive(not self.busy and any(any(t.signal_actions()) for t in self.selected.values()))
         self._update_recipient_transfer()
+        if hasattr(self, "recipient_panel"):
+            self.recipient_panel.refresh_health()
+            self.recipient_frame.queue_draw()
+            self.table.queue_draw()
         notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or ""
         if notice and notice != self._runtime_notice and hasattr(self, "status"):
             self._message(notice, "error" if runtime.get("watch_error") else "warning" if runtime.get("watch_pause_reason") else "normal")
@@ -853,6 +907,8 @@ class TargetPicker(Gtk.Window):
             return
         self.monitoring_palette = palette
         self.monitoring_css.load_from_data(f"""
+            frame.target-watch-frame > border {{ border: none; box-shadow: none; }}
+            frame.target-watch-frame > border {{ border: none; box-shadow: none; }}
             frame.monitoring-card > border {{ border: 2px solid; border-radius: 4px; }}
             frame.monitoring-card.watch-on > border {{ border-color: {BORDER_COLORS['success']}; }}
             frame.monitoring-card.watch-off > border {{ border-color: {BORDER_COLORS['error']}; }}

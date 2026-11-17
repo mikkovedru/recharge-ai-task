@@ -10,7 +10,9 @@ from .config import AppConfig
 from .resizable_editor import ResizableEditor
 from .delivery_policy import Usage, UsageLedger, effective_limit, effective_message
 from .recipient_readiness import recipient_readiness
+from .recipient_readiness import target_health
 from .status_display import status_colors
+from .status_display import draw_target_border
 
 
 class ActionFlowBoxChild(Gtk.FlowBoxChild):
@@ -151,7 +153,7 @@ class RecipientPanel(Gtk.Box):
         self.last_usage = {}
         self.status_css = Gtk.CssProvider()
         self.status_palette = None
-        self.get_style_context().add_provider_for_screen(self.get_screen(), self.status_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.get_style_context().add_provider_for_screen(self.get_screen(), self.status_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+1)
         self.connect("style-updated", self._recolor_status)
         self.connect("destroy", lambda *_: Gtk.StyleContext.remove_provider_for_screen(self.get_screen(), self.status_css))
         self._recolor_status()
@@ -160,13 +162,17 @@ class RecipientPanel(Gtk.Box):
             .target-passive { background-color: mix(@theme_base_color, @theme_bg_color, .55); }
             .target-passive .target-title, .target-passive .target-preview {
                 color: mix(@theme_text_color, @theme_base_color, .20); opacity: 1; }
-            .target-actions-off .target-title { font-style: italic; }
+            .target-actions-off .target-title { font-style: normal; }
             .target-passive-badge { background-color: alpha(@theme_fg_color, .12);
-                color: @theme_text_color; border: 1px solid alpha(@theme_fg_color, .4);
-                border-radius: 4px; padding: 1px 5px; font-weight: bold; }
-            .target-row:selected { background-color: mix(@theme_base_color, @theme_selected_bg_color, .24);
-                color: @theme_text_color; box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
-            .target-row:selected .target-title { color: @theme_text_color; opacity: 1; }
+                color: @theme_text_color; border: 0;
+                border-radius: 3px; padding: 0 4px; font-size: .85em; }
+            .target-row { border-left: 4px solid transparent; }
+            .target-row:selected { background-color: @theme_selected_bg_color;
+                color: @theme_selected_fg_color; }
+            .target-row:selected label, .target-row:selected .target-title {
+                color: @theme_selected_fg_color; opacity: 1; }
+            .target-row:selected .target-passive-badge {
+                color: @theme_selected_fg_color; background-color: alpha(@theme_selected_fg_color, .18); }
             .target-row button { padding: 3px; }
             flowbox.target-heading > flowboxchild { padding: 0; }
             button.target-info { background-image: none; background-color: @theme_base_color;
@@ -298,12 +304,18 @@ class RecipientPanel(Gtk.Box):
 
     def _recolor_status(self, *_):
         colors = status_colors(self)
-        palette = tuple(colors.values())
+        found, selected = self.get_style_context().lookup_color("theme_selected_bg_color")
+        palette = (*colors.values(), selected.to_string() if found else "")
         if palette == self.status_palette:
             return
         self.status_palette = palette
         text = "#142018" if colors["success"] != "#137333" else "#ffffff"
+        def linear(value):
+            return value/12.92 if value <= .04045 else ((value+.055)/1.055)**2.4
+        luminance = sum(weight*linear(value) for weight,value in zip((.2126,.7152,.0722),(selected.red,selected.green,selected.blue))) if found else 0
+        selected_text = "#000000" if luminance > .179 else "#ffffff"
         self.status_css.load_from_data(f"""
+            .target-row:selected label, .target-row:selected .target-title {{ color: {selected_text}; }}
             .target-save-success {{ color: {colors['success']}; }}
             .target-save-warning {{ color: {colors['warning']}; }}
             .target-save-error {{ color: {colors['error']}; }}
@@ -351,6 +363,7 @@ class RecipientPanel(Gtk.Box):
                     row.preview_pending = False
                     row.custom_message = ""
                     row.get_style_context().add_class("target-row")
+                    row.connect_after("draw", self._draw_health_border)
                     body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin=8)
                     header = Gtk.Box(spacing=6)
                     row.title, row.plan, row.allowance, row.preview = [wrapped() for _ in range(4)]
@@ -431,6 +444,7 @@ class RecipientPanel(Gtk.Box):
                 message = effective_message(target, self.picker._prompt_text())
                 row.automatic = recipient_readiness(target, config, usage, message, ledger_error=self.ledger_error)
                 row.manual = recipient_readiness(target, config, usage, message, manual=True, ledger_error=self.ledger_error)
+                row.health_ok = target_health(target, row.automatic)
                 self._readiness(row)
                 colors = status_colors(self)
                 allowances, expanded_allowances, details = [], [], []
@@ -459,6 +473,8 @@ class RecipientPanel(Gtk.Box):
                 row.allowance_collapsed = "\n".join(allowances)
                 row.allowance_expanded = "\n".join(expanded_allowances)
                 row.allowance.set_markup(row.allowance_expanded if row.expanded else row.allowance_collapsed)
+                row.allowance_box.set_no_show_all(True)
+                row.allowance_box.set_visible(bool(allowances))
                 row.allowance.set_tooltip_text("\n".join(details))
                 row.custom_message = message if prompt and target.custom_prompt is not None else ""
                 if not row.custom_message:
@@ -549,7 +565,7 @@ class RecipientPanel(Gtk.Box):
             return reason if reason.startswith(name) else name + ": " + reason
         def summary(readiness):
             if not readiness.actions:
-                return "No actions selected"
+                return ""
             parts = []
             for action in readiness.actions:
                 if action.ready and not action.warning:
@@ -563,6 +579,8 @@ class RecipientPanel(Gtk.Box):
         automatic, manual = summary(row.automatic), summary(row.manual)
         lines = (["Automatic / Send now: " + automatic] if automatic and automatic == manual else
                  (["Automatic: " + automatic] if automatic else []) + (["Send now: " + manual] if manual else []))
+        if not row.automatic.actions:
+            lines = ["Goal and Message are off"]
         row.plan.set_markup("\n".join(lines))
         row.plan.set_no_show_all(True)
         row.plan.set_visible(bool(lines))
@@ -594,6 +612,23 @@ class RecipientPanel(Gtk.Box):
         row.explanation.set_text(explanation)
         row.plan.set_tooltip_text(explanation)
         row.indicator.set_tooltip_text(explanation + "\nShow details (Enter / Space)")
+
+    def refresh_health(self):
+        runtime = self.picker.runtime or {}
+        watch_on = bool(runtime.get("desktop_watch"))
+        for key, row in self.rows.items():
+            target = self.picker.selected.get(key)
+            provider_error = self.picker.quota_errors.get(target.provider, "") if target else ""
+            healthy = row.health_ok and not provider_error and not runtime.get("watch_error")
+            row.health_level = ("success" if watch_on else "warning") if healthy else "error"
+            context = row.get_style_context()
+            for level in ("success", "warning", "error"):
+                context.remove_class("health-" + level)
+            context.add_class("health-" + row.health_level)
+
+    def _draw_health_border(self, row, cr):
+        draw_target_border(cr, self, 0, row.get_allocated_height(), getattr(row, "health_level", "error"), inset=3)
+        return False
 
     def _row_selected(self, _list):
         if self.updating:
