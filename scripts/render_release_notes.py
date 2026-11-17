@@ -25,7 +25,7 @@ def render(source: Path, *, repository: str, ref: str) -> str:
         if parts.fragment:
             result += "#" + parts.fragment
         return result
-    text = source.read_text()
+    text = source.read_text(encoding="utf-8")
     text = re.sub(r'(<img\b[^>]*\bsrc=")([^"]+)(")',
                   lambda m: m[1] + absolute(m[2], image=True) + m[3], text)
     text = re.sub(r'(!?\[[^\]]*\]\()([^)]+)(\))',
@@ -41,4 +41,4 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(render(args.source, repository=args.repository, ref=args.ref))
+    args.output.write_text(render(args.source, repository=args.repository, ref=args.ref), encoding="utf-8")

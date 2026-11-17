@@ -1,5 +1,5 @@
 """Provider-scoped monitoring presentation; no quota fetches or delivery side effects."""
-from datetime import datetime
+from datetime import datetime, timezone
 from .config import PROVIDERS, PROVIDER_SHORT_NAMES, TERMINAL_PROVIDERS
 from .delivery_policy import Usage, effective_limit
 from .quota import quota_blocked, quota_windows
@@ -82,7 +82,7 @@ def provider_status(provider, *, targets, config, usage, quota=None, error='', n
         check, check_detail = 'Not monitored', 'Start monitoring with a target from this provider selected.'
     if not installed and not selected:
         check, check_detail = 'Not detected', 'Install this provider or open a supported native app.'
-    freshness = ('Updated ' + datetime.fromtimestamp(checked_at).astimezone().strftime('%H:%M:%S') +
+    freshness = ('Updated ' + datetime.fromtimestamp(checked_at, timezone.utc).astimezone().strftime('%H:%M:%S') +
                  f' · {max(0,int(now-checked_at))}s ago') if checked_at else 'No successful quota observation yet'
     if error and quota:freshness = 'Last known quota · current refresh failed · ' + freshness
     elif checked_at and now-checked_at>max(45,config.poll_seconds*2):freshness='Stale quota observation · '+freshness
@@ -92,7 +92,7 @@ def provider_status(provider, *, targets, config, usage, quota=None, error='', n
             name = window.label or ('5-hour' if window.window_duration_mins==300 else 'Weekly' if window.window_duration_mins==10080 else f'{window.window_duration_mins}-minute')
             if window.resets_at:
                 seconds=max(0,int(window.resets_at-now));days,remainder=divmod(seconds,86400);hours,remainder=divmod(remainder,3600);minutes,seconds=divmod(remainder,60)
-                reset=datetime.fromtimestamp(window.resets_at).astimezone().strftime('%a %d %b %H:%M:%S')
+                reset=datetime.fromtimestamp(window.resets_at, timezone.utc).astimezone().strftime('%a %d %b %H:%M:%S')
                 timing=f'resets {reset} ({str(days)+"d " if days else ""}{hours:02}:{minutes:02}:{seconds:02})'
             else:timing='window not started'
             windows.append((name, window.used_percent, timing))

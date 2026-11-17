@@ -97,3 +97,17 @@ def test_terminal_only_status_does_not_invent_quota_or_recipient_statistics():
     assert data['command']=='recharge-ai-task run --provider opencode'
     assert 'model provider' in data['notices'] and not data['error']
     assert 'counts' not in data and 'windows' not in data
+
+
+def test_epoch_observations_use_aware_timestamps_for_windows(monkeypatch):
+    from datetime import datetime
+    from recharge_ai_task import provider_monitor
+    class WindowsDatetime:
+        @staticmethod
+        def fromtimestamp(value, tz=None):
+            if tz is None:
+                raise OSError('Windows cannot reconvert a naive pre-epoch local time')
+            return datetime.fromtimestamp(value, tz)
+    monkeypatch.setattr(provider_monitor, 'datetime', WindowsDatetime)
+    data = status(quota=Quota('Plus', RateWindow(20, 300, 1300), None, False), checked_at=1)
+    assert 'Updated' in data['freshness'] and 'resets' in data['windows'][0][2]

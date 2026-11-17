@@ -7,7 +7,7 @@ from scripts.render_release_notes import ROOT, render
 
 def test_source_notes_use_existing_relative_logo_and_document_links():
     source = ROOT / "docs/2026-11-09_release-notes-1.0.md"
-    text = source.read_text()
+    text = source.read_text(encoding="utf-8")
     assert 'src="assets/logo-lockup.png"' in text
     assert "raw.githubusercontent.com" not in text
     assert (source.parent / "assets/logo-lockup.png").is_file()
@@ -58,7 +58,7 @@ def test_all_repository_markdown_images_are_relative_existing_files():
             continue
         name = source.relative_to(ROOT).as_posix()
         html = Images()
-        for token in parser.parse(source.read_text()):
+        for token in parser.parse(source.read_text(encoding="utf-8")):
             if token.type == "html_block":
                 html.feed(token.content)
             for child in token.children or []:
@@ -73,3 +73,14 @@ def test_all_repository_markdown_images_are_relative_existing_files():
             checked.append((name, target))
     assert any(name == "README.md" for name, _ in checked)
     assert any(name == "docs/2026-11-09_release-notes-1.0.md" for name, _ in checked)
+
+
+def test_release_render_reads_utf8_independently_of_windows_code_page(monkeypatch):
+    original = Path.read_text
+    source = ROOT / 'docs/2026-11-09_release-notes-1.0.md'
+    def read(path, *args, **kwargs):
+        if path == source:
+            assert kwargs.get('encoding') == 'utf-8'
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'read_text', read)
+    assert 'Recharge AI-task' in render(source, repository='owner/repo', ref='v1.0')
