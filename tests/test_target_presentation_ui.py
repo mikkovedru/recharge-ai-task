@@ -76,7 +76,11 @@ try:
                     lo,hi=sorted((luminance(rgba(target_border_colors(w)[level])),luminance(base)))
                     assert (hi+.05)/(lo+.05)>=3,(theme,level)
                 selected=p.rows[b.key];sx,sy=pos(selected,w);normal=p.rows[a.key];nx,ny=pos(normal,w)
-                assert not close_color(pixel(surface,sx+30,sy+selected.get_allocated_height()-5),pixel(surface,nx+30,ny+normal.get_allocated_height()-5))
+                def row_background(row):
+                    image=cairo.ImageSurface(cairo.FORMAT_ARGB32,row.get_allocated_width(),row.get_allocated_height())
+                    row.draw(cairo.Context(image));image.flush()
+                    return pixel(image,30,row.get_allocated_height()-5)
+                assert not close_color(row_background(selected),row_background(normal))
                 foreground=selected.title.get_style_context().get_color(selected.title.get_state_flags())
                 background=selected.get_style_context().get_background_color(selected.get_state_flags())
                 def light(c):

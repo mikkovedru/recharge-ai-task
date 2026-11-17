@@ -19,9 +19,10 @@ try:
     xid=str(w.get_window().get_xid())
     subprocess.run(['xdotool','windowactivate','--sync',xid],check=True);pump(w)
     before=pane.get_position();width=w.quota_card.get_allocated_width();height=w.quota_card.get_allocated_height()
-    x,y=pos(pane,w);x+=pane.get_allocated_width()//2;y+=before+3
-    subprocess.run(['xdotool','mousemove','--window',xid,str(x),str(y),'mousedown','1'],check=True);pump(w)
-    subprocess.run(['xdotool','mousemove','--window',xid,str(x+70),str(y+85)],check=True);pump(w)
+    handle=pane.get_handle_window();_,x,y=handle.get_origin()
+    x+=handle.get_width()//2;y+=handle.get_height()//2
+    subprocess.run(['xdotool','mousemove',str(x),str(y),'mousedown','1'],check=True);pump(w)
+    subprocess.run(['xdotool','mousemove',str(x+70),str(y+85)],check=True);pump(w)
     subprocess.run(['xdotool','mouseup','1'],check=True);pump(w)
     assert pane.get_position()>=before+75,(before,pane.get_position())
     assert w.quota_card.get_allocated_height()>=height+75
@@ -120,5 +121,41 @@ try:
     assert contrast(reference[row*29:(row+1)*29])>20
     assert contrast(missing[row*29:(row+1)*29])<=20
     Gtk.StyleContext.remove_provider_for_screen(w.get_screen(),provider)
+finally:w.destroy()
+''')
+
+
+def test_divider_padding_expands_native_input_windows_and_drags_from_outer_edge():
+    run_gui(r'''
+w=make()
+try:
+    w.resize(1440,980);pump(w);w.set_accept_focus(True);pump(w)
+    xid=str(w.get_window().get_xid())
+    subprocess.run(['xdotool','windowactivate','--sync',xid],check=True);pump(w)
+    panes=[pane for pane,_ in w.window_layout.panes.values()]
+    for theme,dark in (('Mint-X',False),('Adwaita',False),('Adwaita',True)):
+        Gtk.Settings.get_default().set_property('gtk-theme-name',theme)
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w)
+        for pane in panes:
+            vertical=pane.get_orientation()==Gtk.Orientation.VERTICAL
+            def thickness():
+                handle=pane.get_handle_window()
+                return handle.get_height() if vertical else handle.get_width()
+            padded=thickness()
+            pane.get_style_context().remove_class('workspace-divider');pump(w)
+            native=thickness()
+            pane.get_style_context().add_class('workspace-divider');pump(w)
+            assert thickness()==padded==native+4,(theme,padded,native)
+    # The very first pixel is in the newly added padding, outside the old hit area.
+    for pane in panes:
+        vertical=pane.get_orientation()==Gtk.Orientation.VERTICAL
+        handle=pane.get_handle_window();_,x,y=handle.get_origin()
+        x+=handle.get_width()//2 if vertical else 0
+        y+=0 if vertical else handle.get_height()//2
+        before=pane.get_position()
+        subprocess.run(['xdotool','mousemove',str(x),str(y),'mousedown','1'],check=True);pump(w)
+        subprocess.run(['xdotool','mousemove',str(x if vertical else x+24),str(y+24 if vertical else y)],check=True);pump(w)
+        subprocess.run(['xdotool','mouseup','1'],check=True);pump(w)
+        assert pane.get_position()>before+15,(before,pane.get_position())
 finally:w.destroy()
 ''')

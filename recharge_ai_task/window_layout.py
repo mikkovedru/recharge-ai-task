@@ -38,11 +38,39 @@ class WindowLayout:
         # All user-resizable dividers share the native theme and handle size.
         pane.get_style_context().add_class("workspace-divider")
         pane.set_wide_handle(True)
+        pane.divider_css = Gtk.CssProvider()
+        pane.divider_padding = None
+        pane.get_style_context().add_provider(pane.divider_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        pane.connect("style-updated", self._divider_padding)
+        self._divider_padding(pane)
         pane.pack1(first, resize=True, shrink=not horizontal)
         pane.pack2(second, resize=resize_second, shrink=not horizontal)
         self.panes[key] = pane, position
         pane.connect("notify::position", self._changed)
         return pane
+
+    @staticmethod
+    def _divider_padding(pane, *_):
+        # Query the native separator without our class, so theme padding is added
+        # to rather than replaced (Mint-X already supplies its own padding).
+        path = pane.get_style_context().get_path().copy()
+        path.iter_remove_class(-1, "workspace-divider")
+        path.append_type(Gtk.Separator)
+        path.iter_set_object_name(-1, "separator")
+        path.iter_add_class(-1, "wide")
+        native = Gtk.StyleContext.new()
+        native.set_screen(pane.get_screen())
+        native.set_path(path)
+        padding = native.get_padding(Gtk.StateFlags.NORMAL)
+        horizontal = pane.get_orientation() == Gtk.Orientation.HORIZONTAL
+        values = (padding.left + 2, padding.right + 2) if horizontal else (padding.top + 2, padding.bottom + 2)
+        if pane.divider_padding == values:
+            return
+        pane.divider_padding = values
+        first, second = ("left", "right") if horizontal else ("top", "bottom")
+        pane.divider_css.load_from_data((
+            f"paned.workspace-divider > separator.wide {{ padding-{first}: {values[0]}px; padding-{second}: {values[1]}px; }}"
+        ).encode())
 
     def region(self,key,widget):
         self.regions[key]=widget
