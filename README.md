@@ -15,7 +15,7 @@ Get the files from [GitHub Releases](https://github.com/mikkovedru/recharge-ai-t
 | Linux x86_64 (Debian with glibc 2.39+ / Ubuntu 24.04 / Mint 22 family) | Linux ZIP or raw `recharge-ai-task` | Extract if needed, allow execution, then open `recharge-ai-task` |
 | Debian / Ubuntu / Mint x86_64 (glibc 2.39+) | `recharge-ai-task_1.0_amd64.deb` | Install with `sudo apt install ./recharge-ai-task_1.0_amd64.deb`, then open from the app menu |
 | Linux x86_64 AppImage (glibc 2.39+) | `recharge-ai-task-1.0-x86_64.AppImage`; `.AppImage.zsync` for updates | Allow execution, then open the AppImage; see [installation and updates](#appimage-installation-and-updates) |
-| Windows x86_64 | Windows ZIP | Extract both executables together and open `recharge-ai-task.exe` for the tray |
+| Windows x86_64 | `recharge-ai-task-1.0-windows-x86_64.zip` | Extract both executables together and open `recharge-ai-task.exe` for the tray |
 
 For a portable Linux download:
 
@@ -35,7 +35,7 @@ If FUSE mounting is unavailable, use `./recharge-ai-task-1.0-x86_64.AppImage --a
 
 Linux has **one executable** for the dashboard, tray and terminal commands. The portable app registers a per-user menu entry and file icon when opened; keep the executable at a permanent location. You can refresh integration with `./recharge-ai-task --install-desktop`. No installer script is needed. Closing the dashboard leaves the tray running; use **Exit** in the tray to quit. `./recharge-ai-task --tray` starts without opening the dashboard.
 
-Windows currently provides a **tray and terminal interface**, without the Linux graphical dashboard. Keep `recharge-ai-task-cli.exe` beside the tray executable for terminal actions and configuration. Windows is included in the release plan; native verification is tracked in the [release guide](RELEASE.md).
+Windows currently provides a **tray and terminal interface**, without the Linux graphical dashboard. Keep `recharge-ai-task-cli.exe` beside the tray executable for terminal actions and configuration. The ZIP includes both executables, usage/build documentation and the license. See the [Windows portable guide](docs/2026-11-17_windows-portable.md) for downloads, PowerShell commands and checksum verification. Native verification is tracked in the [release guide](RELEASE.md).
 
 ### Remove the Debian package
 

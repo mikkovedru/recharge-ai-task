@@ -6,10 +6,10 @@ Current version: **1.0**, tag **v1.0**. Source metadata and the logo tooltip use
 
 | Format | 1.0 decision | Considerations |
 |---|---|---|
-| Linux ZIP | Ship | One executable, README and license; file managers may require restoring the executable permission |
+| Linux ZIP | Ship | One executable, offline usage/build documentation and license; file managers may require restoring the executable permission |
 | Raw Linux `recharge-ai-task` | Ship | Same executable, convenient for updates; `chmod +x` after download |
 | `.deb` (amd64) | Ship; owner tested installation/use | Debian / Ubuntu / Mint with glibc 2.39+; Ubuntu 24.04 / Mint 22 baseline; installs binary, menu entry, icon and license |
-| Windows ZIP | Ship; owner approved proceeding | Tray EXE plus console CLI EXE; no Linux GTK dashboard |
+| Windows ZIP | Ship; owner approved proceeding | Tray EXE plus console CLI EXE, offline usage/build documentation and license; no Linux GTK dashboard |
 | AppImage (x86_64) | Build with update metadata and paired zsync | Same glibc 2.39 baseline; publish both files and verify GTK/tray/accessibility and host CLI discovery |
 | Flatpak | Excluded by owner | Host processes, provider files/sockets and accessibility need deliberate permissions and host execution adapters; a sandbox wrapper alone would break features |
 | `.tar.gz`, RPM, ARM, macOS, Windows installer | Omit for 1.0 | ZIP covers portable downloads; additional targets need their own builds and validation |
@@ -21,10 +21,18 @@ AppImage must be built against a compatible oldest target system; see its [build
 
 For AppImage, publish the `.AppImage`, `.AppImage.zsync` and `SHA256SUMS-appimage.txt` together; [embedded update information, tool pins, manager recommendations and publication checks](doc/requirements/2026-11-17_appimage-release.md) are mandatory parts of that release.
 
+## Where Windows downloads are created
+
+Every push to `master`, version-tag push and manual **Release** workflow run builds Linux and Windows together after CI passes. Open **Actions → Release → a successful run → Artifacts** for `linux-x86_64` and `windows-x86_64`. The latter contains `recharge-ai-task-1.0-windows-x86_64.zip` and `SHA256SUMS-windows.txt`. Workflow downloads wrap these files in an outer artifact ZIP; extract that first. Branch builds upload artifacts only; version tags also create a draft release containing both platforms. Published downloads appear on [GitHub Releases](https://github.com/mikkovedru/recharge-ai-task/releases) after the draft is reviewed and published.
+
+On 2026-11-17, GitHub's release list and Release workflow history were both empty. The local checkout already had a Windows job, but local Linux builds do not run that job or produce Windows EXEs. This explains the missing remote downloads without establishing any Windows build failure. Creating native Windows executables requires a Windows runner; running the packager on Linux with placeholder EXEs cannot verify a Windows build.
+
+The portable ZIP includes both Windows executables (the main EXE is the tray), README, this release guide, source/contribution/license information, target-selection help and the [Windows portable guide](docs/2026-11-17_windows-portable.md). Shipped Markdown links stay local; links to deeper source documents point to the version tag. The package includes the current README screenshot as a tracked source asset. The 2026-11-17 README update removed the previous screenshot while the packager still required it, so fresh builds failed before creating either platform’s ZIP; the packager now uses the replacement image. The workflow checks required ZIP entries, runs extracted CLI version/help/wrapper/quota commands, verifies checksums and waits for both builds before creating the tag's draft. Native tray, autostart and provider delivery still require Windows-session verification.
+
 ## GitHub setup and first release
 
 1. In the repository's **Settings → Actions → General**, enable GitHub Actions and allow the actions used by the workflows (`actions/*` and `softprops/action-gh-release`). Organization policies can override this. The workflow grants only its final draft-release job `contents: write`. GitHub supplies `GITHUB_TOKEN`; no personal token or signing secret is needed. See [GitHub token permissions](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token).
-2. Push the reviewed commits to `origin/master` when ready. CI tests Python 3.10 and 3.12 on Linux and Windows, plus Linux GTK/X11 and native Wayland tests.
+2. Push the reviewed commits to `origin/master` when ready. CI tests Python 3.10 and 3.12 on Linux and Windows, plus Linux GTK/X11 and native Wayland tests. The Release workflow also builds both platforms automatically on this push.
 3. In **Actions → Release → Run workflow**, choose `master`. This runs the same checks and both platform builds, then uploads downloadable workflow artifacts. A branch run creates no release. Download them and complete the manual tests below.
 4. Once checks and manual tests pass, create and push the matching tag:
 

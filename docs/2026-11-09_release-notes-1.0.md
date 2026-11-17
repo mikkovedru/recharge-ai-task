@@ -11,7 +11,7 @@ Recharge AI-task continues selected **OpenAI Codex**, **Claude Code**, **Meta Mu
 ## Included
 
 - One Linux `recharge-ai-task` executable for the dashboard, tray and terminal commands; closing the dashboard keeps the tray available. The graphical dashboard requires Linux GTK.
-- Windows tray application `recharge-ai-task.exe` and terminal companion `recharge-ai-task-cli.exe`, kept together in one folder.
+- Windows tray application `recharge-ai-task.exe` and terminal companion `recharge-ai-task-cli.exe`, kept together in one portable ZIP with offline usage documentation, Windows startup/checksum instructions and the license.
 - Terminal wrappers that observe usage-limit messages and quota recovery, plus monitoring for selected desktop targets and saved local Code sessions.
 - Start/stop controls, quota information, optional login startup, private local settings and activity logs.
 - Bundled Python runtime, English message catalog and Recharge artwork. No Python installation is needed for release downloads.
@@ -31,7 +31,7 @@ The Linux build targets compatible Debian / Ubuntu / Mint systems with glibc 2.3
 
 The GUI was tested on Linux Mint 22.3 “Zena” Cinnamon, the [latest stable Linux Mint release](https://linuxmint.com/download.php) as of 2026-11-10. Debian and Ubuntu compatibility uses the stated baseline; their native GUI sessions have not been separately tested.
 
-Windows is included in the release plan; its native build and end-to-end operation still need confirmation on Windows. 
+Windows builds automatically alongside Linux in the Release workflow. Before publication, downloads are available under the successful workflow run’s `windows-x86_64` artifact; version tags attach the ZIP and checksum manifest to the same draft release as Linux. Native tray and end-to-end provider operation still need confirmation on Windows. See the [Windows portable guide](2026-11-17_windows-portable.md).
 
 ## Start
 

@@ -12,11 +12,34 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from posixpath import dirname, join, normpath
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from recharge_ai_task import __version__
 from recharge_ai_task.desktop_entry import KEYWORDS, desktop_entry
+
+
+DOCUMENTS = ("README.md", "RELEASE.md", "OPEN_SOURCE.md", "CONTRIBUTING.md",
+             "docs/target-selection.md", "docs/2026-11-17_windows-portable.md")
+SCREENSHOT = "docs/assets/2026-11-17_Screenshot_Recharge-AI-task_Main-screen.png"
+
+
+def archive_document(name, homepage):
+    """Keep shipped documentation links local; send deeper links to the source tag."""
+    content = (ROOT / name).read_text(encoding="utf-8")
+    def documentation_link(match):
+        label, target = match.groups()
+        parsed = urlsplit(target)
+        if parsed.scheme or parsed.netloc or not parsed.path:
+            return match.group(0)
+        resolved = normpath(join(dirname(name), parsed.path))
+        if resolved in (*DOCUMENTS, "LICENSE", SCREENSHOT):
+            return match.group(0)
+        suffix = ("?" + parsed.query if parsed.query else "") + ("#" + parsed.fragment if parsed.fragment else "")
+        return f"[{label}]({homepage}/blob/v{__version__}/{resolved}{suffix})"
+    return re.sub(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)", documentation_link, content)
 
 
 def package(platform, dist, *, deb=True):
@@ -35,18 +58,9 @@ def package(platform, dist, *, deb=True):
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
         for path in inputs + [ROOT / "LICENSE"]:
             z.write(path, path.name)
-        # Downloads contain their screenshot; deeper documentation links point
-        # to the matching source tag instead of absent files in the ZIP.
-        readme = (ROOT / "README.md").read_text()
-        def documentation_link(match):
-            label, target = match.groups()
-            if target.startswith(("https://", "http://", "#", "mailto:")):
-                return match.group(0)
-            return f"[{label}]({metadata['homepage']}/blob/v{__version__}/{target})"
-        readme = re.sub(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)", documentation_link, readme)
-        z.writestr("README.md", readme)
-        screenshot = "docs/assets/2026-11-09_Screenshot_Recharge-AI-task_Main-screen.png"
-        z.write(ROOT / screenshot, screenshot)
+        for name in DOCUMENTS:
+            z.writestr(name, archive_document(name, metadata["homepage"]))
+        z.write(ROOT / SCREENSHOT, SCREENSHOT)
     outputs.append(archive)
     if platform == "linux":
         raw = output / "recharge-ai-task"

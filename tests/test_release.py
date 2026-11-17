@@ -41,11 +41,26 @@ def test_package_allowlist_permissions_and_checksums(tmp_path, platform, names):
     (tmp_path / "private-settings.json").write_text("must not ship")
     outputs = module.package(platform, tmp_path, deb=False)
     with zipfile.ZipFile(outputs[0]) as z:
-        assert set(z.namelist()) == {*names, "LICENSE", "README.md", "docs/assets/2026-11-09_Screenshot_Recharge-AI-task_Main-screen.png"}
+        assert set(z.namelist()) == {*names, "LICENSE", "README.md", "RELEASE.md", "OPEN_SOURCE.md", "CONTRIBUTING.md",
+                                    "docs/target-selection.md", "docs/2026-11-17_windows-portable.md", module.SCREENSHOT}
         readme = z.read("README.md").decode()
-        assert "](RELEASE.md)" not in readme
-        assert f"/blob/v{__version__}/RELEASE.md" in readme
-        assert z.read("docs/assets/2026-11-09_Screenshot_Recharge-AI-task_Main-screen.png") == (Path(__file__).resolve().parents[1] / "docs/assets/2026-11-09_Screenshot_Recharge-AI-task_Main-screen.png").read_bytes()
+        assert "](RELEASE.md)" in readme
+        assert "](docs/2026-11-17_windows-portable.md)" in readme
+        assert f"/blob/v{__version__}/doc/architecture/" in readme
+        assert "](../README.md#choose-targets-and-start-monitoring)" in z.read("docs/2026-11-17_windows-portable.md").decode()
+        assert z.read("docs/assets/2026-11-17_Screenshot_Recharge-AI-task_Main-screen.png") == (Path(__file__).resolve().parents[1] / "docs/assets/2026-11-17_Screenshot_Recharge-AI-task_Main-screen.png").read_bytes()
+        from markdown_it import MarkdownIt
+        from posixpath import dirname, join, normpath
+        from urllib.parse import urlsplit
+        parser = MarkdownIt("commonmark")
+        for name in module.DOCUMENTS:
+            for token in parser.parse(z.read(name).decode()):
+                for child in token.children or []:
+                    target = child.attrGet("href") if child.type == "link_open" else child.attrGet("src") if child.type == "image" else None
+                    if target:
+                        parsed = urlsplit(target)
+                        if not parsed.scheme and not parsed.netloc and parsed.path:
+                            assert normpath(join(dirname(name), parsed.path)) in z.namelist(), (name, target)
         assert z.getinfo(names[0]).external_attr >> 16 & 0o111
     for line in outputs[-1].read_text().splitlines():
         digest, name = line.split("  ")
@@ -130,3 +145,19 @@ def test_windows_file_and_product_version_come_from_runtime(tmp_path):
     assert f"StringStruct('FileVersion', '{__version__}')" in resource
     assert f"StringStruct('ProductVersion', '{__version__}')" in resource
     assert "filevers=(1, 0, 0, 0)" in resource
+
+
+def test_release_builds_both_platforms_on_master_and_tags():
+    import yaml
+    workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github/workflows/release.yml").read_text())
+    # YAML 1.1 interprets the GitHub Actions `on` key as a boolean.
+    triggers = workflow.get("on", workflow.get(True))
+    assert triggers["push"] == {"branches": ["master"], "tags": ["v*"]}
+    jobs = workflow["jobs"]
+    assert jobs["build-linux"]["needs"] == jobs["build-windows"]["needs"] == "checks"
+    assert set(jobs["draft-release"]["needs"]) == {"build-linux", "build-windows"}
+    assert jobs["draft-release"]["if"] == "startsWith(github.ref, 'refs/tags/')"
+    release = jobs["draft-release"]["steps"][-1]["with"]
+    assert release["draft"] is True
+    assert "artifacts/windows-x86_64/*.zip" in release["files"]
+    assert "artifacts/windows-x86_64/SHA256SUMS-windows.txt" in release["files"]

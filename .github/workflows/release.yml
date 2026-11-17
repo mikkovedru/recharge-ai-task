@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [master]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -98,6 +99,16 @@ jobs:
           ./scripts/build_windows.ps1
           ./scripts/package_release.ps1
           Expand-Archive dist/release/*.zip -DestinationPath dist/extracted
+          $Required = @("recharge-ai-task.exe", "recharge-ai-task-cli.exe", "README.md", "RELEASE.md", "LICENSE", "OPEN_SOURCE.md", "CONTRIBUTING.md", "docs/target-selection.md", "docs/2026-11-17_windows-portable.md")
+          foreach ($Name in $Required) {
+            if (-not (Test-Path "dist/extracted/$Name" -PathType Leaf)) { throw "Missing Windows package file: $Name" }
+          }
+          & ./dist/extracted/recharge-ai-task-cli.exe --version
+          if ($LASTEXITCODE -ne 0) { throw "Packaged CLI version failed" }
+          & ./dist/extracted/recharge-ai-task-cli.exe --help
+          if ($LASTEXITCODE -ne 0) { throw "Packaged CLI help failed" }
+          & ./dist/extracted/recharge-ai-task-cli.exe run --help
+          if ($LASTEXITCODE -ne 0) { throw "Packaged terminal wrapper failed" }
           & ./dist/extracted/recharge-ai-task-cli.exe quota --help
           if ($LASTEXITCODE -ne 0) { throw "Packaged CLI failed" }
           foreach ($Line in Get-Content dist/release/SHA256SUMS-windows.txt) {
