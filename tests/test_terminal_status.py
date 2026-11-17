@@ -41,11 +41,11 @@ def test_symlink_record_is_ignored(tmp_path):
 
 @pytest.mark.parametrize('provider', ['gemini','antigravity','opencode'])
 def test_actual_wrapper_publishes_wait_and_continuation_then_cleans_up(tmp_path,provider):
-    binary=tmp_path/'provider'
+    binary=tmp_path/'provider.py'
     receipt=tmp_path/'receipt'
     binary.write_text(f'#!{sys.executable}\nimport time\nfrom pathlib import Path\nprint("Usage limit reached; try again in 2 seconds",flush=True)\nmessage=input()\nPath({str(receipt)!r}).write_text(message)\ntime.sleep(1)\n')
     binary.chmod(0o755)
-    process=subprocess.Popen([sys.executable,'-m','recharge_ai_task.cli','run','--provider',provider,'--'+provider,str(binary),'--grace','0'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    process=subprocess.Popen([sys.executable,'-m','recharge_ai_task.cli','run','--provider',provider,'--'+provider,sys.executable,'--grace','0','--',str(binary)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     seen=set()
     deadline=time.monotonic()+8
     try:

@@ -9,6 +9,8 @@ from types import SimpleNamespace
 import pytest
 from recharge_ai_task import desktop_integration as integration, gui
 
+pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Linux desktop launchers and Debian package integration")
+
 
 @pytest.fixture
 def release(tmp_path, monkeypatch):

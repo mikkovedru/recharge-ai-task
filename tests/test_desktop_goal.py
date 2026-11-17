@@ -91,7 +91,9 @@ def test_frozen_native_helper_uses_combined_desktop_binary(monkeypatch, tmp_path
 
 
 def test_combined_desktop_dispatches_helper_without_starting_tray(monkeypatch):
-    from recharge_ai_task import gui, desktop_goal_ui
+    from recharge_ai_task import gui
+    desktop_goal_ui = SimpleNamespace(main=lambda: 0)
+    monkeypatch.setitem(sys.modules, "recharge_ai_task.desktop_goal_ui", desktop_goal_ui)
     calls = []
     monkeypatch.setattr(desktop_goal_ui, "main", lambda: calls.append("helper") or 0)
     monkeypatch.setitem(sys.modules, "recharge_ai_task.tray", None)

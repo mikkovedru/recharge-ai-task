@@ -3,6 +3,7 @@ import json
 import socket
 import sqlite3
 import struct
+import sys
 import threading
 
 import pytest
@@ -55,6 +56,7 @@ def test_goal_database_absent_and_corrupt_are_not_no_goal(tmp_path):
 
 @pytest.mark.parametrize("snapshot_error", [False, True])
 @pytest.mark.parametrize("cached_goal", [False, True])
+@pytest.mark.skipif(sys.platform != "linux", reason="Codex Unix desktop discovery is Linux-only")
 def test_live_status_overrides_unloaded_metadata(monkeypatch, tmp_path, snapshot_error, cached_goal):
     from recharge_ai_task import codex_ipc
     (tmp_path / "ipc").mkdir()

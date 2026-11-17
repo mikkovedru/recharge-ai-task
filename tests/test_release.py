@@ -61,7 +61,8 @@ def test_package_allowlist_permissions_and_checksums(tmp_path, platform, names):
                         parsed = urlsplit(target)
                         if not parsed.scheme and not parsed.netloc and parsed.path:
                             assert normpath(join(dirname(name), parsed.path)) in z.namelist(), (name, target)
-        assert z.getinfo(names[0]).external_attr >> 16 & 0o111
+        if sys.platform != "win32":
+            assert z.getinfo(names[0]).external_attr >> 16 & 0o111
     for line in outputs[-1].read_text().splitlines():
         digest, name = line.split("  ")
         assert hashlib.sha256((outputs[-1].parent / name).read_bytes()).hexdigest() == digest

@@ -30,7 +30,7 @@ def test_old_settings_use_english_without_losing_recipient_or_custom_prompt(prom
     assert loaded.autostart and loaded.targets()[0].id == "chosen"
     assert not hasattr(loaded, "language")
     loaded.save()
-    saved = json.loads(config.config_path().read_text())
+    saved = json.loads(config.config_path().read_text(encoding="utf-8"))
     assert "language" not in saved and saved["continue_prompt"] == loaded.continue_prompt
     assert saved["desktop_targets"] == data["desktop_targets"]
 

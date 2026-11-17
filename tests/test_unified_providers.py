@@ -1,6 +1,7 @@
 """Local metadata, exact-session acceptance and independent provider recovery."""
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
 import sys
 import threading
@@ -151,9 +152,9 @@ def test_delivery_requires_native_prompt_acceptance(tmp_path, monkeypatch, provi
         else:record['stream']['id']='wrong'
     if response=='initialization_only':record={'type':'system','subtype':'init','session_id':target.id}
     native.write_text('import json,time\n'+('print('+repr(json.dumps(record))+',flush=True)\ntime.sleep(.5)\n' if response!='failed' else 'raise SystemExit(1)\n'))
-    monkeypatch.setattr(delivery,'session_command',lambda *_args,**kw:([sys.executable,str(native)],{}))
+    monkeypatch.setattr(delivery,'session_command',lambda *_args,**kw:([sys.executable,str(native)],os.environ.copy()))
     monkeypatch.setattr(delivery,'active_session',lambda _:False)
-    if response=='accepted':assert 'accepted' in delivery.continue_session(target,'Continue',timeout=.1)
+    if response=='accepted':assert 'accepted' in delivery.continue_session(target,'Continue',timeout=2)
     elif response=='failed':
         with pytest.raises(RuntimeError,match='exited'):delivery.continue_session(target,'Continue',timeout=1)
     else:
@@ -163,7 +164,7 @@ def test_delivery_requires_native_prompt_acceptance(tmp_path, monkeypatch, provi
 def test_claude_initialization_is_only_accepted_after_exact_transcript_turn(tmp_path,monkeypatch):
     target=saved(tmp_path,'claude');native=tmp_path/'native.py'
     native.write_text('import json\nwith open('+repr(target.endpoint)+',"a") as f:f.write(json.dumps('+repr({'type':'user','sessionId':target.id,'message':{'content':'Continue'}})+')+"\\n")\n')
-    monkeypatch.setattr(delivery,'session_command',lambda *_args,**kw:([sys.executable,str(native)],{}))
+    monkeypatch.setattr(delivery,'session_command',lambda *_args,**kw:([sys.executable,str(native)],os.environ.copy()))
     monkeypatch.setattr(delivery,'active_session',lambda _:False)
     assert 'accepted' in delivery.continue_session(target,'Continue')
 
