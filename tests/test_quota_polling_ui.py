@@ -30,7 +30,7 @@ try:
     runtime.update(desktop_watch=True,shared_quota=True,manual_quota_check=True,watch_progress=progress,watch_settings=tray_control.watch_settings(AppConfig.load()))
     w.runtime=dict(runtime);before=len(calls)
     w.poll_runtime();pump(w)
-    assert w.quota==observed and '73% used' in w.quota_label.get_text()
+    assert w.quota==observed and '27% left' in w.quota_label.get_text()
     assert 'automatic refresh every 2s' in w.quota_label.get_text()
     w._periodic_quota_refresh();pump(w)
     w.quota_button.clicked();pump(w)

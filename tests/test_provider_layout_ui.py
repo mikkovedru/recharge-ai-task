@@ -114,7 +114,7 @@ try:
         assert 'Pro fixture' in page.identity.get_text() and '15.16.17' in page.identity.get_text()
         for key in ('availability','freshness','check','check_detail','recovery','countdown','selection','stats','actions'):
             assert status[key] in page.get_text(),(key,page.get_text())
-        assert '87% used' in page.quota.get_text() and '22% used' in page.quota.get_text()
+        assert '13% left' in page.quota.get_text() and '78% left' in page.quota.get_text()
         assert pos(page.automation,w)[0]>pos(page.quota,w)[0]+page.quota.get_allocated_width()
         assert abs(pos(page.quota,w)[1]-pos(page.automation,w)[1])<=2
         colors=status_colors(w)

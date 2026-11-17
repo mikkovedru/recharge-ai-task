@@ -77,7 +77,7 @@ def check():
         assert {icon.get_width() for icon in window.get_icon_list()} == {16,24,32,48,64,128,256}
         assert not any(isinstance(child, Gtk.Label) and "Choose chats by ID" in child.get_text() for child in window.get_child().get_children())
         assert not hasattr(window, "save_state")
-        assert "42%" in window.quota_label.get_text()
+        assert "58%" in window.quota_label.get_text()
         assert "Weekly" in window.quota_label.get_text() and "resets" in window.quota_label.get_text()
         assert not hasattr(window, "startup_label")
         assert not hasattr(window,"recipient_label")
@@ -165,7 +165,7 @@ def check():
             plain = window.quota_label.get_text()
             expected = []
             for label, percent in (("5-hour", primary), ("Weekly", secondary)):
-                text = f"{label}: {percent:g}% used"
+                text = f"{label}: {max(0,100-percent):g}% left"
                 assert text in plain
                 if percent >= 85:
                     color = COLORS["error" if percent >= 100 else "warning"]
@@ -433,7 +433,7 @@ def check():
         target_ui.fetch_quota = lambda _: (_ for _ in ()).throw(RuntimeError("offline"))
         window.refresh_quota()
         idle()
-        assert "42%" in window.quota_label.get_text()
+        assert "58%" in window.quota_label.get_text()
         assert "Latest refresh failed" in window.quota_label.get_text()
         assert "offline" not in window.status.text()
         assert "offline" in window.monitor_tabs.pages["codex"].get_text()

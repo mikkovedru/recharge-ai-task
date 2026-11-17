@@ -271,7 +271,7 @@ def run_desktop_watch(config: WatchConfig, stop: StopEvent | None = None) -> int
                     status("Quota is available; recovering selected quota-stopped goals after the grace period.")
 
         if not state.pending:
-            status(t("watch.polling", percent=used))
+            status(t("watch.polling", percent=max(0, min(100, 100-used))))
             wait(interval, "monitoring")
             continue
 

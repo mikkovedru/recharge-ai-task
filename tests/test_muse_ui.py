@@ -22,7 +22,7 @@ try:
     assert set(w.targets)=={a.key,b.key,c.key,m.key} and len(w.selected)==4
     assert 'fixture login required' not in w.status.text()
     assert 'fixture login required' in w.monitor_tabs.pages['claude'].get_text()
-    assert '42% used' in w.quota_label.get_text() and '40% used' in w.quota_label.get_text()
+    assert '58% left' in w.quota_label.get_text() and '60% left' in w.quota_label.get_text()
     settings_before=tray_control.watch_settings(AppConfig.load())
     # Real mouse opens the list; keyboard chooses Claude.
     w.set_accept_focus(True);w.set_focus_on_map(True);pump(w)

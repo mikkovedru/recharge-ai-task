@@ -27,7 +27,7 @@ try:
     assert AppConfig.load().provider=='claude' and AppConfig.load().claude_args==['--continue']
     assert w.get_title()=='Recharge AI-task'
     assert set(w.selected)=={a.key,b.key,claude_target.key} and len(w.store)==3
-    assert '51% used' in w.quota_label.get_text() and '40% used' in w.quota_label.get_text()
+    assert '49% left' in w.quota_label.get_text() and '60% left' in w.quota_label.get_text()
     w.provider_filter.set_active_id('claude');pump(w)
     assert len(w.filtered)==1 and len(w.selected)==3
     d=settings_ui.SettingsDialog(w);pump(w)

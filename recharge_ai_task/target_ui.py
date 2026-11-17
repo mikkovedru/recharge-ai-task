@@ -1110,16 +1110,16 @@ class TargetPicker(Gtk.Window):
         def window_text(window):
             label = window.label or ("5-hour" if window.window_duration_mins == 300 else "Weekly" if window.window_duration_mins == 10080 else f"{window.window_duration_mins}-minute")
             if not window.resets_at:
-                return GLib.markup_escape_text(f"{label}: {window.used_percent:g}% used · window not started")
+                return GLib.markup_escape_text(f"{label}: {window.remaining_percent:g}% left · window not started")
             remaining = max(0, int(window.resets_at - time.time()))
             days, remainder = divmod(remaining, 86400)
             hours, remainder = divmod(remainder, 3600)
             minutes, seconds = divmod(remainder, 60)
             countdown = (f"{days}d " if days else "") + f"{hours:02}:{minutes:02}:{seconds:02}"
             reset = time.strftime("%a %d %b %H:%M:%S", time.localtime(window.resets_at))
-            text = GLib.markup_escape_text(f"{label}: {window.used_percent:g}% used")
+            text = GLib.markup_escape_text(f"{label}: {window.remaining_percent:g}% left")
             suffix = GLib.markup_escape_text(f" · resets {reset} ({countdown})")
-            level = "error" if window.used_percent >= 100 else "warning" if window.used_percent >= 85 else None
+            level = "error" if window.remaining_percent <= 0 else "warning" if window.remaining_percent <= 15 else None
             return (f'<span foreground="{colors[level]}">{text}</span>' if level else text) + suffix
         lines = []
         for provider in PROVIDERS:
@@ -1220,7 +1220,7 @@ class TargetPicker(Gtk.Window):
                 target.status if key in live else "Unavailable — saved selection",
                 target.id, str(target.pid or ""), target.instance, target.deeplink, target.cwd,
                 target.owner_id, target.task_status, target.goal_status, choice.send_goal if choice else False, target.project_name,
-                datetime.fromtimestamp(target.last_active_at).astimezone().strftime("%Y-%m-%d %H:%M:%S") if target.last_active_at else "Unknown",
+                datetime.fromtimestamp(target.last_active_at).astimezone().strftime("%Y-%m-%d, %H:%M:%S") if target.last_active_at else "Unknown",
                 target.last_active_at or 0.0, target.provider, target.key, key in self.selected]
             iterator = rows.get(key)
             if iterator is None:

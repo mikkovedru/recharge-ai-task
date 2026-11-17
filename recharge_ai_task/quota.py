@@ -26,6 +26,10 @@ class RateWindow:
     label: str = ""
 
     @property
+    def remaining_percent(self) -> float:
+        return max(0.0, min(100.0, 100.0 - self.used_percent))
+
+    @property
     def resets_in_seconds(self) -> int:
         return max(0, self.resets_at - int(time.time()))
 
@@ -263,18 +267,18 @@ def format_quota(quota: Quota) -> str:
          if quota.plan_type.startswith(("Claude ", "Muse ")) else t("quota.plan", plan=quota.plan_type)),
         "─" * 40,
         t(
-            "quota.used",
+            "quota.remaining",
             label=quota.primary.label or _window_label(quota.primary.window_duration_mins),
-            percent=quota.primary.used_percent,
+            percent=quota.primary.remaining_percent,
             remaining=remaining(quota.primary.resets_at),
         ),
     ]
     for window in quota_windows(quota)[1:]:
         lines.append(
             t(
-                "quota.used",
+                "quota.remaining",
                 label=window.label or _window_label(window.window_duration_mins),
-                percent=window.used_percent,
+                percent=window.remaining_percent,
                 remaining=remaining(window.resets_at),
             )
         )

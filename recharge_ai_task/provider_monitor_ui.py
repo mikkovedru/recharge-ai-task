@@ -191,7 +191,8 @@ class ProviderMonitor(Gtk.Notebook):
                                   else 'error' if status['availability'] == 'Quota exhausted' else 'success')
             quota = [tone(status['availability'], availability_level)+' · '+escape(status['freshness'])]
             for name, used, timing in status['windows']:
-                quota.append(tone(f'{name}: {used:g}% used', 'error' if used >= 100 else 'warning' if used >= 85 else 'normal')+' · '+escape(timing))
+                left = max(0, min(100, 100-used))
+                quota.append(tone(f'{name}: {left:g}% left', 'error' if left <= 0 else 'warning' if left <= 15 else 'normal')+' · '+escape(timing))
             if status.get('credits'):
                 quota.append(tone(status['credits'], 'success'))
             check_level = ('error' if status['check'] == 'Needs attention' else 'warning' if status['check'] in
