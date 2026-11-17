@@ -147,6 +147,7 @@ class RecipientPanel(Gtk.Box):
         self.rows = {}
         self.selected_keys = set()
         self.selected_key = None
+        self.preview_key = None
         self.selection_initialized = False
         self.ledger_error = ""
         self.ledger = None
@@ -161,7 +162,7 @@ class RecipientPanel(Gtk.Box):
         css.load_from_data(b"""
             .target-passive { background-color: mix(@theme_base_color, @theme_bg_color, .55); }
             .target-passive .target-title, .target-passive .target-preview {
-                color: mix(@theme_text_color, @theme_base_color, .20); opacity: 1; }
+                color: @theme_text_color; opacity: 1; }
             .target-actions-off .target-title { font-style: normal; }
             .target-passive-badge { background-color: alpha(@theme_fg_color, .12);
                 color: @theme_text_color; border: 0;
@@ -174,6 +175,12 @@ class RecipientPanel(Gtk.Box):
             .target-row:selected .target-passive-badge {
                 color: @theme_selected_fg_color; background-color: alpha(@theme_selected_fg_color, .18); }
             .target-row button { padding: 3px; }
+            .target-settings-preview label:disabled, .target-settings-preview checkbutton:disabled,
+            .target-settings-preview button:disabled { color: @theme_fg_color; opacity: 1; }
+            .target-settings-preview checkbutton:disabled check { opacity: 1; color: @theme_fg_color; }
+            .target-save-passive { color: @theme_fg_color; }
+
+
             flowbox.target-heading > flowboxchild { padding: 0; }
             button.target-info { background-image: none; background-color: @theme_base_color;
                 border: 1px solid alpha(@theme_text_color, .5); border-radius: 4px; }
@@ -280,6 +287,9 @@ class RecipientPanel(Gtk.Box):
         preview_css = Gtk.CssProvider()
         preview_css.load_from_data(b"textview.inherited-message, textview.inherited-message text { background-color: @theme_bg_color; color: @theme_fg_color; }")
         self.message.get_style_context().add_provider(preview_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.editor_notice = wrapped()
+        self.editor_notice.set_no_show_all(True)
+        self.editor.pack_start(self.editor_notice, False, False, 0)
         self.message.set_left_margin(4)
         self.message.set_right_margin(4)
         self.message_buffer = self.message.get_buffer()
@@ -321,9 +331,12 @@ class RecipientPanel(Gtk.Box):
             .target-save-error {{ color: {colors['error']}; }}
             .action-limit button:checked {{ background-image: none; background-color: {colors['success']};
                 color: {text}; border-color: {colors['success']}; }}
-            .action-limit button.action-off:checked {{ background-color: {colors['error']}; border-color: {colors['error']}; }}
             .action-limit button:checked:hover {{ background-color: shade({colors['success']}, .88); }}
-            .action-limit button.action-off:checked:hover {{ background-color: shade({colors['error']}, .88); }}
+            .action-limit button.action-off:checked {{ background-image: none; transition: none;
+                background-color: mix(@theme_base_color, @theme_fg_color, .15);
+                color: @theme_fg_color; border-color: mix(@theme_base_color, @theme_fg_color, .5); }}
+            .action-limit button.action-off:checked:hover {{ background-color: mix(@theme_base_color, @theme_fg_color, .23); }}
+            .action-limit button.action-off:checked:disabled {{ color: @theme_fg_color; opacity: 1; }}
         """.encode())
 
     def _usage(self):
@@ -661,6 +674,7 @@ class RecipientPanel(Gtk.Box):
         self.selection_initialized = True
         try:
             self.selected_key = key if key in self.rows else None
+            self.preview_key = key if key not in self.rows and key in self.picker.targets else None
             row = self.rows.get(self.selected_key)
             if not preserve_selection or self.selected_key not in self.selected_keys:
                 self.list.unselect_all()
@@ -678,16 +692,25 @@ class RecipientPanel(Gtk.Box):
 
     def _load_editor(self, config):
         target = self.picker.selected.get(self.selected_key)
+        preview = target is None and self.preview_key in self.picker.targets
+        if preview:
+            target = self.picker.targets[self.preview_key]
+        context = self.editor_frame.get_style_context()
+        context.remove_class("target-settings-preview")
+        if preview:
+            context.add_class("target-settings-preview")
+        self.editor_notice.set_text("Saved settings · not in Targets & actions. Add this chat with the arrow to edit or enable its actions." if preview else "")
+        self.editor_notice.set_visible(preview)
         for child in self.editor.get_children():
             if child is not self.actions:
-                child.set_sensitive(target is not None)
+                child.set_sensitive(target is not None and not preview)
         self.reset.set_sensitive(bool(self.selected_keys))
         state, detail = self.picker.custom_message_status(target)
         icon = {"saved": "emblem-ok-symbolic", "pending": "emblem-synchronizing-symbolic",
                 "error": "dialog-error-symbolic", "unknown": "dialog-warning-symbolic", "default": "dialog-information-symbolic", "paused": "media-playback-pause-symbolic"}[state]
-        level = "success" if state == "saved" else "error" if state in {"error", "paused"} else "warning"
+        level = "success" if state == "saved" else "error" if state == "error" else "passive" if state == "paused" else "warning"
         context = self.save_status.get_style_context()
-        for old_level in ("success", "warning", "error"):
+        for old_level in ("success", "warning", "error", "passive"):
             context.remove_class("target-save-" + old_level)
         context.add_class("target-save-" + level)
         self.save_status.set_from_icon_name(icon, Gtk.IconSize.BUTTON)
@@ -704,14 +727,17 @@ class RecipientPanel(Gtk.Box):
             self.message_buffer.set_text("")
             self._set_custom_appearance(False)
             return
-        self.prompt_limit.set_value(target.prompt_limit, enabled=target.send_prompt)
-        self.goal_limit.set_value(target.goal_limit, enabled=target.send_goal)
+        self.prompt_limit.set_value(target.prompt_limit, enabled=target.send_prompt and not preview)
+        self.goal_limit.set_value(target.goal_limit, enabled=target.send_goal and not preview)
         for kind, button in self.goal_limit.modes.items():
-            button.set_sensitive(target.kind == "thread" or kind == "off")
+            button.set_sensitive(not preview and (target.kind == "thread" or kind == "off"))
         self.custom.set_active(target.custom_prompt is not None)
         self.once.set_active(bool(target.custom_prompt_once))
         self.once.set_sensitive(target.custom_prompt is not None)
-        self._set_custom_appearance(target.custom_prompt is not None)
+        self._set_custom_appearance(target.custom_prompt is not None and not preview)
+        if preview:
+            self.message_resize.set_sensitive(True)
+            self.message.set_tooltip_text("Saved message preview. Add this chat to Targets & actions to edit it.")
         text = effective_message(target, self.picker._prompt_text())
         current = self.message_buffer.get_text(*self.message_buffer.get_bounds(), True)
         if current != text:

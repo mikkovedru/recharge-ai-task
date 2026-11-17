@@ -116,3 +116,108 @@ try:
     assert not w.dirty()
 finally:w.destroy()
 ''')
+
+
+def test_inactive_main_selection_previews_saved_settings_without_reactivating():
+    run_gui(r'''
+w=make();p=w.recipient_panel
+try:
+    saved=replace(w.selected[b.key],send_prompt=False,send_goal=False,prompt_limit=7,goal_limit=3,
+                  custom_prompt='Retained custom text',custom_prompt_once='saved-once-token')
+    w.update_recipient(saved);w.remove_recipient(b.key);pump(w)
+    before=AppConfig.load().desktop_targets;sent=list(commands)
+    def choose(key):
+        path=next(r.path for r in w.filtered if r[17]==key)
+        w.table.set_cursor(path,w.title_column,False);pump(w)
+    def contrast(fg,bg):
+        def light(c):
+            return sum(weight*(v/12.92 if v<=.04045 else ((v+.055)/1.055)**2.4)
+                       for weight,v in zip((.2126,.7152,.0722),(c.red,c.green,c.blue)))
+        lo,hi=sorted((light(fg),light(bg)))
+        return (hi+.05)/(lo+.05)
+    for theme,dark in (('Mint-X',False),('Adwaita',False),('Adwaita',True)):
+        Gtk.Settings.get_default().set_property('gtk-theme-name',theme)
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w,.4)
+        for size in ((1440,980),(1120,820)):
+            w.resize(*size);choose(b.key)
+            assert p.preview_key==b.key and p.selected_key is None
+            assert p.editor_frame.get_style_context().has_class('target-settings-preview')
+            assert p.editor_notice.get_visible()
+            assert p.custom.get_active() and p.once.get_active()
+            assert not p.custom.is_sensitive() and not p.once.is_sensitive()
+            assert p.prompt_limit.limited.get_label()=='7' and p.goal_limit.limited.get_label()=='3'
+            for control in (p.prompt_limit,p.goal_limit):
+                assert control.off.get_active()
+                assert all(not button.get_style_context().has_class('saved-limit') for button in control.modes.values())
+                button=control.off;context=button.get_style_context();flags=button.get_state_flags()
+                foreground=button.get_child().get_style_context().get_color(button.get_child().get_state_flags())
+                background=context.get_background_color(flags)
+                assert contrast(foreground,background)>=4.5,(theme,dark,foreground,background)
+            assert p.message_buffer.get_text(*p.message_buffer.get_bounds(),True)=='Retained custom text'
+            assert not p.message.get_editable() and p.message.is_sensitive()
+            assert b.key not in w.selected and b.key not in p.rows
+            assert AppConfig.load().desktop_targets==before
+            w.refresh();pump(w)
+            assert p.preview_key==b.key and p.custom.get_active() and p.once.get_active()
+            choose(a.key)
+            assert p.selected_key==a.key and p.preview_key is None and not p.editor_notice.get_visible()
+            assert p.custom.is_sensitive() and p.message.get_editable()
+            w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
+            surface.write_to_png('/tmp/2026-11-17_passive-settings-member-%s-%s-%s.png'%(theme,dark,size[0]))
+            choose(b.key);w.check_resize();w.draw(cairo.Context(surface))
+            surface.write_to_png('/tmp/2026-11-17_passive-settings-preview-%s-%s-%s.png'%(theme,dark,size[0]))
+    assert [c for c in commands[len(sent):] if c in ('start-watch','start-watch-blocked')]==[]
+    w.remove_recipient(a.key);pump(w);choose(b.key)
+    assert not p.rows and p.preview_key==b.key and p.once.get_active()
+    w.update_recipient(replace(w.targets[b.key],custom_prompt=None,custom_prompt_once=''),include=False);pump(w)
+    assert not p.custom.get_active() and not p.once.get_active()
+    assert p.message_buffer.get_text(*p.message_buffer.get_bounds(),True)==w._prompt_text()
+finally:w.destroy()
+''')
+
+
+def test_passive_members_keep_editor_background_but_readonly_previews_are_distinct():
+    run_gui(r'''
+w=make();p=w.recipient_panel
+try:
+    def backgrounds():
+        w.check_resize()
+        image=cairo.ImageSurface(cairo.FORMAT_ARGB32,p.message.get_allocated_width(),p.message.get_allocated_height())
+        p.message.draw(cairo.Context(image));image.flush()
+        offset=(image.get_height()-10)*image.get_stride()+(image.get_width()-10)*4
+        return (p.editor_frame.get_style_context().get_background_color(Gtk.StateFlags.NORMAL).to_string(),
+                bytes(image.get_data()[offset:offset+4]))
+    for theme,dark in (('Mint-X',False),('Adwaita',False),('Adwaita',True)):
+        Gtk.Settings.get_default().set_property('gtk-theme-name',theme)
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w,.4)
+        saved=replace(w.targets[a.key],send_prompt=True,send_goal=True,custom_prompt='Editable custom message',prompt_limit=7,goal_limit=3)
+        w.update_recipient(saved);p.select_recipient(a.key);pump(w)
+        active=backgrounds()
+        p.goal_limit.off.clicked();p.prompt_limit.off.clicked();pump(w)
+        assert p.rows[a.key].get_style_context().has_class('target-passive')
+        assert not p.editor_frame.get_style_context().has_class('target-settings-preview')
+        assert backgrounds()==active,(theme,dark,'passive member background')
+        assert p.message.get_editable() and p.message.get_cursor_visible()
+        p.message_buffer.set_text('Edited while actions are off');pump(w)
+        assert w.selected[a.key].custom_prompt=='Edited while actions are off'
+        for control in (p.goal_limit,p.prompt_limit):
+            for button in control.modes.values():
+                assert not button.get_style_context().has_class('saved-limit')
+        w.remove_recipient(a.key);pump(w)
+        path=next(r.path for r in w.filtered if r[17]==a.key)
+        w.table.set_cursor(path,w.title_column,False);pump(w)
+        assert p.preview_key==a.key and not p.message.get_editable()
+        preview=backgrounds()
+        assert preview[0]==active[0],(theme,dark,'editor frame must remain unchanged')
+        assert preview[1]!=active[1],(theme,dark,'read-only message must look read-only')
+        assert p.message.get_style_context().has_class('inherited-message')
+        assert p.message_buffer.get_text(*p.message_buffer.get_bounds(),True)=='Edited while actions are off'
+        w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
+        surface.write_to_png('/tmp/2026-11-17_readonly-target-preview-%s-%s.png'%(theme,dark))
+        w.transfer_recipient();pump(w)
+        assert a.key in w.selected and not any(w.selected[a.key].signal_actions())
+        assert p.message.get_editable() and p.message.get_cursor_visible()
+        assert not p.message.get_style_context().has_class('inherited-message')
+        assert backgrounds()==active,(theme,dark,'added passive target is editable')
+finally:w.destroy()
+''')

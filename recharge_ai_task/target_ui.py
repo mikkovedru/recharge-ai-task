@@ -1393,13 +1393,13 @@ class TargetPicker(Gtk.Window):
 
     def _main_selection_changed(self, *_):
         self._update_recipient_transfer()
-        if not hasattr(self, "recipient_panel") or self.recipient_panel.updating or not self.recipient_panel.rows:
+        if not hasattr(self, "recipient_panel") or self.recipient_panel.updating:
             return
         try:
             target = self._row_target()
         except ValueError:
             return
-        self.recipient_panel.select_recipient(target.key if target.key in self.selected else None, preserve_selection=True)
+        self.recipient_panel.select_recipient(target.key, preserve_selection=True)
 
     def _update_recipient_transfer(self):
         if not hasattr(self, "recipient_panel"):
