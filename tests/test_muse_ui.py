@@ -1,4 +1,4 @@
-"""Unified provider filtering, saved recipients and independent quota display."""
+"""Unified provider filtering, saved targets and independent quota display."""
 import os
 import pytest
 from test_monitoring_status_ui import run_gui

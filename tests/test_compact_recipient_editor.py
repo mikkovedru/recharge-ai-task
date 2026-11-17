@@ -1,4 +1,4 @@
-"""Compact recipient editor, two-way focus, issue-only previews and save feedback."""
+"""Compact target editor, two-way focus, issue-only previews and save feedback."""
 import os
 import subprocess
 import sys
@@ -23,7 +23,7 @@ target_ui.discover_codex=lambda _:'fixture'
 target_ui.fetch_quota=lambda _:Quota('test',RateWindow(40,300,9999999999),None,False)
 a=Target('thread','a','Same title',instance='/fixture',endpoint='/fixture/ipc/ipc.sock',project_name='Work',send_prompt=True,send_goal=False,task_status='Idle',goal_status='Usage limited')
 b=replace(a,id='b',custom_prompt='B draft')
-c=replace(a,id='c',title='Not a recipient',send_prompt=False)
+c=replace(a,id='c',title='Not a target',send_prompt=False)
 target_ui.discover_targets=lambda:Inventory([a,b,c])
 runtime={'desktop_watch':False,'one_use_messages':True,'recipient_policies':True,'per_target_signals':True}
 def control(*args,**kw):return dict(runtime)

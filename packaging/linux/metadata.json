@@ -4,8 +4,8 @@
   "summary": "Continue selected AI tasks after AI provider token quota recovery",
   "description": [
     "Continue selected AI tasks after their usage limits reset. Supports OpenAI Codex, Claude Code and Meta (Facebook) Muse Code, plus Google Gemini CLI, Google Antigravity CLI and OpenCode in wrapped interactive terminals. Includes a Linux dashboard, system tray and CLI (terminal commands).",
-    "Choose desktop recipients and continuation messages, monitor supported provider quotas and recovery times, or wrap a provider CLI in a terminal. Codex chats also support Goal recovery. Provider tools must be installed and signed in separately.",
-    "Google Gemini CLI, Google Antigravity CLI and OpenCode support wrapped interactive terminals with an explicit supported reset time. Native retries and model fallback remain in control. Shared dashboard quota checks, desktop chat recipients and Codex Goal actions are unavailable for these terminal integrations. Provider tabs show live wrapped-terminal observations, detected reset/grace countdowns and continuation counts; these are not account-wide quota measurements."
+    "Choose desktop targets and continuation messages, monitor supported provider quotas and recovery times, or wrap a provider CLI in a terminal. Codex chats also support Goal recovery. Provider tools must be installed and signed in separately.",
+    "Google Gemini CLI, Google Antigravity CLI and OpenCode support wrapped interactive terminals with an explicit supported reset time. Native retries and model fallback remain in control. Shared dashboard quota checks, desktop chat targets and Codex Goal actions are unavailable for these terminal integrations. Provider tabs show live wrapped-terminal observations, detected reset/grace countdowns and continuation counts; these are not account-wide quota measurements."
   ],
   "homepage": "https://github.com/mikkovedru/recharge-ai-task",
   "issues": "https://github.com/mikkovedru/recharge-ai-task/issues",

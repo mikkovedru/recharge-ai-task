@@ -4,7 +4,7 @@
 
 A 2026-11-07 automatic Goal attempt failed before activation with `g-io-error-quark: Could not connect: No such file or directory` while opening the exact selected chat. A read-only probe reproduced the error independently of chat navigation: `org.a11y.Bus.GetAddress` returned `unix:path=/run/user/1000/at-spi/bus_0`, but that socket did not exist. The session D-Bus socket existed, and the accessibility launcher, broker and registry were still running. X11 had no alternative `AT_SPI_BUS` address.
 
-The failure was connection to the desktop accessibility bus, rather than a canonical chat-ID mismatch. Earlier daemon metadata connection resets and desktop routing timeouts are separate discovery warnings; they do not identify the cause of the missing accessibility socket. The affected saved recipient had both actions disabled when inspected, so diagnosis did not re-enable or resume it.
+The failure was connection to the desktop accessibility bus, rather than a canonical chat-ID mismatch. Earlier daemon metadata connection resets and desktop routing timeouts are separate discovery warnings; they do not identify the cause of the missing accessibility socket. The affected saved target had both actions disabled when inspected, so diagnosis did not re-enable or resume it.
 
 ## Recovery behavior
 
@@ -64,7 +64,7 @@ A new timeout error names the interface, method, object path and request limit, 
 
 A private D-Bus fixture with 2.2-second replies demonstrates the old deadline failing and the 30-second deadline succeeding on the same still-open connection. Its timed-out action counter stays at one. Tests also cover the helper/cleanup budgets, controls appearing after the former three-second wait, timeout details, focus guards and post-Resume uncertainty.
 
-A live Goal-only test then used the selected recipient's saved allowances and normal delivery path. It succeeded: native and desktop Goal state became active, the desktop task was active, and objective/creation identity/token budget were unchanged. No prompt was sent. This verifies actual activation and an active turn in that session; it does not establish that every historical failure had the same cause or guarantee an indefinitely healthy accessibility service.
+A live Goal-only test then used the selected target's saved allowances and normal delivery path. It succeeded: native and desktop Goal state became active, the desktop task was active, and objective/creation identity/token budget were unchanged. No prompt was sent. This verifies actual activation and an active turn in that session; it does not establish that every historical failure had the same cause or guarantee an indefinitely healthy accessibility service.
 
 ## Accessibility existed in the original working implementation
 

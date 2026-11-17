@@ -10,7 +10,7 @@ from recharge_ai_task.status_display import watch_check_summary
     ({"desktop_watch": True, "stopping": True}, "Stopping…", "being stopped"),
     ({"desktop_watch": True, "restarting": True}, "Updating…", "Applying saved"),
     ({"desktop_watch": True, "watch_error": "offline"}, "Needs attention", "activity messages"),
-    ({"watch_pause_reason": "empty"}, "Waiting", "valid recipients"),
+    ({"watch_pause_reason": "empty"}, "Waiting", "valid targets"),
     ({"cli_running": True}, "CLI mode", "terminal"),
     ({"desktop_watch": True}, "Waiting…", "monitoring update"),
     ({"desktop_watch": True, "watch_progress": {"phase": "checking_quota"}}, "Checking…", "quota availability"),
@@ -60,7 +60,7 @@ def test_send_forecast_switches_to_observed_recovery_and_clears_when_stopped():
     runtime = dict(desktop_watch=True, watch_progress=progress)
     title, timer, counts = send_schedule_summary(runtime, 100, 60)
     assert title.startswith("Forecast:") and "00:07:40" in timer and "earlier" in timer
-    assert counts == "Up to 2 messages · 3 Goal activations · 3 recipients"
+    assert counts == "Up to 2 messages · 3 Goal activations · 3 targets"
     progress.update(phase="grace_period", recovery_at=180)
     title, timer, _ = send_schedule_summary(runtime, 130, 60)
     assert title.startswith("Send:") and timer == "In 00:00:50"
@@ -83,7 +83,7 @@ def test_schedule_uses_worker_grace_and_shows_selected_plan_while_monitoring():
     runtime = dict(desktop_watch=True,watch_progress=progress)
     title,timer,counts = send_schedule_summary(runtime,100,0)
     assert title.startswith('Next reset forecast:') and '00:08:40' in timer
-    assert counts == 'Selected, up to 1 messages · 2 Goal activations · 2 recipients'
+    assert counts == 'Selected, up to 1 messages · 2 Goal activations · 2 targets'
     assert send_schedule_summary(runtime,110,0)[1] != timer
     assert send_schedule_summary(runtime,200,0)[0] == 'Worker update overdue'
     assert send_schedule_summary(None,200)[0] == 'Schedule unavailable'

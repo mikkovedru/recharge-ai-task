@@ -1,4 +1,4 @@
-"""Passive recipient membership and the explicit main-list transfer control."""
+"""Passive target membership and the explicit main-list transfer control."""
 import os
 
 import pytest
@@ -28,7 +28,7 @@ try:
             row=p.rows[b.key]
             p.select_recipient(b.key);pump(w)
             assert row.passive_badge.get_visible() and 'Passive' in row.passive_badge.get_text()
-            assert row.get_style_context().has_class('recipient-actions-off')
+            assert row.get_style_context().has_class('target-actions-off')
             assert row.get_state_flags() & Gtk.StateFlags.SELECTED
             model=w.filtered
             column=w.title_column;cell=column.get_cells()[0]
@@ -50,7 +50,7 @@ try:
             assert len({button.get_allocated_height() for button in (w.send_button,p.reset_all,p.reset)})==1
             assert pos(p.transfer,p.actions)[0]<pos(w.send_button,p.actions)[0]
             w.check_resize();surface=cairo.ImageSurface(cairo.FORMAT_ARGB32,*w.get_size());w.draw(cairo.Context(surface))
-            surface.write_to_png('/tmp/2026-11-15_passive-recipients-%s-%s-%s.png'%(theme,dark,width))
+            surface.write_to_png('/tmp/2026-11-15_passive-targets-%s-%s-%s.png'%(theme,dark,width))
     w.refresh();pump(w)
     assert next(r for r in w.store if r[17]==b.key)[18]
     assert not any(w.selected[b.key].signal_actions())
@@ -59,7 +59,7 @@ try:
     assert p.rows[b.key].passive_badge.get_visible()
     w.update_recipient(replace(w.selected[b.key],send_prompt=True));pump(w)
     assert not p.rows[b.key].passive_badge.get_visible()
-    assert not p.rows[b.key].get_style_context().has_class('recipient-actions-off')
+    assert not p.rows[b.key].get_style_context().has_class('target-actions-off')
 finally:w.destroy()
 ''')
 
@@ -85,8 +85,8 @@ try:
     assert w.selected[c.key].custom_prompt=='Retain me' and w.selected[c.key].prompt_limit==7
     assert p.selected_key==c.key and w._row_target().key==c.key
     assert p.transfer.get_image().get_icon_name()[0]=='go-previous-symbolic'
-    assert p.transfer.get_accessible().get_name()=='Remove from Recipients & actions'
-    assert c.key in {t.key for t in AppConfig.load().recipients()}
+    assert p.transfer.get_accessible().get_name()=='Remove from Targets & actions'
+    assert c.key in {t.key for t in AppConfig.load().chosen_targets()}
     assert c.key not in {t.key for t in AppConfig.load().targets()}
     ledger=UsageLedger();ledger.finish(ledger.reserve(c.key,'prompt',7),'sent')
     p.transfer.grab_focus();pump(w)

@@ -121,9 +121,9 @@ class SettingsDialog(Gtk.Dialog):
         grid.attach(startup_row, 0, len(rows), 2, 1)
         self.notes = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         for text in (
-            "Message text, continuation limits and per-recipient overrides are in the main window.",
+            "Message text, continuation limits and per-target overrides are in the main window.",
             "Those choices save automatically for future quota recovery; Send now acts immediately.",
-            "Startup launches the tray; Desktop watch starts when the first recipient is added or you turn it on.",
+            "Startup launches the tray; Desktop watch starts when the first target is added or you turn it on.",
             "Claude desktop uses selected windows with an empty, focused composer and a Claude Code login for the same account. Resume goal is Codex-only.",
             "Installed Codex, Claude Code and Muse Code chats appear together. The main list's Provider filter changes visibility only.",
             "Changes to an active watch apply automatically."):
@@ -160,7 +160,7 @@ class SettingsDialog(Gtk.Dialog):
             "Tray action: " + terminal_start_label(self.provider.get_active_id()) +
             ".\nThe run and quota commands also use this provider when --provider is omitted. "
             "New terminals use its saved executable and arguments. Save settings to apply.\n"
-            "Dashboard discovery and Desktop watch use all installed providers and your selected recipients. "
+            "Dashboard discovery and Desktop watch use all installed providers and your selected targets. "
             "Model choice and sign-in stay in each AI tool.")
 
     def _restore_saved_theme(self, *_):

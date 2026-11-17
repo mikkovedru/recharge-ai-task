@@ -1,4 +1,4 @@
-"""Recipient provider filters use centered, content-sized buttons."""
+"""Target provider filters use centered, content-sized buttons."""
 import os
 
 import pytest

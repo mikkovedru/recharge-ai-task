@@ -27,7 +27,7 @@ def test_provider_schedules_and_statistics_never_use_another_provider():
     assert first['recovery'].startswith('Send:') and '00:00:15' in first['countdown']
     assert second['recovery'].startswith('Forecast:') and '00:17:00' in second['countdown']
     assert first['counts']['used_messages']==3 and second['counts']['used_messages']==7
-    assert first['counts']['recipients']==second['counts']['recipients']==1
+    assert first['counts']['targets']==second['counts']['targets']==1
     assert second['state']=='warning'
     assert status('muse',runtime=runtime)['check']=='Not monitored'
 

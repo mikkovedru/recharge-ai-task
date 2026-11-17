@@ -63,7 +63,7 @@ class TargetPicker(Gtk.Window):
         apply_color_theme(self.config.color_theme)
         self.window_layout = WindowLayout(self, version=3)
         self.preferences = {t.key: t for t in self.config.all_targets()}
-        self.selected = {t.key: t for t in self.config.recipients()}
+        self.selected = {t.key: t for t in self.config.chosen_targets()}
         self.targets = dict(self.selected)
         self.busy = False
         self.closed = False
@@ -192,7 +192,7 @@ class TargetPicker(Gtk.Window):
 
         dashboard_row.pack_end(self.brand_area, False, False, 0)
         self.selection_help = Gtk.Label(xalign=0)
-        self.selection_help.set_markup("<b>Automatic quota recovery</b> · Choose Send message, Resume goal, or both for each recipient. "
+        self.selection_help.set_markup("<b>Automatic quota recovery</b> · Choose Send message, Resume goal, or both for each target. "
             "Choices and message text save automatically for future quota recovery. Editing them sends nothing now.")
         self.selection_help.set_line_wrap(True)
         self.selection_help.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
@@ -217,7 +217,7 @@ class TargetPicker(Gtk.Window):
         filter_toolbar.pack_start(filter_frame, False, False, 0)
         search_row.pack_start(self.search, True, True, 0)
         self.technical_toggle = Gtk.CheckButton(label="Show technical\ncolumns")
-        self.technical_toggle.set_tooltip_text("Show paths, recipient kind, availability, IDs, process and routing details. Search includes these fields in either view.")
+        self.technical_toggle.set_tooltip_text("Show paths, target kind, availability, IDs, process and routing details. Search includes these fields in either view.")
         self.technical_toggle.set_active(self.config.show_technical_columns)
         self.technical_toggle.connect("toggled", self.toggle_technical_columns)
         filter_toolbar.pack_end(self.technical_toggle, False, False, 0)
@@ -233,10 +233,10 @@ class TargetPicker(Gtk.Window):
         self.table.connect("row-activated", self._add_recipient)
         density_css = Gtk.CssProvider()
         density_css.load_from_data(b"""
-            .recipient-table { -GtkTreeView-horizontal-separator: 2; -GtkTreeView-vertical-separator: 2; }
-            .recipient-table header button { padding: 3px 4px; min-width: 0; }
+            .target-table { -GtkTreeView-horizontal-separator: 2; -GtkTreeView-vertical-separator: 2; }
+            .target-table header button { padding: 3px 4px; min-width: 0; }
         """)
-        self.table.get_style_context().add_class("recipient-table")
+        self.table.get_style_context().add_class("target-table")
         self.table.get_style_context().add_provider(density_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.table.connect_after("draw", self._draw_recipient_divider)
         self.table.set_has_tooltip(True)
@@ -249,7 +249,7 @@ class TargetPicker(Gtk.Window):
             header = Gtk.Label(label=label)
             header.set_tooltip_text("Send the message below. When both actions are selected, native Goal activation is verified first."
                 if action == "send_prompt" else
-                "Resume the native goal without a message. Automatic recovery respects intentional pauses; Send now may resume a paused goal. Window recipients cannot identify a fixed goal.")
+                "Resume the native goal without a message. Automatic recovery respects intentional pauses; Send now may resume a paused goal. Window targets cannot identify a fixed goal.")
             header.show()
             column.set_widget(header)
             column.set_cell_data_func(checkbox, self._action_cell, index)
@@ -331,7 +331,7 @@ class TargetPicker(Gtk.Window):
         self.default_group.pack_start(self.prompt_actions, False, False, 0)
         prompt.pack_start(self.default_group, True, True, 0)
         self.signal = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR)
-        self.signal.set_tooltip_text("Used for Send message recipients. Resume goal alone does not send this message.")
+        self.signal.set_tooltip_text("Used for Send message targets. Resume goal alone does not send this message.")
         self.signal.set_left_margin(8)
         self.signal.set_right_margin(8)
         self.signal.set_top_margin(6)
@@ -403,7 +403,7 @@ class TargetPicker(Gtk.Window):
         self.recipient_panel.default_controls.set_valign(Gtk.Align.START)
         self.recipient_panel.set_border_width(8)
         self.recipient_frame = Gtk.Frame()
-        self.recipient_frame.get_accessible().set_name("Recipient actions and overrides")
+        self.recipient_frame.get_accessible().set_name("Target actions and overrides")
         self.recipient_frame.add(self.recipient_panel)
         self.main_split = self.window_layout.pane("targets", self.list_area, self.message_area, position=.50)
         self.main_split.child_set_property(self.list_area, "shrink", False)
@@ -459,7 +459,7 @@ class TargetPicker(Gtk.Window):
             button.set_always_show_image(True)
         for button in (self.copy_button, self.open_button, self.send_button):
             self._wrap_button_label(button)
-        self.watch_button.set_tooltip_text("Start or stop automatic quota recovery for selected recipients (Space / Enter)")
+        self.watch_button.set_tooltip_text("Start or stop automatic quota recovery for selected targets (Space / Enter)")
         self.search.set_tooltip_text("Search chats by title, status, project or ID (Ctrl+F)")
         self.connect("key-press-event",self._keyboard)
 
@@ -517,9 +517,9 @@ class TargetPicker(Gtk.Window):
                 tooltip.set_text(status_tooltip(row[index],goal=index == 11))
             table.set_tooltip_cell(tooltip, path, column, None)
             return True
-        membership = ("Passive recipient — Goal and Message are off." if row[18] and not (row[0] or row[12]) else
-                      "Recipient — actions are enabled." if row[18] else "Not in Recipients & actions.")
-        tooltip.set_text(f"{row[1]}\n{membership}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}\nDouble-click or Enter to add this item to Recipients & actions. Action checkboxes stay unchanged.")
+        membership = ("Passive target — Goal and Message are off." if row[18] and not (row[0] or row[12]) else
+                      "Target — actions are enabled." if row[18] else "Not in Targets & actions.")
+        tooltip.set_text(f"{row[1]}\n{membership}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}\nDouble-click or Enter to add this item to Targets & actions. Action checkboxes stay unchanged.")
         table.set_tooltip_row(tooltip, path)
         return True
 
@@ -639,7 +639,7 @@ class TargetPicker(Gtk.Window):
         row = self.filtered[path]
         target = self.targets[row[17]]
         if action == "send_goal" and target.kind != "thread":
-            self._message("Resume goal needs a chat ID. Window recipients support Send message only.", "warning")
+            self._message("Resume goal needs a chat ID. Window targets support Send message only.", "warning")
             return
         prompt, goal = row[0], row[12]
         self.update_recipient(replace(target,
@@ -707,11 +707,11 @@ class TargetPicker(Gtk.Window):
                 if identity in self.targets:
                     self.targets[identity] = self.targets[identity].with_preferences(normalized)
         if consumed_settings is not None:
-            self.saved_signature = self._signature(consumed_settings.recipients(), consumed_settings.continue_prompt)
+            self.saved_signature = self._signature(consumed_settings.chosen_targets(), consumed_settings.continue_prompt)
         prompts = sum(t.signal_actions()[0] for t in self.selected.values())
         goals = sum(t.signal_actions()[1] for t in self.selected.values())
         count = len(self.selected)
-        recipients = f"{count} " + ("recipient" if count == 1 else "recipients")
+        recipients = f"{count} " + ("target" if count == 1 else "targets")
         self.summary.set_text(f"{recipients} · Send message: {prompts} · Resume goal: {goals}.")
         self.send_button.set_label(f"Send now\n({goals} goals, {prompts} messages)")
         self._wrap_button_label(self.send_button)
@@ -775,7 +775,7 @@ class TargetPicker(Gtk.Window):
                         value.get("watch_settings") == tray_control.watch_settings(saved)):
                     self.apply_error = ""
                     self._apply_notice = ""
-                self.saved_signature = self._signature(saved.recipients(), saved.continue_prompt) if config_path().exists() else None
+                self.saved_signature = self._signature(saved.chosen_targets(), saved.continue_prompt) if config_path().exists() else None
                 self._summary()
             except Exception as exc:
                 self._message(f"Could not read settings: {exc}", "error")
@@ -838,7 +838,7 @@ class TargetPicker(Gtk.Window):
         self.watch_button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic" if alive or requested else "media-playback-start-symbolic",Gtk.IconSize.BUTTON))
         self.watch_button.set_always_show_image(True)
         self.watch_button.set_sensitive(not self.busy and not self.runtime_busy and (not stopping or restarting) and not runtime.get("cli_running", False))
-        self.watch_button.set_tooltip_text("Monitor each selected recipient using its own provider's quota; the list filter does not change recipients")
+        self.watch_button.set_tooltip_text("Monitor each selected target using its own provider's quota; the list filter does not change targets")
         self.send_button.set_sensitive(not self.busy and any(any(t.signal_actions()) for t in self.selected.values()))
         self._update_recipient_transfer()
         notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or ""
@@ -958,7 +958,7 @@ class TargetPicker(Gtk.Window):
             if self.dirty() and not self.save():
                 return
             if not active_recipients:
-                self._message("Enable Send message or Resume goal for at least one recipient before starting Desktop watch.", "warning")
+                self._message("Enable Send message or Resume goal for at least one target before starting Desktop watch.", "warning")
                 return
             if not self._messages_ready():
                 return
@@ -982,15 +982,15 @@ class TargetPicker(Gtk.Window):
                         time.sleep(.2)
             starting = command in ("start-watch", "start-watch-blocked")
             if wait_for_block and not live.get("quota_blocked_start"):
-                raise RuntimeError("Restart the tray to safely start monitoring when adding a quota-blocked recipient.")
+                raise RuntimeError("Restart the tray to safely start monitoring when adding a quota-blocked target.")
             if starting and live.get("per_target_signals") is not True:
-                raise RuntimeError("Restart the tray to use per-recipient Prompt / Goal signals; the running tray is an older version.")
+                raise RuntimeError("Restart the tray to use per-target Prompt / Goal signals; the running tray is an older version.")
             if starting and any(t.provider != "codex" for t in active_recipients) and not live.get("unified_providers"):
-                raise RuntimeError("Restart the tray to monitor recipients from multiple providers.")
+                raise RuntimeError("Restart the tray to monitor targets from multiple providers.")
             uses_policies = self.config.prompt_limit is not None or self.config.goal_limit is not None or any(
                 t.custom_prompt is not None or t.prompt_limit is not None or t.goal_limit is not None for t in active_recipients)
             if starting and uses_policies and not live.get("recipient_policies"):
-                raise RuntimeError("Restart the tray to enforce recipient messages and continuation limits.")
+                raise RuntimeError("Restart the tray to enforce target messages and continuation limits.")
             if starting and any(t.custom_prompt_once for t in active_recipients) and not live.get("one_use_messages"):
                 raise RuntimeError("Restart the tray to use Send only once custom messages.")
             if ensure_started and (live.get("desktop_watch") or live.get("watch_requested") or live.get("restarting")):
@@ -1360,10 +1360,10 @@ class TargetPicker(Gtk.Window):
         if button.get_image().get_icon_name()[0] != icon:
             button.set_image(TransferArrow(icon))
         action = "Remove from" if member else "Add to"
-        button.get_accessible().set_name(action + " Recipients & actions")
+        button.get_accessible().set_name(action + " Targets & actions")
         detail = ("Both actions will be turned off; custom text, limits and counts are retained." if member else
                   "Goal and Message will stay off. Nothing is sent.")
-        button.set_tooltip_text(f"{action} Recipients & actions: {target.title}. {detail} (Enter / Space)")
+        button.set_tooltip_text(f"{action} Targets & actions: {target.title}. {detail} (Enter / Space)")
         button.set_sensitive(not self.busy)
 
     def transfer_recipient(self, *_):
@@ -1380,7 +1380,7 @@ class TargetPicker(Gtk.Window):
             self.recipient_panel.select_recipient(target.key)
 
     def highlight_recipient(self, key):
-        """Reveal the same stable recipient identity without changing its actions."""
+        """Reveal the same stable target identity without changing its actions."""
         target = self.selected.get(key)
         if target is None:
             return
@@ -1453,7 +1453,7 @@ class TargetPicker(Gtk.Window):
         return True
 
     def _can_auto_start_watch(self):
-        """Only known, current exhaustion can opt a newly added recipient in."""
+        """Only known, current exhaustion can opt a newly added target in."""
         now = time.time()
         for provider in {target.provider for target in self.selected.values() if any(target.signal_actions())}:
             quota = self.quotas.get(provider)
@@ -1483,7 +1483,7 @@ class TargetPicker(Gtk.Window):
 
     def custom_message_status(self, target):
         if target is not None:
-            reason = "Send messages is Off for this recipient." if not target.signal_actions()[0] else ""
+            reason = "Send messages is Off for this target." if not target.signal_actions()[0] else ""
             try:
                 limit = effective_limit(target, "prompt", self.config)
                 if not reason and limit == 0:
@@ -1527,20 +1527,20 @@ class TargetPicker(Gtk.Window):
             self._message(f"Cannot validate delivery settings: {exc}", "error")
             return False
         if invalid:
-            self._message("Enter a message for recipients with Send message enabled: " +
+            self._message("Enter a message for targets with Send message enabled: " +
                           ", ".join(t.title for t in invalid), "warning")
             return False
         return True
 
     def send(self, *_):
         if not any(any(t.signal_actions()) for t in self.selected.values()):
-            self._message("Enable at least one recipient action before sending.", "warning")
+            self._message("Enable at least one target action before sending.", "warning")
             return
         selected = [t for t in self.selected.values() if any(t.signal_actions())]
         text = self._prompt_text()
         if not self._messages_ready():
             return
-        self._message(f"Sending now to {len(selected)} selected recipients…", "success")
+        self._message(f"Sending now to {len(selected)} selected targets…", "success")
         def show(results):
             accepted = sum(r.success and not r.skipped for r in results)
             skipped = sum(r.skipped for r in results)

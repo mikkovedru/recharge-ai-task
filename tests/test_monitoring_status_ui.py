@@ -1,4 +1,4 @@
-"""Native GTK checks for recipient feedback, compact monitoring and Settings."""
+"""Native GTK checks for target feedback, compact monitoring and Settings."""
 import os
 import subprocess
 import sys
@@ -24,8 +24,8 @@ from recharge_ai_task.status_display import BORDER_COLORS,status_colors
 autostart.autostart_target=lambda:config_dir()/'test.desktop'
 target_ui.discover_codex=lambda _:'fixture'
 target_ui.fetch_quota=lambda _:Quota('test',RateWindow(40,300,9999999999),None,False)
-a=Target('thread','a','Goal recipient',instance='/fixture',endpoint='/fixture/ipc/ipc.sock',project_name='Work',send_prompt=False,send_goal=True,task_status='Idle',goal_status='Usage limited',custom_prompt='Custom')
-b=replace(a,id='b',title='Message recipient',send_prompt=True,send_goal=False,custom_prompt=None)
+a=Target('thread','a','Goal target',instance='/fixture',endpoint='/fixture/ipc/ipc.sock',project_name='Work',send_prompt=False,send_goal=True,task_status='Idle',goal_status='Usage limited',custom_prompt='Custom')
+b=replace(a,id='b',title='Message target',send_prompt=True,send_goal=False,custom_prompt=None)
 target_ui.discover_targets=lambda:Inventory([a,b])
 target_ui.installation_details=lambda:{}
 runtime=dict(desktop_watch=False,per_target_signals=True,recipient_policies=True,one_use_messages=True,quota_blocked_start=True,launched_at_startup=True)
@@ -95,7 +95,7 @@ try:
         colors=status_colors(p)
         assert close_color(p.save_status.get_style_context().get_color(p.save_status.get_state_flags()),rgba(colors['success']))
         for bracket in (p.save_status_open,p.save_status_close):
-            assert not any(name.startswith('recipient-save-') for name in bracket.get_style_context().list_classes())
+            assert not any(name.startswith('target-save-') for name in bracket.get_style_context().list_classes())
             assert not close_color(bracket.get_style_context().get_color(bracket.get_state_flags()),rgba(colors['success']))
         assert close_color(p.prompt_limit.default.get_style_context().get_background_color(p.prompt_limit.default.get_state_flags()),rgba(colors['success']))
         assert not p.default_prompt.get_style_context().has_class('action-limit')
@@ -244,7 +244,7 @@ try:
     AppConfig.save=original
     w.save();pump(w)
     assert commands.count('start-watch-blocked')==2 and runtime['desktop_watch']
-    # Loading the saved recipient or changing it never starts or stops monitoring.
+    # Loading the saved target or changing it never starts or stops monitoring.
     w.destroy();runtime['desktop_watch']=False;w=make()
     assert w.selected and commands.count('start-watch-blocked')==2
     w.update_recipient(replace(w.selected[b.key],custom_prompt='Loaded edit'));pump(w)

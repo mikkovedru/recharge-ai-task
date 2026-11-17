@@ -86,7 +86,7 @@ def test_deb_installs_safe_modes_and_one_executable(tmp_path):
     description = subprocess.check_output(["dpkg-deb", "--field", str(deb), "Description"], text=True)
     assert description.splitlines()[0] == "Continue selected AI tasks after AI provider token quota recovery"
     assert "Google Gemini CLI, Google Antigravity CLI and OpenCode in wrapped interactive terminals" in description
-    assert "Shared dashboard quota checks, desktop chat recipients and Codex Goal actions are unavailable for these terminal integrations." in description
+    assert "Shared dashboard quota checks, desktop chat targets and Codex Goal actions are unavailable for these terminal integrations." in description
     assert "\n .\n Project source, documentation and issues: https://github.com/mikkovedru/recharge-ai-task\n" in description
     with tarfile.open(fileobj=io.BytesIO(data)) as archive:
         desktop = archive.extractfile("./usr/share/applications/recharge-ai-task.desktop").read().decode()

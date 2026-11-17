@@ -164,7 +164,7 @@ class TrayApp:
             self.open_targets()
             return
         if invalid_messages(self.config.targets(), self.config.continue_prompt, self.config):
-            raise RuntimeError("Enter a prompt message for recipients with Prompt enabled")
+            raise RuntimeError("Enter a prompt message for targets with Prompt enabled")
         from . import watch_state
         state_file = watch_state.state_path(self.config)
         if not restarting or self._watch_state is None or self._watch_state_path != state_file:
@@ -262,7 +262,7 @@ class TrayApp:
                 config = AppConfig.load()
                 targets = config.targets()
                 if not targets:
-                    self._watch_pause_reason = "Choose at least one recipient; watch will resume automatically."
+                    self._watch_pause_reason = "Choose at least one target; watch will resume automatically."
                 elif invalid_messages(targets, config.continue_prompt, config):
                     self._watch_pause_reason = "Enter a prompt message; watch will resume automatically."
                 else:

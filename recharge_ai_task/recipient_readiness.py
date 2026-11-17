@@ -1,4 +1,4 @@
-"""Cached recipient eligibility for display; the sender still verifies live state."""
+"""Cached target eligibility for display; the sender still verifies live state."""
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -92,9 +92,9 @@ def recipient_readiness(target, config, usage, message, *, manual=False, ledger_
         if target.pid is None:
             return remaining("blocked", "Window process unavailable; refresh before sending", "routing")
     else:
-        return remaining("blocked", "Unsupported recipient type", "routing")
+        return remaining("blocked", "Unsupported target type", "routing")
     if target.status.startswith("Unavailable"):
-        return remaining("uncertain", "Recipient unavailable at last refresh; open Codex and refresh", "routing")
+        return remaining("uncertain", "Target unavailable at last refresh; open Codex and refresh", "routing")
     if goal:
         goal_status, task_status = target.goal_status, target.task_status
         if not goal_status or goal_status == "Unavailable":

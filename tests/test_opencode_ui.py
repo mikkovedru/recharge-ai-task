@@ -29,7 +29,7 @@ try:
     assert stored.opencode_args==['--session','selected chat']
     assert list(w.provider_filter.buttons)[-1]=='opencode'
     assert w.provider_filter.buttons['opencode'].get_sensitive()
-    assert 'no dashboard recipients' in w.provider_filter.buttons['opencode'].get_tooltip_text()
+    assert 'no dashboard targets' in w.provider_filter.buttons['opencode'].get_tooltip_text()
     dialog.destroy();pump(w)
 finally:w.destroy()
 ''')

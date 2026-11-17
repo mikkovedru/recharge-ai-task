@@ -2,7 +2,7 @@
 
 Only same-user provider executables are queried. Window identities include the
 accessibility bus ID, unique connection owner and object path, so a restart can
-never silently redirect a saved recipient. Codex chat-ID delivery still uses IPC.
+never silently redirect a saved target. Codex chat-ID delivery still uses IPC.
 """
 from contextlib import closing
 import os

@@ -64,7 +64,7 @@ try:
     assert 'Forecast:' in w.monitor_tabs.pages['claude'].get_text()
     assert 'Send:' in w.monitor_tabs.pages['codex'].get_text()
     assert 'Send:' not in w.monitor_tabs.pages['muse'].get_text()
-    assert '1 selected recipient' in w.monitor_tabs.pages['claude'].get_text()
+    assert '1 selected target' in w.monitor_tabs.pages['claude'].get_text()
     assert 'Used:' in w.monitor_tabs.pages['claude'].get_text()
     assert w.provider_filter.buttons['claude'].provider_state=='enabled'
     assert not w.provider_filter.buttons['claude'].status_image.get_visible()

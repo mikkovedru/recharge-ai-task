@@ -83,7 +83,7 @@ try:
     p.default_prompt.unlimited.clicked();pump(w)
     assert p.default_prompt.unlimited.get_active() and not p.default_prompt.limited.get_active()
     assert AppConfig.load().prompt_limit is None
-    # A recipient count label wraps inside its action column.
+    # A target count label wraps inside its action column.
     w.update_recipient(Target('thread','0','Synthetic chat 0',send_prompt=True,send_goal=False));pump(w)
     assert target_ui.WrappingButton._label(w.send_button).get_layout().get_line_count()>1
     for key in w.table_layout.columns:
@@ -133,7 +133,7 @@ try:
     x,y=w.table.convert_bin_window_to_widget_coords(8,bounds.y)
     strip=Gdk.pixbuf_get_from_window(w.table.get_window(),x,y,1,7)
     pixels=strip.get_pixels();stride=strip.get_rowstride()
-    assert sum(abs(pixels[i]-pixels[5*stride+i]) for i in range(3))>100,'Missing selected-recipient divider'
+    assert sum(abs(pixels[i]-pixels[5*stride+i]) for i in range(3))>100,'Missing selected-target divider'
     assert w.table.get_parent().get_allocated_height()>=59
     assert w.search.translate_coordinates(w.list_area,0,0)[1]>=0
     image=Gdk.pixbuf_get_from_window(w.get_window(),0,0,*w.get_size())

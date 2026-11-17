@@ -62,7 +62,7 @@ def _owner_for_delivery(desktop, target):
 
 def _send_thread(target, text):
     if target.provider != "codex":
-        raise ValueError("Claude recipients require an explicit desktop window")
+        raise ValueError("Claude targets require an explicit desktop window")
     if not target.endpoint:
         raise RuntimeError("Desktop chat routing unavailable; open Codex and refresh targets")
     with DesktopIPC(target.endpoint, timeout=5) as desktop:
@@ -87,7 +87,7 @@ def recover_target(target, text, *, manual=False, send_prompt=True, require_goal
     """
     if target.kind != "thread" or target.provider != "codex":
         return DeliveryResult(target, False,
-            "Native goal recovery requires a chat ID; select a chat or turn off Goal for this recipient", retryable=False)
+            "Native goal recovery requires a chat ID; select a chat or turn off Goal for this target", retryable=False)
     from .goal_control import NativeGoals
     def perform(action, operation):
         return operation() if actions is None else actions.perform(action, operation)
@@ -254,7 +254,7 @@ def deliver_targets(targets, text, *, enter_presses=1, key_delay=.12):
 
 
 def send_signals(targets, text, *, manual=False, enter_presses=1, key_delay=.12):
-    """Honor each recipient's actions, overrides and persistent allowances."""
+    """Honor each target's actions, overrides and persistent allowances."""
     from .config import AppConfig
     from .activity import record
     source = "manual" if manual else "automatic"

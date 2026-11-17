@@ -54,7 +54,7 @@ try:
         color(w.send_time_label,'warning');color(w.next_check_detail,'error');color(w.send_countdown_label,'error')
         assert close_color(border(),rgba(BORDER_COLORS['error']))
         assert not any(name in w.quota_card.get_style_context().list_classes() for name in ('watch-off','watch-on','watch-stopping','quota-status'))
-        set_runtime(desktop_watch=False,watch_pause_reason='Choose recipients')
+        set_runtime(desktop_watch=False,watch_pause_reason='Choose targets')
         assert w.watch_label.get_text()=='Waiting'
         color(w.watch_label,'error');assert close_color(border(),rgba(BORDER_COLORS['error']))
         set_runtime(desktop_watch=True,restarting=True)

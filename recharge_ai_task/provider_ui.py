@@ -30,7 +30,7 @@ class ProviderNotice(Gtk.Box):
 class ProviderButtons(Gtk.FlowBox):
     __gsignals__ = {'changed': (GObject.SignalFlags.RUN_FIRST, None, ())}
 
-    def __init__(self, *, active='all', purpose='Filter visible items; saved recipients and monitoring stay unchanged', include_all=True, compact=False):
+    def __init__(self, *, active='all', purpose='Filter visible items; saved targets and monitoring stay unchanged', include_all=True, compact=False):
         super().__init__()
         self.set_selection_mode(Gtk.SelectionMode.NONE)
         self.set_min_children_per_line(len(PROVIDER_NAMES) if compact else 4)
@@ -116,12 +116,12 @@ class ProviderButtons(Gtk.FlowBox):
             button.set_tooltip_text(tooltip)
 
     def set_counts(self, providers):
-        """Count recipients independently of the currently visible category."""
+        """Count targets independently of the currently visible category."""
         providers = list(providers)
         for key, button in self.buttons.items():
             count = len(providers) if key == 'all' else providers.count(key)
             button.caption.set_text(f'{PROVIDER_NAMES[key]} ({count})')
-            button.get_accessible().set_name(f'{PROVIDER_NAMES[key]}: {count} recipients')
+            button.get_accessible().set_name(f'{PROVIDER_NAMES[key]}: {count} targets')
         self.set_visible_providers(providers)
 
     def set_visible_providers(self, providers):

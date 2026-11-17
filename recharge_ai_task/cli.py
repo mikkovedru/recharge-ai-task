@@ -163,7 +163,7 @@ def _cmd_watch(argv: list[str]) -> int:
 
 def _cmd_targets(argv):
     from .targets import discover_targets
-    parser = argparse.ArgumentParser(prog=f"{PROG} targets", description="Discover installed AI chats and windows, and select signal recipients")
+    parser = argparse.ArgumentParser(prog=f"{PROG} targets", description="Discover installed AI chats and windows, and select signal targets")
     parser.add_argument("--json", action="store_true", help="Print all metadata as JSON")
     parser.add_argument("--gui", action="store_true", help="Open the multi-target picker")
     parser.add_argument("--select", action="append", metavar="ID", help="Save this target (repeat for multiple targets)")
@@ -270,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
   targets --gui    Open the same graphical dashboard
   targets --json   List chats from all installed providers as JSON
   run              Run Codex, Claude, Muse, Gemini, Antigravity or OpenCode with auto-continue
-  watch            Watch quota and signal saved desktop recipients
+  watch            Watch quota and signal saved desktop targets
   quota            Show current quota and reset times
   configure        Configure command-line settings
 

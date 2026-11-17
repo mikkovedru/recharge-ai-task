@@ -69,7 +69,7 @@ try:
     pump_events()
     assert result.success and received==['Continue Claude'],(result,received,entry.get_text())
     stale=replace(matches[0],pid=os.getpid()+1)
-    assert not target_delivery.deliver_targets([stale],'Wrong recipient')[0].success
+    assert not target_delivery.deliver_targets([stale],'Wrong target')[0].success
     pump_events();assert received==['Continue Claude']
 finally:fixture.destroy()
 ''')

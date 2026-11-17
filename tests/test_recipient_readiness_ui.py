@@ -1,4 +1,4 @@
-"""Recipient list space, passive actions, issue highlighting and accessible help."""
+"""Target list space, passive actions, issue highlighting and accessible help."""
 import os
 import subprocess
 import sys
@@ -46,9 +46,9 @@ try:
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
         w._summary();pump(w)
         ra,rb,rc=(p.rows[t.key] for t in (a,b,c))
-        assert context(ra).has_class('recipient-passive')
-        assert context(rb).has_class('recipient-passive') and rb.manual.ready and not rb.automatic.ready
-        assert not context(rc).has_class('recipient-passive') and rc.automatic.ready
+        assert context(ra).has_class('target-passive')
+        assert context(rb).has_class('target-passive') and rb.manual.ready and not rb.automatic.ready
+        assert not context(rc).has_class('target-passive') and rc.automatic.ready
         assert ra.get_sensitive() and ra.indicator.get_can_focus()
         assert 'foreground=' in ra.allowance.get_label() and '⚠' in ra.allowance.get_text()
         assert 'Blocked' in rc.plan.get_text() and 'foreground=' in rc.plan.get_label()
@@ -63,13 +63,13 @@ try:
         # Passive rows still select their editor. Counts reset makes the row ready.
         p.select_recipient(a.key);assert p.selected_key==a.key and p.editor.get_sensitive()
         p.reset.clicked();pump(w)
-        assert not context(ra).has_class('recipient-passive') and ra.automatic.ready
+        assert not context(ra).has_class('target-passive') and ra.automatic.ready
         attempt=ledger.reserve(a.key,'prompt',1);ledger.finish(attempt,'sent');p.render()
         # Changing a custom message to empty updates the actual blocker.
         p.select_recipient(c.key);p.custom.set_active(True);p.message_buffer.set_text(' ');pump(w)
-        assert context(rc).has_class('recipient-passive') and 'Message is empty' in rc.indicator.get_tooltip_text()
+        assert context(rc).has_class('target-passive') and 'Message is empty' in rc.indicator.get_tooltip_text()
         p.message_buffer.set_text('Continue');pump(w)
-        assert not context(rc).has_class('recipient-passive')
+        assert not context(rc).has_class('target-passive')
         w.get_window().invalidate_rect(None,True);w.queue_draw();pump(w)
         image=Gdk.pixbuf_get_from_window(w.get_window(),0,0,*w.get_size())
         image.savev('/tmp/2026-11-06_recipient-native-'+('dark' if dark else 'light')+'.png','png',[],[])

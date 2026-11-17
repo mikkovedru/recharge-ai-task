@@ -46,7 +46,7 @@ def watch_check_summary(runtime, now):
     if runtime.get("watch_error"):
         return "Needs attention", "See the activity messages below."
     if runtime.get("watch_pause_reason"):
-        return "Waiting", "Choose valid recipients and signal settings."
+        return "Waiting", "Choose valid targets and signal settings."
     if runtime.get("cli_running"):
         return "CLI mode", "Quota recovery is managed in the terminal."
     if not runtime.get("desktop_watch"):
@@ -106,7 +106,7 @@ def send_schedule_summary(runtime, now, grace_seconds=0):
         return ("No eligible actions" if pending or "selected_recipients" in progress else "No send scheduled",
                 "Check selected actions and remaining allowances." if pending or "selected_recipients" in progress else "Watching for quota recovery.", zero)
     counts = (f"{'Up to' if pending else 'Selected, up to'} {progress.get(prefix_key + '_messages', 0)} messages · "
-              f"{progress.get(prefix_key + '_goals', 0)} Goal activations · {recipients} recipients")
+              f"{progress.get(prefix_key + '_goals', 0)} Goal activations · {recipients} targets")
     phase = progress.get("phase")
     updated = progress.get("updated_at")
     if isinstance(updated, (int, float)) and now > max(updated + 45, (progress.get("next_check_at") or updated) + 10):

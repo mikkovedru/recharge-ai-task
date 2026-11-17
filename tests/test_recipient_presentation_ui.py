@@ -1,4 +1,4 @@
-"""Compact recipient allowances, custom messages and reset controls."""
+"""Compact target allowances, custom messages and reset controls."""
 import os
 import pytest
 from test_monitoring_status_ui import run_gui
@@ -15,7 +15,7 @@ try:
     row=p.rows[b.key]
     assert row.allowance.get_text()=='Message: used 0 / ∞ (default)'
     assert not row.preview.get_visible() and 'Default:' not in row.allowance.get_text()
-    assert p.reset.get_label()=="Reset current recipient's counts"
+    assert p.reset.get_label()=="Reset current target's counts"
     assert p.reset_all.get_label()=='Reset counts for all'
     groups=[child.get_child() for child in p.actions.get_children()]
     assert groups[0].get_children()==[p.transfer,w.send_button]
@@ -97,7 +97,7 @@ try:
     assert buttons[0].get_allocated_height()<=narrow_height
     p.actions.reparent(p.editor);fixture.destroy()
     p.list.select_all();pump(w)
-    assert p.reset.get_label().startswith('Reset current recipients')
+    assert p.reset.get_label().startswith('Reset current targets')
     assert p.reset._label(p.reset).get_line_wrap()
 finally:w.destroy()
 ''')

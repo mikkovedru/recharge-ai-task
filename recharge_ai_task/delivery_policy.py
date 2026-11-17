@@ -1,4 +1,4 @@
-"""Per-recipient policies and durable, process-safe continuation allowances."""
+"""Per-target policies and durable, process-safe continuation allowances."""
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path

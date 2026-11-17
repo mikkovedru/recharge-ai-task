@@ -1,4 +1,4 @@
-"""Atomic recovery checkpoints scoped to provider profiles and recipients."""
+"""Atomic recovery checkpoints scoped to provider profiles and targets."""
 import hashlib
 import json
 import os

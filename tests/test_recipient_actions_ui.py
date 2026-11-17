@@ -1,4 +1,4 @@
-"""Saved passive recipients, explicit removal and scoped count resets."""
+"""Saved passive targets, explicit removal and scoped count resets."""
 import os
 import pytest
 from test_monitoring_status_ui import run_gui
@@ -12,9 +12,9 @@ from recharge_ai_task.delivery_policy import UsageLedger
 w=make();p=w.recipient_panel
 try:
     w.update_recipient(replace(w.selected[b.key], send_prompt=False, send_goal=False));pump(w)
-    assert b.key in p.rows and p.rows[b.key].get_style_context().has_class('recipient-passive')
+    assert b.key in p.rows and p.rows[b.key].get_style_context().has_class('target-passive')
     assert 'No actions selected' in p.rows[b.key].plan.get_text()
-    assert b.key in {t.key for t in AppConfig.load().recipients()}
+    assert b.key in {t.key for t in AppConfig.load().chosen_targets()}
     assert b.key not in {t.key for t in AppConfig.load().targets()}
     w._apply_inventory(Inventory([a,b]));pump(w)
     assert b.key in p.rows and not w.selected[b.key].send_prompt
@@ -33,7 +33,7 @@ try:
     assert b.key not in w.selected and b.key not in p.rows
     table_row=next(r for r in w.store if r[17]==b.key)
     assert not table_row[0] and not table_row[12]
-    assert b.key not in {t.key for t in AppConfig.load().recipients()}
+    assert b.key not in {t.key for t in AppConfig.load().chosen_targets()}
     path=next(r.path for r in w.filtered if r[17]==b.key)
     w.table.emit('row-activated',path,w.title_column);pump(w)
     assert b.key in p.rows and not any(w.selected[b.key].signal_actions())
@@ -60,7 +60,7 @@ w=make();p=w.recipient_panel;ledger=UsageLedger()
 try:
     for target,action,n in ((a,'goal',2),(b,'prompt',3)):
         for _ in range(n):ledger.finish(ledger.reserve(target.key,action,None),'sent')
-    removed=replace(b,id='removed',title='Removed recipient',prompt_limit=4)
+    removed=replace(b,id='removed',title='Removed target',prompt_limit=4)
     w.update_recipient(removed);w.remove_recipient(removed.key)
     ledger.finish(ledger.reserve(removed.key,'prompt',4),'uncertain')
     w._summary();pump(w)
@@ -68,14 +68,14 @@ try:
     assert pos(w.send_button,w)[0]<pos(p.reset_all,w)[0]
     p.select_recipient(a.key);p.list.select_row(p.rows[b.key]);pump(w)
     assert p.selected_keys=={a.key,b.key}
-    assert p.reset.get_label()=="Reset current recipients' (2) counts"
+    assert p.reset.get_label()=="Reset current targets' (2) counts"
     w._summary();w._apply_inventory(Inventory([a,b]));pump(w)
     assert {row.key for row in p.list.get_selected_rows()}=={a.key,b.key}
     tip=p.reset.get_tooltip_text()
-    assert '2 recipient(s)' in tip and 'Goal recipient' in tip and 'Message recipient' in tip
+    assert '2 target(s)' in tip and 'Goal target' in tip and 'Message target' in tip
     assert 'used 2 → 0' in tip and 'used 3 → 0' in tip and 'Nothing is sent' in tip
     tip=p.reset_all.get_tooltip_text()
-    assert '3 recipient(s)' in tip and 'Removed recipient' in tip and 'unconfirmed 1 → 0' in tip
+    assert '3 target(s)' in tip and 'Removed target' in tip and 'unconfirmed 1 → 0' in tip
     assert 'Remaining 3 → 4 of 4' in tip and 'not rearmed' in tip
     # Query-time preview reflects deliveries after the last row render.
     ledger.finish(ledger.reserve(b.key,'prompt',None),'sent')
@@ -91,8 +91,8 @@ try:
     p.list.unselect_all();pump(w)
     assert not p.reset.get_sensitive()
     p.select_recipient(b.key);pump(w)
-    assert p.reset.get_label()=="Reset current recipient's counts"
-    assert '1 recipient(s)' in p.reset.get_tooltip_text()
+    assert p.reset.get_label()=="Reset current target's counts"
+    assert '1 target(s)' in p.reset.get_tooltip_text()
 finally:w.destroy()
 ''')
 

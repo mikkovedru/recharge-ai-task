@@ -1,4 +1,4 @@
-"""Exercise GTK layout behavior with isolated settings and synthetic recipients."""
+"""Exercise GTK layout behavior with isolated settings and synthetic targets."""
 import os
 import subprocess
 import sys

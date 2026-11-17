@@ -44,7 +44,7 @@ def statistics(targets, config, usage):
             allowed[action] = enabled and (limit is None or value.used < limit)
         messages += allowed["prompt"]
         goals += allowed["goal"]
-    return dict(recipients=len(targets), messages=messages, goals=goals,
+    return dict(targets=len(targets), messages=messages, goals=goals,
                 used_messages=used_messages, used_goals=used_goals, uncertain=uncertain)
 
 
@@ -61,14 +61,14 @@ def provider_status(provider, *, targets, config, usage, quota=None, error='', n
         level = 'warning' if any(s['state'] in ('waiting', 'native') for s in sessions) else 'enabled' if sessions else 'off'
         return dict(provider=provider, terminal_only=True, state=level, installed=installed or bool(sessions),
                     terminal_observations=observation_lines(sessions, now),
-                    enabled=False, monitored=False, selection='Wrapped interactive terminals only; no dashboard recipients.',
+                    enabled=False, monitored=False, selection='Wrapped interactive terminals only; no dashboard targets.',
                     error='', notices=LIMITATION, command=f'recharge-ai-task run --provider {provider}')
     selected = [t for t in targets if t.provider == provider]
     try:
         counts = statistics(selected, config, usage)
     except (ValueError, TypeError) as exc:
         usage_error = str(exc)
-        counts = dict(recipients=len(selected), messages=0, goals=0, used_messages=0, used_goals=0, uncertain=0)
+        counts = dict(targets=len(selected), messages=0, goals=0, used_messages=0, used_goals=0, uncertain=0)
     enabled = counts['messages'] + counts['goals'] > 0
     state = 'enabled' if enabled else 'off'
     if error:state = 'error' if enabled else 'warning'
@@ -79,7 +79,7 @@ def provider_status(provider, *, targets, config, usage, quota=None, error='', n
     check, check_detail = watch_check_summary(scoped, now)
     recovery, countdown, actions = send_schedule_summary(scoped, now, config.grace_seconds)
     if scoped and not scoped.get('desktop_watch') and not scoped.get('restarting'):
-        check, check_detail = 'Not monitored', 'Start monitoring with a recipient from this provider selected.'
+        check, check_detail = 'Not monitored', 'Start monitoring with a target from this provider selected.'
     if not installed and not selected:
         check, check_detail = 'Not detected', 'Install this provider or open a supported native app.'
     freshness = ('Updated ' + datetime.fromtimestamp(checked_at).astimezone().strftime('%H:%M:%S') +
@@ -96,8 +96,8 @@ def provider_status(provider, *, targets, config, usage, quota=None, error='', n
                 timing=f'resets {reset} ({str(days)+"d " if days else ""}{hours:02}:{minutes:02}:{seconds:02})'
             else:timing='window not started'
             windows.append((name, window.used_percent, timing))
-    noun = "recipient" if counts["recipients"] == 1 else "recipients"
-    details = f"{counts['recipients']} selected {noun} · {counts['messages']} message / {counts['goals']} Goal actions with allowance remaining"
+    noun = "target" if counts["targets"] == 1 else "targets"
+    details = f"{counts['targets']} selected {noun} · {counts['messages']} message / {counts['goals']} Goal actions with allowance remaining"
     stats = f"Used: {counts['used_messages']} messages · {counts['used_goals']} Goal activations · {counts['uncertain']} unconfirmed"
     if usage_error:stats='Usage statistics unavailable: '+usage_error
     return dict(provider=provider, state=state, counts=counts, enabled=enabled,

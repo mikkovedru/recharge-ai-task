@@ -67,7 +67,7 @@ for row in p.rows.values():
 w.table_layout.sort('id', True)
 p.select_recipient(b.key)
 assert w._row_target().key == b.key
-# Main-list selection also loads and highlights the same recipient.
+# Main-list selection also loads and highlights the same target.
 for target in (a,b):
     path=next(row.path for row in w.filtered if row[4]==target.id and row[6]==target.instance)
     w.table.set_cursor(path,w.title_column);pump(w)
@@ -98,7 +98,7 @@ assert w.selected[a.key].custom_prompt=='Specific\nmessage' and w.selected[a.key
 assert 'Message: used 0 / 1' in p.rows[a.key].allowance.get_text()
 assert '    |    Custom message: Specific message' in p.rows[a.key].allowance.get_text()
 assert not p.rows[a.key].preview.get_visible()
-# Same-titled recipients have independent identities and inherited defaults.
+# Same-titled targets have independent identities and inherited defaults.
 assert w.selected[b.key].custom_prompt is None and w.selected[b.key].prompt_limit is None
 p.message_buffer.place_cursor(p.message_buffer.get_iter_at_offset(4))
 w._summary()
@@ -108,7 +108,7 @@ assert w.selected[a.key].custom_prompt=='Specific\nmessage' and w.selected[a.key
 # Deselecting retains overrides for later reuse.
 w.update_recipient(replace(w.selected[a.key],send_prompt=False))
 assert a.key in w.selected and a.key in p.rows
-assert p.rows[a.key].get_style_context().has_class("recipient-passive")
+assert p.rows[a.key].get_style_context().has_class("target-passive")
 w.update_recipient(replace(w.preferences[a.key],send_prompt=True))
 assert w.selected[a.key].custom_prompt=='Specific\nmessage'
 assert target_delivery.send_signals([w.selected[a.key]],w._prompt_text(),manual=True)[0].success
@@ -121,7 +121,7 @@ p.select_recipient(a.key);p.reset.clicked()
 assert not UsageLedger().snapshot()
 p.prompt_limit.unlimited.clicked()
 assert w.selected[a.key].prompt_limit==-1
-# Clearing the default is valid when all message recipients have custom text.
+# Clearing the default is valid when all message targets have custom text.
 w.update_recipient(replace(w.selected[b.key],custom_prompt='Other message'))
 w.signal_buffer.set_text('')
 w.destroy()

@@ -1,4 +1,4 @@
-"""Per-recipient action persistence, migration and quota-reset delivery."""
+"""Per-target action persistence, migration and quota-reset delivery."""
 from dataclasses import replace
 import pytest
 from recharge_ai_task.config import AppConfig

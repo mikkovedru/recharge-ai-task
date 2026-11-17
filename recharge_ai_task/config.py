@@ -137,9 +137,13 @@ class AppConfig:
         return [t for t in self.all_targets() if (provider is None or t.provider == provider) and any(t.signal_actions())]
 
     def recipients(self):
+        """Compatibility alias for older callers and saved tray integrations."""
+        return self.chosen_targets()
+
+    def chosen_targets(self):
         """Saved panel membership, independent of the enabled delivery actions.
 
-        Older settings contain disabled preferences for removed recipients, so
+        Older settings contain disabled preferences for removed targets, so
         only enabled targets are migrated into the panel on the first save.
         """
         if self.recipient_keys is None:

@@ -1,6 +1,6 @@
 # Source and distribution
 
-[Recharge AI-task](https://github.com/mikkovedru/recharge-ai-task) is [MIT licensed](LICENSE), derived from [Autumnpoem/codex-autocontinue](https://github.com/Autumnpoem/codex-autocontinue). The source includes the multi-provider dashboard, tray, terminal wrapper, recipient discovery/delivery, artwork, English messages, tests and build workflows.
+[Recharge AI-task](https://github.com/mikkovedru/recharge-ai-task) is [MIT licensed](LICENSE), derived from [Autumnpoem/codex-autocontinue](https://github.com/Autumnpoem/codex-autocontinue). The source includes the multi-provider dashboard, tray, terminal wrapper, target discovery/delivery, artwork, English messages, tests and build workflows.
 
 | Path | Purpose |
 |---|---|

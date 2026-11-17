@@ -1,4 +1,4 @@
-"""Editable recipient plans, effective messages and continuation allowances."""
+"""Editable target plans, effective messages and continuation allowances."""
 from dataclasses import replace
 from uuid import uuid4
 from gi.repository import GLib, Gtk, Pango
@@ -39,14 +39,14 @@ class LimitControl(Gtk.Box):
         self.limited = Gtk.ToggleButton(label="1")
         self.unlimited.get_accessible().set_name("Unlimited")
         self._size_infinity(self.unlimited)
-        self.unlimited.set_tooltip_text("Use an unlimited allowance for this recipient (Enter / Space)")
+        self.unlimited.set_tooltip_text("Use an unlimited allowance for this target (Enter / Space)")
         self.limited.set_tooltip_text("Use a fixed allowance; click to edit its number (Enter / Space)")
         self.last_value = None
         self.modes = {}
         if off:
             self.off = Gtk.ToggleButton(label="Off")
             self.off.get_style_context().add_class("action-off")
-            self.off.set_tooltip_text("Do not send this action to this recipient (Enter / Space)")
+            self.off.set_tooltip_text("Do not send this action to this target (Enter / Space)")
             self.modes["off"] = self.off
         if inherit:
             self.default = Gtk.ToggleButton(label="Global default")
@@ -61,7 +61,7 @@ class LimitControl(Gtk.Box):
         self.pack_start(linked, False, False, 0)
         self.number_popover = Gtk.Popover.new(self.limited)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=8)
-        content.pack_start(Gtk.Label(label="Maximum actions per recipient:"), False, False, 0)
+        content.pack_start(Gtk.Label(label="Maximum actions per target:"), False, False, 0)
         content.pack_start(self.number, False, False, 0)
         self.number_popover.add(content)
         self.number.connect("value-changed", lambda *_: self._changed(changed))
@@ -157,32 +157,32 @@ class RecipientPanel(Gtk.Box):
         self._recolor_status()
         css = Gtk.CssProvider()
         css.load_from_data(b"""
-            .recipient-passive { background-color: mix(@theme_base_color, @theme_bg_color, .55); }
-            .recipient-passive .recipient-title, .recipient-passive .recipient-preview {
+            .target-passive { background-color: mix(@theme_base_color, @theme_bg_color, .55); }
+            .target-passive .target-title, .target-passive .target-preview {
                 color: mix(@theme_text_color, @theme_base_color, .20); opacity: 1; }
-            .recipient-actions-off .recipient-title { font-style: italic; }
-            .recipient-passive-badge { background-color: alpha(@theme_fg_color, .12);
+            .target-actions-off .target-title { font-style: italic; }
+            .target-passive-badge { background-color: alpha(@theme_fg_color, .12);
                 color: @theme_text_color; border: 1px solid alpha(@theme_fg_color, .4);
                 border-radius: 4px; padding: 1px 5px; font-weight: bold; }
-            .recipient-row:selected { background-color: mix(@theme_base_color, @theme_selected_bg_color, .24);
+            .target-row:selected { background-color: mix(@theme_base_color, @theme_selected_bg_color, .24);
                 color: @theme_text_color; box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
-            .recipient-row:selected .recipient-title { color: @theme_text_color; opacity: 1; }
-            .recipient-row button { padding: 3px; }
-            flowbox.recipient-heading > flowboxchild { padding: 0; }
-            button.recipient-info { background-image: none; background-color: @theme_base_color;
+            .target-row:selected .target-title { color: @theme_text_color; opacity: 1; }
+            .target-row button { padding: 3px; }
+            flowbox.target-heading > flowboxchild { padding: 0; }
+            button.target-info { background-image: none; background-color: @theme_base_color;
                 border: 1px solid alpha(@theme_text_color, .5); border-radius: 4px; }
-            button.recipient-info, button.recipient-info image { color: @theme_text_color; }
-            button.recipient-info:hover { background-color: mix(@theme_base_color, @theme_selected_bg_color, .18); }
-            button.recipient-info:focus { box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
+            button.target-info, button.target-info image { color: @theme_text_color; }
+            button.target-info:hover { background-color: mix(@theme_base_color, @theme_selected_bg_color, .18); }
+            button.target-info:focus { box-shadow: inset 0 0 0 2px @theme_selected_bg_color; }
         """)
         self.get_style_context().add_provider_for_screen(self.get_screen(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.heading_row = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
             column_spacing=8, row_spacing=4, min_children_per_line=1, max_children_per_line=2)
-        self.heading_row.get_style_context().add_class("recipient-heading")
+        self.heading_row.get_style_context().add_class("target-heading")
         self.heading = Gtk.Label(xalign=0)
-        self.heading.set_markup("<b>Recipients &amp; actions</b>")
-        self.heading.set_tooltip_text("Recipients & actions")
-        self.provider_filter = ProviderButtons(compact=True, purpose="Filter this recipient list only; hidden actions remain enabled")
+        self.heading.set_markup("<b>Targets &amp; actions</b>")
+        self.heading.set_tooltip_text("Targets & actions")
+        self.provider_filter = ProviderButtons(compact=True, purpose="Filter this target list only; hidden actions remain enabled")
         self.provider_filter.connect("changed", self._filter_changed)
         # Treat the complete tab group as one item: it moves below the heading
         # only when both items' natural widths cannot fit together.
@@ -194,26 +194,26 @@ class RecipientPanel(Gtk.Box):
         self.default_prompt = LimitControl(self._defaults_changed)
         self.default_goal = LimitControl(self._defaults_changed)
         self.default_controls = Gtk.Grid(column_spacing=6, row_spacing=4)
-        self.default_controls.attach(Gtk.Label(label="Global limits per recipient:", xalign=0), 0, 0, 2, 1)
+        self.default_controls.attach(Gtk.Label(label="Global limits per target:", xalign=0), 0, 0, 2, 1)
         for row, (caption, control) in enumerate((("Reactivate goals", self.default_goal), ("Send messages", self.default_prompt)), 1):
             self.default_controls.attach(Gtk.Label(label=caption, xalign=0), 0, row, 1, 1)
             self.default_controls.attach(control, 1, row, 1, 1)
         self.reset_all = WrappingButton(label="Reset counts for all")
-        self.reset_all.set_tooltip_text("Reset message and Goal allowances for every recipient (Enter / Space)")
+        self.reset_all.set_tooltip_text("Reset message and Goal allowances for every target (Enter / Space)")
         self.reset_all.connect("clicked", self._reset_all)
-        self.default_controls.set_tooltip_text("Manual and automatic sends share each recipient's allowance. Counts survive restarts. Zero stops an action; use the reset buttons to renew allowances.")
+        self.default_controls.set_tooltip_text("Manual and automatic sends share each target's allowance. Counts survive restarts. Zero stops an action; use the reset buttons to renew allowances.")
         self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.MULTIPLE)
         self.list.set_filter_func(lambda row: self.provider_filter.get_active_id() in ("all", row.provider_id))
         self.list.set_activate_on_single_click(False)
         self.list.connect("selected-rows-changed", self._row_selected)
         self.list.connect("row-activated", self._row_activated)
-        self.list.set_tooltip_text("Choose a recipient to edit it. Ctrl+click toggles selection; Shift+click selects a range. Double-click or Enter removes a recipient and turns both actions off (Up / Down)")
+        self.list.set_tooltip_text("Choose a target to edit it. Ctrl+click toggles selection; Shift+click selects a range. Double-click or Enter removes a target and turns both actions off (Up / Down)")
         self.list_scroller = Gtk.ScrolledWindow()
         self.list_scroller.set_shadow_type(Gtk.ShadowType.IN)
         self.list_scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.list_scroller.set_size_request(250, 60)
         self.list_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.empty_label = Gtk.Label(label="No recipients for this provider", margin=12, wrap=True)
+        self.empty_label = Gtk.Label(label="No targets for this provider", margin=12, wrap=True)
         self.empty_label.set_no_show_all(True)
         self.list_container.pack_start(self.list, True, True, 0)
         self.list_container.pack_start(self.empty_label, False, False, 0)
@@ -224,8 +224,8 @@ class RecipientPanel(Gtk.Box):
         actions.set_max_children_per_line(3)
         actions.set_min_children_per_line(1)
         actions.set_homogeneous(False)
-        self.reset = WrappingButton(label="Reset current recipient's counts")
-        self.reset.set_tooltip_text("Reset both used allowances for this recipient. This never sends anything.")
+        self.reset = WrappingButton(label="Reset current target's counts")
+        self.reset.set_tooltip_text("Reset both used allowances for this target. This never sends anything.")
         self.reset.connect("clicked", self._reset)
         self._action_height_update = 0
         self.transfer = TransferButton()
@@ -252,8 +252,8 @@ class RecipientPanel(Gtk.Box):
             overrides.attach(Gtk.Label(label=caption, xalign=0), 0, row, 1, 1)
             overrides.attach(control, 1, row, 1, 1)
         self.editor.pack_start(overrides, False, False, 0)
-        self.custom = Gtk.CheckButton(label="Use a custom message for this recipient")
-        self.custom.set_tooltip_text("Override the default message for only this recipient; edits save automatically (Space)")
+        self.custom = Gtk.CheckButton(label="Use a custom message for this target")
+        self.custom.set_tooltip_text("Override the default message for only this target; edits save automatically (Space)")
         self.custom.connect("toggled", self._custom_toggled)
         self.custom_row = Gtk.Box(spacing=6)
         self.custom_row.pack_start(self.custom, False, False, 0)
@@ -289,7 +289,7 @@ class RecipientPanel(Gtk.Box):
         self.editor_scroller.set_size_request(250, 120)
         self.editor_scroller.set_propagate_natural_height(True)
         self.editor_frame=Gtk.Frame()
-        self.editor_frame.get_accessible().set_name("Selected recipient overrides")
+        self.editor_frame.get_accessible().set_name("Selected target overrides")
         self.editor.set_border_width(6)
         self.editor_frame.add(self.editor)
         self.editor_scroller.add(self.editor_frame)
@@ -304,9 +304,9 @@ class RecipientPanel(Gtk.Box):
         self.status_palette = palette
         text = "#142018" if colors["success"] != "#137333" else "#ffffff"
         self.status_css.load_from_data(f"""
-            .recipient-save-success {{ color: {colors['success']}; }}
-            .recipient-save-warning {{ color: {colors['warning']}; }}
-            .recipient-save-error {{ color: {colors['error']}; }}
+            .target-save-success {{ color: {colors['success']}; }}
+            .target-save-warning {{ color: {colors['warning']}; }}
+            .target-save-error {{ color: {colors['error']}; }}
             .action-limit button:checked {{ background-image: none; background-color: {colors['success']};
                 color: {text}; border-color: {colors['success']}; }}
             .action-limit button.action-off:checked {{ background-color: {colors['error']}; border-color: {colors['error']}; }}
@@ -350,7 +350,7 @@ class RecipientPanel(Gtk.Box):
                     row.expanded = False
                     row.preview_pending = False
                     row.custom_message = ""
-                    row.get_style_context().add_class("recipient-row")
+                    row.get_style_context().add_class("target-row")
                     body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3, margin=8)
                     header = Gtk.Box(spacing=6)
                     row.title, row.plan, row.allowance, row.preview = [wrapped() for _ in range(4)]
@@ -363,8 +363,8 @@ class RecipientPanel(Gtk.Box):
                     row.title.set_hexpand(True)
                     header.pack_start(row.title, True, True, 0)
                     row.passive_badge = Gtk.Label(label="\u23f8 Passive", valign=Gtk.Align.START)
-                    row.passive_badge.get_style_context().add_class("recipient-passive-badge")
-                    row.passive_badge.set_tooltip_text("Goal and Message are off. This chat stays in Recipients & actions; nothing will be sent.")
+                    row.passive_badge.get_style_context().add_class("target-passive-badge")
+                    row.passive_badge.set_tooltip_text("Goal and Message are off. This chat stays in Targets & actions; nothing will be sent.")
                     row.passive_badge.set_no_show_all(True)
                     header.pack_start(row.passive_badge, False, False, 0)
                     header.pack_start(row.provider, False, False, 0)
@@ -373,7 +373,7 @@ class RecipientPanel(Gtk.Box):
                     row.allowance_box.pack_start(row.allowance, True, True, 0)
                     row.preview_toggle = Gtk.Button(valign=Gtk.Align.START)
                     row.preview_toggle.set_relief(Gtk.ReliefStyle.NONE)
-                    row.preview_toggle.get_style_context().add_class("recipient-info")
+                    row.preview_toggle.get_style_context().add_class("target-info")
                     row.preview_toggle.set_image(Gtk.Image.new_from_icon_name("pan-down-symbolic", Gtk.IconSize.MENU))
                     row.preview_toggle.set_no_show_all(True)
                     row.preview_toggle.connect("clicked", self._toggle_preview, row)
@@ -384,9 +384,9 @@ class RecipientPanel(Gtk.Box):
                     row.preview.set_width_chars(1)
                     row.preview.set_no_show_all(True)
                     for label, name in ((row.title, "title"), (row.preview, "preview")):
-                        label.get_style_context().add_class("recipient-" + name)
+                        label.get_style_context().add_class("target-" + name)
                     row.indicator = Gtk.Button(relief=Gtk.ReliefStyle.NONE, valign=Gtk.Align.START)
-                    row.indicator.get_style_context().add_class("recipient-info")
+                    row.indicator.get_style_context().add_class("target-info")
                     row.indicator.set_image(Gtk.Image.new_from_icon_name("dialog-information-symbolic", Gtk.IconSize.BUTTON))
                     row.details = Gtk.Popover.new(row.indicator)
                     row.explanation = wrapped()
@@ -397,9 +397,9 @@ class RecipientPanel(Gtk.Box):
                     row.details.add(row.explanation)
                     row.indicator.connect("clicked", lambda _button, current=row: self._show_details(current))
                     row.remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
-                    row.remove.get_style_context().add_class("recipient-info")
-                    row.remove.get_accessible().set_name("Remove recipient")
-                    row.remove.set_tooltip_text("Remove this recipient from Recipients & actions and turn off both Goal and Message. Custom text and limits are retained. You can also double-click the row (Enter / Space)")
+                    row.remove.get_style_context().add_class("target-info")
+                    row.remove.get_accessible().set_name("Remove target")
+                    row.remove.set_tooltip_text("Remove this target from Targets & actions and turn off both Goal and Message. Custom text and limits are retained. You can also double-click the row (Enter / Space)")
                     row.remove.connect("clicked", lambda _button, key=key: self.picker.remove_recipient(key))
                     icons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.START)
                     icons.pack_start(row.indicator, False, False, 0)
@@ -423,9 +423,9 @@ class RecipientPanel(Gtk.Box):
                 row.passive_badge.set_visible(not (prompt or goal))
                 context = row.get_style_context()
                 if prompt or goal:
-                    context.remove_class("recipient-actions-off")
+                    context.remove_class("target-actions-off")
                 else:
-                    context.add_class("recipient-actions-off")
+                    context.add_class("target-actions-off")
                 pl, gl = effective_limit(target, "prompt", config), effective_limit(target, "goal", config)
                 pu, gu = usage.get((key, "prompt"), Usage()), usage.get((key, "goal"), Usage())
                 message = effective_message(target, self.picker._prompt_text())
@@ -568,9 +568,9 @@ class RecipientPanel(Gtk.Box):
         row.plan.set_visible(bool(lines))
         context = row.get_style_context()
         if row.automatic.ready:
-            context.remove_class("recipient-passive")
+            context.remove_class("target-passive")
         else:
-            context.add_class("recipient-passive")
+            context.add_class("target-passive")
         actions = (*row.automatic.actions, *row.manual.actions)
         warning = any(action.state in {"blocked", "uncertain"} or action.warning or
                       action.state == "passive" and not action.reason.startswith("Already active") for action in actions)
@@ -579,7 +579,7 @@ class RecipientPanel(Gtk.Box):
         row.indicator.set_image(Gtk.Image.new_from_icon_name(icon, Gtk.IconSize.BUTTON))
         row.indicator.set_no_show_all(True)
         row.indicator.set_visible(True)
-        row.indicator.get_accessible().set_name("Recipient readiness: " +
+        row.indicator.get_accessible().set_name("Target readiness: " +
             ("needs attention" if warning else "some actions passive" if passive else "ready"))
         detail = []
         for name, readiness in (("Automatic recovery", row.automatic), ("Send now", row.manual)):
@@ -653,8 +653,8 @@ class RecipientPanel(Gtk.Box):
         level = "success" if state == "saved" else "error" if state in {"error", "paused"} else "warning"
         context = self.save_status.get_style_context()
         for old_level in ("success", "warning", "error"):
-            context.remove_class("recipient-save-" + old_level)
-        context.add_class("recipient-save-" + level)
+            context.remove_class("target-save-" + old_level)
+        context.add_class("target-save-" + level)
         self.save_status.set_from_icon_name(icon, Gtk.IconSize.BUTTON)
         self.save_status.set_tooltip_text(detail)
         self.save_status_group.set_tooltip_text(detail)
@@ -716,8 +716,8 @@ class RecipientPanel(Gtk.Box):
             context.remove_class("inherited-message")
         else:
             context.add_class("inherited-message")
-        self.message.set_tooltip_text("Custom message for this recipient" if enabled else
-            "Default message preview. Enable the custom message checkbox to edit this recipient's message.")
+        self.message.set_tooltip_text("Custom message for this target" if enabled else
+            "Default message preview. Enable the custom message checkbox to edit this target's message.")
 
     def _custom_toggled(self, *_):
         if self.updating:
@@ -776,7 +776,7 @@ class RecipientPanel(Gtk.Box):
 
     def _update_reset_help(self):
         count = len(self.selected_keys)
-        self.reset.set_label(f"Reset current recipients' ({count}) counts" if count > 1 else "Reset current recipient's counts")
+        self.reset.set_label(f"Reset current targets' ({count}) counts" if count > 1 else "Reset current target's counts")
         self._wrap_reset_label(self.reset)
         for button, all_recipients in ((self.reset, False), (self.reset_all, True)):
             button.set_tooltip_text(self._reset_help(all_recipients))
@@ -793,8 +793,8 @@ class RecipientPanel(Gtk.Box):
         if self.ledger_error:
             return self.ledger_error + " Counts cannot be previewed or reset safely until the ledger is readable."
         keys = ({key for key, _action in usage} | set(self.picker.selected)) if all_recipients else set(self.selected_keys)
-        scope = "all stored recipients (including hidden and removed recipients with counts)" if all_recipients else "the selected recipients only"
-        lines = [f"Reset Goal and Message counts for {len(keys)} recipient(s): {scope}."]
+        scope = "all stored targets (including hidden and removed targets with counts)" if all_recipients else "the selected targets only"
+        lines = [f"Reset Goal and Message counts for {len(keys)} target(s): {scope}."]
         config = AppConfig.load()
         for key in sorted(keys):
             target = self.picker.preferences.get(key)
@@ -815,7 +815,7 @@ class RecipientPanel(Gtk.Box):
             return
         try:
             (self.ledger or UsageLedger()).reset(self.selected_keys)
-            self.picker._message(f"Counts reset for {len(self.selected_keys)} recipient(s). No signals sent.")
+            self.picker._message(f"Counts reset for {len(self.selected_keys)} target(s). No signals sent.")
             self.render()
         except Exception as exc:
             self.picker._message(str(exc), "error")
@@ -824,7 +824,7 @@ class RecipientPanel(Gtk.Box):
         try:
             ledger = self.ledger or UsageLedger()
             ledger.reset({key for key, _action in ledger.snapshot()})
-            self.picker._message("All recipient counts reset. No signals sent.")
+            self.picker._message("All target counts reset. No signals sent.")
             self.render()
         except Exception as exc:
             self.picker._message(str(exc), "error")

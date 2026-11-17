@@ -6,13 +6,13 @@
 
 First public release of [Recharge AI-task](https://github.com/mikkovedru/recharge-ai-task), licensed under the [MIT license](../LICENSE).
 
-Recharge AI-task continues selected **OpenAI Codex**, **Claude Code**, **Meta Muse Code**, and **OpenCode** tasks after token quota becomes available again. Choose recipients, continuation messages, Codex Goal actions and per-recipient allowances; review quota, recovery timing and delivery results. **GUI** (dashboard, tray) and **CLI**. **Linux** and **Windows** (only tray and CLI).
+Recharge AI-task continues selected **OpenAI Codex**, **Claude Code**, **Meta Muse Code**, and **OpenCode** tasks after token quota becomes available again. Choose targets, continuation messages, Codex Goal actions and per-target allowances; review quota, recovery timing and delivery results. **GUI** (dashboard, tray) and **CLI**. **Linux** and **Windows** (only tray and CLI).
 
 ## Included
 
 - One Linux `recharge-ai-task` executable for the dashboard, tray and terminal commands; closing the dashboard keeps the tray available. The graphical dashboard requires Linux GTK.
 - Windows tray application `recharge-ai-task.exe` and terminal companion `recharge-ai-task-cli.exe`, kept together in one folder.
-- Terminal wrappers that observe usage-limit messages and quota recovery, plus monitoring for selected desktop recipients and saved local Code sessions.
+- Terminal wrappers that observe usage-limit messages and quota recovery, plus monitoring for selected desktop targets and saved local Code sessions.
 - Start/stop controls, quota information, optional login startup, private local settings and activity logs.
 - Bundled Python runtime, English message catalog and Recharge artwork. No Python installation is needed for release downloads.
 - Choose a `.deb` installation package with Linux desktop menu integration or a portable version.
@@ -37,7 +37,7 @@ Windows is included in the release plan; its native build and end-to-end operati
 1. Download the package for your platform. Extract ZIP downloads; on Linux allow the portable executable to run with `chmod +x recharge-ai-task`, or install the `.deb` through your package installer.
 2. Open `recharge-ai-task` on Linux or `recharge-ai-task.exe` on Windows. Use `recharge-ai-task-cli.exe` for Windows terminal commands.
 3. Install and sign in to the provider tools you will use. Codex quota checks require the corresponding signed-in Codex CLI account; Claude Code and Muse Code use their subscription logins. Muse Code must support `muse usage --json`.
-4. On Linux, choose recipients and actions, then start monitoring. For a wrapped terminal, use `recharge-ai-task run` with the desired provider options.
+4. On Linux, choose targets and actions, then start monitoring. For a wrapped terminal, use `recharge-ai-task run` with the desired provider options.
 
 Linux supports X11 and Wayland. X11/XWayland window input needs `xdotool`; native Codex Goal recovery also needs accessibility and a clipboard manager. Native Wayland Goal controls are not supported, and Wayland trays require AppIndicator/StatusNotifier support. Desktop routing depends on provider compatibility; an uncertain send is not retried automatically.
 

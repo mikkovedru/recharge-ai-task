@@ -12,7 +12,7 @@ A same-process GTK socket test does not reproduce this manager-process gap. `tes
 
 ## Relaunch repair
 
-`recharge-ai-task --tray` requests `restore-tray` from an existing controller. Normal and Settings launches also request repair before opening their views. The GTK backend replaces only its plug and restarts the refresh source, including when GLib already removed the old source. XApp refreshes its visibility and icon. No watch worker, CLI job, recipient, allowance or prompt is reset. A status poll remains read-only with respect to the tray surface.
+`recharge-ai-task --tray` requests `restore-tray` from an existing controller. Normal and Settings launches also request repair before opening their views. The GTK backend replaces only its plug and restarts the refresh source, including when GLib already removed the old source. XApp refreshes its visibility and icon. No watch worker, CLI job, target, allowance or prompt is reset. A status poll remains read-only with respect to the tray surface.
 
 ## Physical pixel allocation
 

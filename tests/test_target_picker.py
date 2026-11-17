@@ -57,7 +57,7 @@ def check():
     if window.busy or window.runtime_busy or window.quota_busy or window.discovery_busy:
         return True
     try:
-        # Sorting an action moves rows during toggles. Recipient identity and
+        # Sorting an action moves rows during toggles. Target identity and
         # both saved actions must still refer to the clicked chat.
         window.table_layout.sort("id", True)
         assert window.filtered[0][4] == "beta"
@@ -277,7 +277,7 @@ def check():
         window.search.set_text("blocked")
         window.filtered.refilter()
         assert len(window.filtered) == 1
-        # Selected recipients remain visible when discovery no longer finds them.
+        # Selected targets remain visible when discovery no longer finds them.
         target_ui.discover_targets = lambda: Inventory([alpha])
         window.search.set_text("beta")
         window.filtered.refilter()
@@ -344,7 +344,7 @@ def check():
         assert "Restart the tray" in window.status.latest_text
         assert "start-watch" not in commands
         runtime["per_target_signals"] = True
-        # Blank text is valid for Goal-only recipients, and invalid for Prompt.
+        # Blank text is valid for Goal-only targets, and invalid for Prompt.
         window._toggle(None, path_for("alpha"), "send_prompt")
         window.signal_buffer.set_text(" ")
         window.send()
@@ -404,7 +404,7 @@ def check():
         idle()
         assert window.watch_label.get_text() == "Off"
         assert "watch-off" in window.monitoring_card.get_style_context().list_classes()
-        # Deselecting the last action removes that recipient on disk immediately.
+        # Deselecting the last action removes that target on disk immediately.
         window._toggle(None, path_for("beta"), "send_goal")
         assert {t.id for t in AppConfig.load().targets()} == {"alpha"}
         window._toggle(None, path_for("beta"), "send_goal")
