@@ -1,8 +1,12 @@
 # Recharge AI-task
 
-Continue selected AI tasks after their usage limits are reset. Recharge AI-task supports **OpenAI Codex**, **Claude Code** and **Meta (Facebook) Muse Code**, plus **Google Gemini CLI**, **Google Antigravity CLI** and **OpenCode** in wrapped interactive terminals, through a Linux dashboard, a system tray, and terminal commands. Version **1.0** · [MIT license](LICENSE).
+Are you an ordinary poor peasant and a target of 5h limits of cheaper AI plans? Are you tired of fighting against this limit, running to your computer at specific time (even setting an alarm and purposefully waking up) just to restart a long-running task? Do you have resets expiring soon and you want to push the current quota limits to their limited limits?  Use **Recharge AI-task** program to automatically reset tasks according to your token quota limits.
 
-![Recharge AI-task main screen](docs/assets/2026-11-09_Screenshot_Recharge-AI-task_Main-screen.png)
+Do you have a specific work plan and want to send goal continuation signals and custom messages to different tasks? Do you want to limit how much those signals are being sent, so you have some tokens left for the rest of the week? Do you want to do all that across different AI providers? **Recharge AI-task** is a user-friendly program for demanding AI users, made for you; for GUI mouse-clickers and CLI automation-wizards.
+
+Continue selected AI tasks (by resuming goals and sending custom messages) after their quota usage limits are reset. Recharge AI-task supports **OpenAI Codex**, **Claude Code**, **Meta (Facebook) Muse Code**, **Google Gemini CLI**, **Google Antigravity CLI** and **OpenCode** in wrapped interactive terminals. Linux (dashboard, a system tray, and CLI terminal commands) and Windows (tray, CLI). User-friendly. Portable, `.deb`, `.AppImage` (incl `.zsync` delta files for updates).
+
+![Recharge AI-task main screen](docs/assets/2026-11-17_Screenshot_Recharge-AI-task_Main-screen.png)
 
 The Linux dashboard brings local chats, selected targets, recovery actions, provider quota and activity logs into one window. Each target can have its own message, signal limits and recovery plan.
 
@@ -92,6 +96,14 @@ The GUI was tested on **Linux Mint 22.3 “Zena” Cinnamon**, the [latest stabl
 
 Settings and logs are local, normally under `~/.recharge-ai-task/` (Windows: `%USERPROFILE%\.recharge-ai-task\`). `RECHARGE_AI_TASK_CONFIG_DIR` selects an isolated profile. Existing settings from the original project are imported on first launch without deleting the originals.
 
+## Limitations
+
+1. Windows (tray, CLI) requires more testing.
+
+2. Not all AI providers were extensively tested.
+
+If you encounter problems, please fix and make a PR. Let's make this program complete!
+
 ## More information
 
 - [GitHub repository and source](https://github.com/mikkovedru/recharge-ai-task)
@@ -111,4 +123,14 @@ Google/OpenCode provider tabs also show live Recharge-wrapped terminal sessions,
 
 ## AppImage installation and updates
 
-The AppImage build includes `gh-releases-zsync` update information and a matching `.AppImage.zsync` delta control file. [Gear Lever](https://gearlever.mijorus.it/docs/overview/) is recommended for graphical installation, menu integration and update management; [AM/AppMan](https://github.com/ivan-hc/AM) is the CLI alternative. See the [AppImage release and update requirements](doc/requirements/2026-11-17_appimage-release.md) for build commands, the Linux baseline, manager setup and the paired-publication process. Online updates require the matching assets in a public GitHub release.
+AppImage format is really cool. Download an application, make it executable, and run! No need to install. No system libraries or system preferences are altered. No need to fight dependencies, everything needed is in one nifty file, running on all common Linux distributions.
+
+- [Gear Lever](https://gearlever.mijorus.it/docs/overview/) is recommended for graphical installation, menu integration and update management; 
+- [AM/AppMan](https://github.com/ivan-hc/AM) is the CLI alternative.
+- Alternatively you can use:
+  - [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) to integrate AppImages your application launcher with one click, and manage, update and remove them from there.
+  - [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate) to update your AppImages in a decentral way using information embedded in the AppImage itself; no central repository is involved. A Rust implementation can be found [here](https://github.com/pkgforge-dev/AppImageUpdate).
+
+The AppImage build includes `gh-releases-zsync` update information and a matching `.AppImage.zsync` delta control file. 
+
+See the [AppImage release and update requirements](doc/requirements/2026-11-17_appimage-release.md) for build commands, the Linux baseline, manager setup and the paired-publication process. Online updates require the matching assets in a public GitHub release.
