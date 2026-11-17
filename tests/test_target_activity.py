@@ -76,7 +76,7 @@ assert [r[4] for r in window.filtered] == ["b", "a", "window"]
 column = window.table_layout.columns["last_active_at"][0]
 assert column.get_visible() and column not in window.technical_columns
 assert column.get_sort_indicator() and column.get_sort_order() == Gtk.SortType.DESCENDING
-assert window.filtered[0][14] == datetime.fromtimestamp(b.last_active_at).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+assert window.filtered[0][14] == datetime.fromtimestamp(b.last_active_at).astimezone().strftime("%Y-%m-%d, %H:%M:%S")
 assert window.filtered[2][14] == "Unknown"
 # Displayed seconds match, while underlying milliseconds still sort correctly.
 assert window.filtered[0][14] == window.filtered[1][14]

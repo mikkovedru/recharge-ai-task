@@ -5,7 +5,7 @@ import sys
 import pytest
 
 
-@pytest.mark.skipif(os.environ.get("RECHARGE_AI_TASK_GUI_TESTS") != "1", reason="Requires an active Cinnamon panel")
+@pytest.mark.skipif(os.environ.get("RECHARGE_AI_TASK_CINNAMON_TESTS") != "1", reason="Requires an active Cinnamon panel")
 def test_real_cinnamon_icon():
     env = dict(os.environ)
     env.pop("PYSTRAY_BACKEND", None)
@@ -53,7 +53,7 @@ assert not errors, errors
     assert "CRITICAL" not in result.stderr, result.stderr
 
 
-@pytest.mark.skipif(os.environ.get("RECHARGE_AI_TASK_GUI_TESTS") != "1", reason="Requires an active Cinnamon panel")
+@pytest.mark.skipif(os.environ.get("RECHARGE_AI_TASK_CINNAMON_TESTS") != "1", reason="Requires an active Cinnamon panel")
 def test_double_click_toggles_shared_dashboard_and_close_keeps_tray():
     env = dict(os.environ)
     env.pop("PYSTRAY_BACKEND", None)

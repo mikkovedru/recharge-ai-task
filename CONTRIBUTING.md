@@ -35,6 +35,12 @@ pytest tests/ -v
 | Linux tray | `pip install "recharge-ai-task[tray]"` |
 | Linux desktop mode | `sudo apt install xdotool` (X11 only) |
 
+## Native desktop tests
+
+The ordinary `pytest tests/ -v` run includes portable tests and skips opt-in desktop sessions. For GTK/X11 checks, install the native dependencies from [RELEASE.md](RELEASE.md) plus `at-spi2-core`, `notification-daemon`, `xvfb`, `dbus-x11`, `openbox` and `xclip`, then follow the isolated display setup in [.github/workflows/ci.yml](.github/workflows/ci.yml). Run with `RECHARGE_AI_TASK_GUI_TESTS=1`; pytest gives each test a temporary Recharge configuration. A standalone helper must also set `RECHARGE_AI_TASK_CONFIG_DIR` explicitly to avoid touching personal settings.
+
+The two real Cinnamon panel checks require a working Cinnamon session and the separate `RECHARGE_AI_TASK_CINNAMON_TESTS=1` opt-in. Openbox/Xvfb cannot establish Cinnamon tray behavior. Mint-X texture checks run only where that theme is installed; Ubuntu still checks Adwaita light/dark. Native Wayland checks use `RECHARGE_AI_TASK_WAYLAND_TESTS=1` and Weston. See the [CI portability and desktop investigation](doc/investigations/2026-11-17_github-actions-platform-and-desktop-failures.md) for the environment requirements and platform-specific fixture boundaries.
+
 ## Pull requests
 
 1. Keep changes focused; match existing style.

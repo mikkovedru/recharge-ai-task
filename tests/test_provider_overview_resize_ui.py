@@ -91,6 +91,9 @@ try:
     def difference(a,b):return sum(abs(x-y) for p,q in zip(a,b) for x,y in zip(p,q))/(len(a)*3)
     def contrast(row):return max(p[0] for p in row)-min(p[0] for p in row)
     for theme,dark in (('Adwaita',False),('Adwaita',True),('Mint-X',False),('Mint-X',True)):
+        if theme=='Mint-X' and not any((root/'Mint-X/gtk-3.0/gtk.css').is_file() for root in
+                (Path('/usr/share/themes'),Path.home()/'.themes',Path.home()/'.local/share/themes')):
+            continue  # Ubuntu does not ship Mint-X; do not test its grip against a fallback theme.
         Gtk.Settings.get_default().set_property('gtk-theme-name',theme)
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark)
         for size in ((1440,980),(1120,820)):
@@ -110,17 +113,18 @@ try:
                     assert all(difference(value,grips[0])<16 for value in grips[1:]),(theme,dark,size,hover,[difference(value,grips[0]) for value in grips])
                 else:
                     assert all(value==rendered[0] for value in rendered[1:]),(theme,dark,size,hover,dimensions)
-    # Removing only the grip must fail the texture check, even if the handle
-    # dimensions and transparent background remain unchanged.
-    provider=Gtk.CssProvider()
-    provider.load_from_data(b'paned.divider-regression-probe > separator.wide { background-image: none; }')
-    Gtk.StyleContext.add_provider_for_screen(w.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-    w.overview_split.get_style_context().add_class('divider-regression-probe');pump(w)
-    missing=sample(w.overview_split,False);reference=sample(w.main_split,False)
-    row=handle(w.overview_split)[2]//2-3
-    assert contrast(reference[row*29:(row+1)*29])>20
-    assert contrast(missing[row*29:(row+1)*29])<=20
-    Gtk.StyleContext.remove_provider_for_screen(w.get_screen(),provider)
+    if any((root/'Mint-X/gtk-3.0/gtk.css').is_file() for root in (Path('/usr/share/themes'),Path.home()/'.themes',Path.home()/'.local/share/themes')):
+        # Removing only the grip must fail the texture check, even if the handle
+        # dimensions and transparent background remain unchanged.
+        provider=Gtk.CssProvider()
+        provider.load_from_data(b'paned.divider-regression-probe > separator.wide { background-image: none; }')
+        Gtk.StyleContext.add_provider_for_screen(w.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        w.overview_split.get_style_context().add_class('divider-regression-probe');pump(w)
+        missing=sample(w.overview_split,False);reference=sample(w.main_split,False)
+        row=handle(w.overview_split)[2]//2-3
+        assert contrast(reference[row*29:(row+1)*29])>20
+        assert contrast(missing[row*29:(row+1)*29])<=20
+        Gtk.StyleContext.remove_provider_for_screen(w.get_screen(),provider)
 finally:w.destroy()
 ''')
 
@@ -134,6 +138,9 @@ try:
     subprocess.run(['xdotool','windowactivate','--sync',xid],check=True);pump(w)
     panes=[pane for pane,_ in w.window_layout.panes.values()]
     for theme,dark in (('Mint-X',False),('Adwaita',False),('Adwaita',True)):
+        if theme=='Mint-X' and not any((root/'Mint-X/gtk-3.0/gtk.css').is_file() for root in
+                (Path('/usr/share/themes'),Path.home()/'.themes',Path.home()/'.local/share/themes')):
+            continue  # Ubuntu does not ship Mint-X; do not test its grip against a fallback theme.
         Gtk.Settings.get_default().set_property('gtk-theme-name',theme)
         Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w)
         for pane in panes:

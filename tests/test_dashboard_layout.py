@@ -71,7 +71,8 @@ try:
         w.resize(width,820);pump(w)
         assert pos(p.default_controls)[0] >= pos(editor)[0]+editor.get_allocated_width()
         assert pos(w.send_button)[0] < pos(p.reset_all)[0]
-        assert [child.get_child() for child in p.actions.get_children()] == [w.send_button,p.reset_all,p.reset]
+        assert [child.get_child() for child in p.actions.get_children()][1:] == [p.reset_all,p.reset]
+        assert w.send_button.get_parent().get_parent() is p.actions.get_children()[0]
         for button in (w.send_button,p.reset_all,p.reset):
             x,y=button.translate_coordinates(p.editor_scroller,0,0)
             assert x>=0 and x+button.get_allocated_width()<=p.editor_scroller.get_allocated_width()

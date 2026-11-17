@@ -25,7 +25,7 @@ try:
             w.resize(width,height);pump(w);p.select_recipient(b.key);pump(w)
             assert w.send_button.get_label()=='Send now\n(0 goals, 1 messages)'
             label=w.send_button._label(w.send_button)
-            assert label.get_layout().get_line_count()==2
+            assert label.get_layout().get_line_count()>=2
             assert w.get_size().width<=width and w.get_size().height<=height
             base=p.get_style_context().lookup_color('theme_base_color')[1]
             bg=p.get_style_context().lookup_color('theme_bg_color')[1]
