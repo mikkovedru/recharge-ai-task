@@ -1025,7 +1025,8 @@ class TargetPicker(Gtk.Window):
             except OSError:
                 if command not in ("start-watch", "start-watch-blocked", "start-cli"):
                     raise
-                args = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, "-m", "recharge_ai_task.tray"]
+                from .desktop_launch import desktop_command
+                args = desktop_command() if getattr(sys, "frozen", False) else [sys.executable, "-m", "recharge_ai_task.tray"]
                 subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
                 deadline = time.monotonic() + 10
                 while True:

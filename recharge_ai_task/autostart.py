@@ -15,6 +15,11 @@ _DESKTOP_NAME = "recharge-ai-task-tray.desktop"
 
 
 def _tray_command() -> str:
+    from .launch_path import appimage_path
+    image = appimage_path()
+    if image:
+        from .desktop_integration import _exec_value
+        return _exec_value([str(image), "--tray", "--autostart"])
     if getattr(sys, "frozen", False):
         return f'"{Path(sys.executable).resolve()}" --tray --autostart'
     return f'"{sys.executable}" -m recharge_ai_task.gui --tray --autostart'
@@ -28,7 +33,8 @@ def _windows_startup_dir() -> Path:
 
 
 def _linux_autostart_dir() -> Path:
-    return Path.home() / ".config" / "autostart"
+    root = os.environ.get("XDG_CONFIG_HOME")
+    return (Path(root) if root else Path.home()/".config") / "autostart"
 
 
 def autostart_target() -> Path | None:

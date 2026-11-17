@@ -40,10 +40,14 @@ jobs:
         run: |
           PYTHON=.build-venv/bin/python bash scripts/build_linux.sh
           PYTHON=.build-venv/bin/python bash scripts/package_release.sh
+          .build-venv/bin/python scripts/build_appimage.py
       - name: Verify packages
         run: |
           cd dist/release
           sha256sum -c SHA256SUMS-linux.txt
+          sha256sum -c SHA256SUMS-appimage.txt
+          ./*.AppImage --appimage-extract-and-run --version
+          ./*.AppImage --appimage-updateinformation
           dpkg-deb --info *.deb
           mkdir extracted
           unzip -q '*.zip' -d extracted
@@ -61,6 +65,9 @@ jobs:
           path: |
             dist/release/*.zip
             dist/release/*.deb
+            dist/release/*.AppImage
+            dist/release/*.AppImage.zsync
+            dist/release/SHA256SUMS-appimage.txt
             dist/release/recharge-ai-task
             dist/release/SHA256SUMS-linux.txt
 
@@ -131,6 +138,9 @@ jobs:
           files: |
             artifacts/linux-x86_64/*.zip
             artifacts/linux-x86_64/*.deb
+            artifacts/linux-x86_64/*.AppImage
+            artifacts/linux-x86_64/*.AppImage.zsync
+            artifacts/linux-x86_64/SHA256SUMS-appimage.txt
             artifacts/linux-x86_64/recharge-ai-task
             artifacts/linux-x86_64/SHA256SUMS-linux.txt
             artifacts/windows-x86_64/*.zip

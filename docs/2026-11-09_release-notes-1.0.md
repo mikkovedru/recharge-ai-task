@@ -15,7 +15,7 @@ Recharge AI-task continues selected **OpenAI Codex**, **Claude Code**, **Meta Mu
 - Terminal wrappers that observe usage-limit messages and quota recovery, plus monitoring for selected desktop targets and saved local Code sessions.
 - Start/stop controls, quota information, optional login startup, private local settings and activity logs.
 - Bundled Python runtime, English message catalog and Recharge artwork. No Python installation is needed for release downloads.
-- Choose a `.deb` installation package with Linux desktop menu integration or a portable version.
+- Choose a `.deb` installation package with Linux desktop menu integration or a portable ZIP/raw executable or updateable AppImage.
 
 ## Downloads
 
@@ -23,8 +23,9 @@ Recharge AI-task continues selected **OpenAI Codex**, **Claude Code**, **Meta Mu
 |---|---|
 | Linux x86_64 portable | `recharge-ai-task-1.0-linux-x86_64.zip` or raw `recharge-ai-task` |
 | Debian / Ubuntu / Mint amd64 | `recharge-ai-task_1.0_amd64.deb` |
+| Linux x86_64 AppImage | `recharge-ai-task-1.0-x86_64.AppImage` and matching `.AppImage.zsync` |
 | Windows x86_64 | `recharge-ai-task-1.0-windows-x86_64.zip` |
-| Checksums | `SHA256SUMS-linux.txt` and `SHA256SUMS-windows.txt` |
+| Checksums | `SHA256SUMS-linux.txt`, `SHA256SUMS-windows.txt` and `SHA256SUMS-appimage.txt` |
 
 The Linux build targets compatible Debian / Ubuntu / Mint systems with glibc 2.39 or later (Ubuntu 24.04 / Mint 22 baseline).
 
@@ -34,7 +35,7 @@ Windows is included in the release plan; its native build and end-to-end operati
 
 ## Start
 
-1. Download the package for your platform. Extract ZIP downloads; on Linux allow the portable executable to run with `chmod +x recharge-ai-task`, or install the `.deb` through your package installer.
+1. Download the package for your platform. Extract ZIP downloads; on Linux allow the portable executable to run with `chmod +x recharge-ai-task`, or install the `.deb` through your package installer. For AppImage, allow execution and open the `.AppImage` file; keep its matching `.zsync` available for updates. See [AppImage installation and updates](../README.md#appimage-installation-and-updates).
 2. Open `recharge-ai-task` on Linux or `recharge-ai-task.exe` on Windows. Use `recharge-ai-task-cli.exe` for Windows terminal commands.
 3. Install and sign in to the provider tools you will use. Codex quota checks require the corresponding signed-in Codex CLI account; Claude Code and Muse Code use their subscription logins. Muse Code must support `muse usage --json`.
 4. On Linux, choose targets and actions, then start monitoring. For a wrapped terminal, use `recharge-ai-task run` with the desired provider options.

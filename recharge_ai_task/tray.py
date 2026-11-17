@@ -48,6 +48,10 @@ def _setup_logging() -> None:
 
 
 def _resolve_cli_exe() -> list[str]:
+    from .launch_path import appimage_path
+    image = appimage_path()
+    if image:
+        return [str(image)]
     if getattr(sys, "frozen", False):
         cli = (Path(sys.executable).with_name("recharge-ai-task-cli.exe")
                if sys.platform == "win32" else Path(sys.executable))

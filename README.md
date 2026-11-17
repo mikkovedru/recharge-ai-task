@@ -14,6 +14,7 @@ Get the files from [GitHub Releases](https://github.com/mikkovedru/recharge-ai-t
 |---|---|---|
 | Linux x86_64 (Debian with glibc 2.39+ / Ubuntu 24.04 / Mint 22 family) | Linux ZIP or raw `recharge-ai-task` | Extract if needed, allow execution, then open `recharge-ai-task` |
 | Debian / Ubuntu / Mint x86_64 (glibc 2.39+) | `recharge-ai-task_1.0_amd64.deb` | Install with `sudo apt install ./recharge-ai-task_1.0_amd64.deb`, then open from the app menu |
+| Linux x86_64 AppImage (glibc 2.39+) | `recharge-ai-task-1.0-x86_64.AppImage`; `.AppImage.zsync` for updates | Allow execution, then open the AppImage; see [installation and updates](#appimage-installation-and-updates) |
 | Windows x86_64 | Windows ZIP | Extract both executables together and open `recharge-ai-task.exe` for the tray |
 
 For a portable Linux download:
@@ -22,6 +23,15 @@ For a portable Linux download:
 chmod +x recharge-ai-task
 ./recharge-ai-task
 ```
+
+For the AppImage:
+
+```bash
+chmod +x recharge-ai-task-1.0-x86_64.AppImage
+./recharge-ai-task-1.0-x86_64.AppImage
+```
+
+If FUSE mounting is unavailable, use `./recharge-ai-task-1.0-x86_64.AppImage --appimage-extract-and-run`. Verify the download with `sha256sum -c SHA256SUMS-appimage.txt`. The `.zsync` file is update metadata for the matching AppImage, not a program to launch. Restart Recharge after updating.
 
 Linux has **one executable** for the dashboard, tray and terminal commands. The portable app registers a per-user menu entry and file icon when opened; keep the executable at a permanent location. You can refresh integration with `./recharge-ai-task --install-desktop`. No installer script is needed. Closing the dashboard leaves the tray running; use **Exit** in the tray to quit. `./recharge-ai-task --tray` starts without opening the dashboard.
 
@@ -98,3 +108,7 @@ Based on [Autumnpoem/codex-autocontinue](https://github.com/Autumnpoem/codex-aut
 Recharge AI-task adds the multi-provider dashboard, target controls, quota monitoring, tray integration and verified delivery paths maintained here.
 
 Google/OpenCode provider tabs also show live Recharge-wrapped terminal sessions, detected reset/grace countdowns, native-retry ownership, typing cancellations and sent continuation counts. These are process-scoped observations, not account-wide quota measurements; unwrapped terminals and direct IDE chat delivery are outside this view.
+
+## AppImage installation and updates
+
+The AppImage build includes `gh-releases-zsync` update information and a matching `.AppImage.zsync` delta control file. [Gear Lever](https://gearlever.mijorus.it/docs/overview/) is recommended for graphical installation, menu integration and update management; [AM/AppMan](https://github.com/ivan-hc/AM) is the CLI alternative. See the [AppImage release and update requirements](doc/requirements/2026-11-17_appimage-release.md) for build commands, the Linux baseline, manager setup and the paired-publication process. Online updates require the matching assets in a public GitHub release.

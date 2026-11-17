@@ -29,6 +29,10 @@ class InstallResult:
 
 
 def _commands():
+    from .launch_path import appimage_path
+    image = appimage_path()
+    if image:
+        return {"recharge-ai-task": [str(image)]}
     if getattr(sys, "frozen", False):
         folder = Path(sys.executable).resolve().parent
         return {name: [str(folder / name)] for name in _NAMES if (folder / name).is_file()}
@@ -189,6 +193,9 @@ def install_main():
 def install_on_launch():
     """Refresh frozen-release integration without affecting isolated test profiles."""
     from ._migration import environment_value
+    from .launch_path import appimage_path
+    if appimage_path():
+        return  # AppImage managers own their launchers; explicit installation remains available.
     if not getattr(sys, "frozen", False) or environment_value("CONFIG_DIR") or not Path(sys.executable).is_file():
         return
     import logging

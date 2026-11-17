@@ -10,14 +10,16 @@ Current version: **1.0**, tag **v1.0**. Source metadata and the logo tooltip use
 | Raw Linux `recharge-ai-task` | Ship | Same executable, convenient for updates; `chmod +x` after download |
 | `.deb` (amd64) | Ship; owner tested installation/use | Debian / Ubuntu / Mint with glibc 2.39+; Ubuntu 24.04 / Mint 22 baseline; installs binary, menu entry, icon and license |
 | Windows ZIP | Ship; owner approved proceeding | Tray EXE plus console CLI EXE; no Linux GTK dashboard |
-| AppImage | Excluded by owner | Still needs an older-system build baseline and tests of GTK, tray, accessibility and host CLI discovery; not a universal compatibility fix |
+| AppImage (x86_64) | Build with update metadata and paired zsync | Same glibc 2.39 baseline; publish both files and verify GTK/tray/accessibility and host CLI discovery |
 | Flatpak | Excluded by owner | Host processes, provider files/sockets and accessibility need deliberate permissions and host execution adapters; a sandbox wrapper alone would break features |
 | `.tar.gz`, RPM, ARM, macOS, Windows installer | Omit for 1.0 | ZIP covers portable downloads; additional targets need their own builds and validation |
 | SHA-256 manifests | Ship | Detect corrupt/incorrect downloads; not a code signature |
 
 The Linux executable handles dashboard, tray and terminal commands itself. Windows keeps `recharge-ai-task.exe` (windowed tray) and `recharge-ai-task-cli.exe` (console). The tray launches its console companion for interactive actions. PyInstaller's windowed build has no standard streams; a single Windows EXE would need a tested console attachment/hiding design. See [PyInstaller's standard-stream limitations](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#sys-stdin-sys-stdout-and-sys-stderr-in-noconsole-windowed-applications-windows-only).
 
-AppImage must be built against a compatible oldest target system; see its [build guidance](https://docs.appimage.org/reference/best-practices.html). Flatpak restricts host access; see its [sandbox permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html). Neither format is built or advertised as available in 1.0.
+AppImage must be built against a compatible oldest target system; see its [build guidance](https://docs.appimage.org/reference/best-practices.html). Flatpak restricts host access; see its [sandbox permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html). AppImage packaging and update requirements are now specified in the [AppImage release contract](doc/requirements/2026-11-17_appimage-release.md). Flatpak remains excluded.
+
+For AppImage, publish the `.AppImage`, `.AppImage.zsync` and `SHA256SUMS-appimage.txt` together; [embedded update information, tool pins, manager recommendations and publication checks](doc/requirements/2026-11-17_appimage-release.md) are mandatory parts of that release.
 
 ## GitHub setup and first release
 
@@ -51,6 +53,7 @@ sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo \
 .venv/bin/python -m pip install -e ".[tray,dev]"
 PYTHON=.venv/bin/python bash scripts/build_linux.sh
 PYTHON=.venv/bin/python bash scripts/package_release.sh
+.venv/bin/python scripts/build_appimage.py
 ```
 
 Windows x86_64, from PowerShell in the source checkout:
@@ -75,7 +78,7 @@ The GUI was tested on Linux Mint 22.3 “Zena” Cinnamon, the [latest stable Li
 - On Windows 10/11 x86_64, launch the tray, configuration, quota, a real pywinpty wrapped provider, target selection and desktop delivery, start/stop and autostart. CLI unit tests use a fake PTY and do not establish these native behaviors.
 - Verify downloaded checksums with `sha256sum -c SHA256SUMS-linux.txt` on Linux or `Get-FileHash` on Windows. GitHub workflow artifacts wrap release files in another ZIP; use the inner release packages for these checks.
 
-The `.deb` is a direct-download package, not an apt repository with automatic updates. Portable menu/autostart registrations refer to the executable's location; refresh them after moving the file. No Flatpak, AppImage, macOS or ARM support is claimed. Record failed native checks before publishing; do not treat a build or mocked test suite as proof of end-to-end provider compatibility.
+The `.deb` is a direct-download package, not an apt repository with automatic updates. Portable menu/autostart registrations refer to the executable's location; refresh them after moving the file. AppImage retains the same tested Linux baseline; Flatpak, macOS and ARM remain unsupported. Record failed native checks before publishing; do not treat a build or mocked test suite as proof of end-to-end provider compatibility.
 
 ## Package name, descriptions, logo and repository
 

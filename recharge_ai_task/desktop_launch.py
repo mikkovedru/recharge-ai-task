@@ -8,6 +8,10 @@ from pathlib import Path
 
 
 def desktop_command() -> list[str]:
+    from .launch_path import appimage_path
+    image = appimage_path()
+    if image:
+        return [str(image)]
     if getattr(sys, "frozen", False):
         if sys.platform == "linux":
             return [str(Path(sys.executable).resolve())]
