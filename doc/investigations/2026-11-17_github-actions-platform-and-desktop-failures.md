@@ -46,3 +46,7 @@ A separate host-desktop overview resize/persistence check failed twice because a
 The Linux executable, portable ZIP, Debian package and AppImage/zsync pair were rebuilt. Both SHA-256 manifests passed; the raw executable and extraction-and-run AppImage returned the expected version.
 
 Windows 3.10/3.12 runtime tests, native Windows packaging and a successful remote release workflow remain unverified locally. Do not describe a source fix, a Linux run or a mock as a successful Windows release. Push authorization and the resulting GitHub run are separate steps.
+
+## Follow-up
+
+The [2026-11-18 Windows terminal-recovery investigation](2026-11-18_windows-terminal-recovery-blocking-reads.md) covers the next workflow logs. The prior Windows failures above are absent; only three real PTY recovery tests remain failing on each Windows version. That follow-up documents the blocking-read adapter mismatch and the subsequent repair.

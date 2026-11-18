@@ -45,20 +45,33 @@ def test_actual_wrapper_publishes_wait_and_continuation_then_cleans_up(tmp_path,
     receipt=tmp_path/'receipt'
     binary.write_text(f'#!{sys.executable}\nimport time\nfrom pathlib import Path\nprint("Usage limit reached; try again in 2 seconds",flush=True)\nmessage=input()\nPath({str(receipt)!r}).write_text(message)\ntime.sleep(1)\n')
     binary.chmod(0o755)
-    process=subprocess.Popen([sys.executable,'-m','recharge_ai_task.cli','run','--provider',provider,'--'+provider,sys.executable,'--grace','0','--',str(binary)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    stdout=tmp_path/'wrapper.stdout'
+    stderr=tmp_path/'wrapper.stderr'
+    with stdout.open('w',encoding='utf-8') as out, stderr.open('w',encoding='utf-8') as err:
+        process=subprocess.Popen([sys.executable,'-m','recharge_ai_task.cli','run','--provider',provider,'--'+provider,sys.executable,'--grace','0','--',str(binary)],stdout=out,stderr=err,text=True)
     seen=set()
     deadline=time.monotonic()+8
     try:
         while time.monotonic()<deadline and process.poll() is None:
             for record in live_observations(provider):seen.add(record['state'])
             time.sleep(.02)
-        out,err=process.communicate(timeout=2)
-        assert process.returncode==0,err
+        process.wait(timeout=2)
+        assert process.returncode==0,stderr.read_text(encoding='utf-8',errors='replace')
         assert {'waiting','continued'}<=seen,seen
         assert receipt.read_text()=='Continue'
         assert not live_observations(provider)
+    except subprocess.TimeoutExpired:
+        pytest.fail('Terminal recovery timed out. States: '+repr(seen)+'\nstdout:\n'+
+                    stdout.read_text(encoding='utf-8',errors='replace')+'\nstderr:\n'+
+                    stderr.read_text(encoding='utf-8',errors='replace'))
     finally:
-        if process.poll() is None:process.kill();process.wait()
+        if process.poll() is None:
+            # A timed-out wrapper can leave a provider holding inherited handles.
+            if sys.platform=='win32':
+                subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],capture_output=True,timeout=5)
+            else:
+                process.kill()
+            process.wait(timeout=5)
 
 
 def test_unavailable_observation_store_does_not_interrupt_terminal(monkeypatch):

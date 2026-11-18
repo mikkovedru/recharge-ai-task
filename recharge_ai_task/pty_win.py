@@ -2,26 +2,24 @@
 
 from __future__ import annotations
 
-import msvcrt
 import sys
 import time
+from typing import TYPE_CHECKING
 
-try:
+if TYPE_CHECKING:
     from winpty.ptyprocess import PtyProcess
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "Windows PTY support requires pywinpty. Install with: pip install 'recharge-ai-task[windows]'"
-    ) from exc
 
 from .pty_backend import StopEvent
+from .pty_reader import PollingReader
 
 
 class WinPtySession:
     def __init__(self, proc: PtyProcess) -> None:
         self._proc = proc
+        self._reader = PollingReader(proc.read)
 
     def read(self, size: int) -> str:
-        return self._proc.read(size)
+        return self._reader.read(size)
 
     def write(self, data: str) -> None:
         self._proc.write(data)
@@ -35,6 +33,12 @@ class WinPtySession:
 
 
 def spawn_pty(argv: list[str], dimensions: tuple[int, int]) -> WinPtySession:
+    try:
+        from winpty.ptyprocess import PtyProcess
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            "Windows PTY support requires pywinpty. Install with: pip install 'recharge-ai-task[windows]'"
+        ) from exc
     rows, cols = dimensions
     proc = PtyProcess.spawn(argv, dimensions=(rows, cols))
     return WinPtySession(proc)
@@ -50,6 +54,7 @@ def _stdin_is_tty() -> bool:
 def forward_stdin(pty: WinPtySession, stop: StopEvent) -> None:
     if not _stdin_is_tty():
         return
+    import msvcrt
     while not stop.is_set() and pty.isalive():
         if not msvcrt.kbhit():
             time.sleep(0.05)
