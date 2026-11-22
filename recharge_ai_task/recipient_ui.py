@@ -1,7 +1,7 @@
 """Editable target plans, effective messages and continuation allowances."""
 from dataclasses import replace
 from uuid import uuid4
-from gi.repository import GLib, Gtk, Pango
+from gi.repository import Gdk, GLib, Gtk, Pango
 
 from .provider_ui import ProviderButtons, PROVIDER_NAMES
 from .wrapping_button import WrappingButton
@@ -33,9 +33,10 @@ class LimitControl(Gtk.Box):
         if off:
             self.get_style_context().add_class("action-limit")
         self.inherit = inherit
+        self.number_before_edit = None
         self.number = Gtk.SpinButton.new_with_range(0, 1000000, 1)
         self.number.set_value(1)
-        self.number.set_tooltip_text("Maximum actions since the last count reset; 0 disables the action (Up / Down)")
+        self.number.set_tooltip_text("Maximum actions since the last count reset. A limit of 0 disables the action (Enter to save, Esc to cancel, Up / Down to step)")
         self.number.set_width_chars(4)
         self.unlimited = Gtk.ToggleButton(label="∞")
         self.limited = Gtk.ToggleButton(label="1")
@@ -67,10 +68,21 @@ class LimitControl(Gtk.Box):
         content.pack_start(self.number, False, False, 0)
         self.number_popover.add(content)
         self.number.connect("value-changed", lambda *_: self._changed(changed))
+        self.number.connect("activate", lambda *_: self.number_popover.popdown())
+        self.number_popover.connect("key-press-event", self._number_key_pressed)
+        self.number_popover.connect("closed", self._commit_number, changed)
         self.set_value(None)
 
     def _mode(self, kind, changed):
         if self.updating:
+            return
+        if kind == "limited":
+            self._select(self.mode)
+            self.number_before_edit = self.number.get_value_as_int()
+            self.number.set_text(str(self.number_before_edit))
+            self.number_popover.show_all()
+            self.number_popover.popup()
+            self.number.grab_focus()
             return
         if self.enabled():
             self.last_value = self.value()
@@ -78,12 +90,35 @@ class LimitControl(Gtk.Box):
         if kind != "off":
             self.last_value = self.value()
         changed()
-        if kind == "limited":
-            self.number_popover.show_all()
-            self.number_popover.popup()
-            self.number.grab_focus()
+
+    def _number_key_pressed(self, _popover, event):
+        if event.keyval != Gdk.KEY_Escape:
+            return False
+        self.dismiss_number_editor()
+        return True
+
+    def _commit_number(self, _popover, changed):
+        if self.number_before_edit is None:
+            return
+        previous = self.value()
+        was_limited = self.mode == "limited"
+        self.number.update()
+        self.number_before_edit = None
+        self._select("limited")
+        self.last_value = self.value()
+        self.limited.set_label(str(self.last_value))
+        if not was_limited or self.last_value != previous:
+            changed()
+
+    def dismiss_number_editor(self):
+        if self.number_before_edit is None:
+            return
+        self.number.set_value(self.number_before_edit)
+        self.number_before_edit = None
+        self.number_popover.popdown()
 
     def _select(self, kind):
+        self.mode = kind
         self.updating = True
         try:
             for key, button in self.modes.items():
@@ -92,9 +127,10 @@ class LimitControl(Gtk.Box):
             self.updating = False
 
     def _changed(self, changed):
+        if self.updating or self.number_before_edit is not None:
+            return
         self.limited.set_label(str(self.number.get_value_as_int()))
-        if not self.updating:
-            changed()
+        changed()
 
     def enabled(self):
         return not hasattr(self, "off") or not self.off.get_active()
@@ -113,21 +149,27 @@ class LimitControl(Gtk.Box):
         if not self.enabled():
             return self.last_value
         if self.limited.get_active():
+            if self.number_before_edit is not None:
+                return self.number_before_edit
             return self.number.get_value_as_int()
         return -1 if self.inherit and self.unlimited.get_active() else None
 
     def set_value(self, value, *, enabled=True):
+        kind = "default" if value is None and self.inherit else "unlimited" if value is None or value == -1 else "limited"
+        mode = kind if enabled else "off"
+        if self.number_before_edit is not None:
+            if (mode, value) == (self.mode, self.last_value):
+                return
+            self.dismiss_number_editor()
         self.updating = True
         try:
             self.last_value = value
-            kind = "default" if value is None and self.inherit else "unlimited" if value is None or value == -1 else "limited"
-            if kind == "limited":
+            if kind == "limited" and self.number.get_value() != value:
                 self.number.set_value(value)
             self.limited.set_label(str(self.number.get_value_as_int()))
-            for key, button in self.modes.items():
-                button.set_active(key == (kind if enabled else "off"))
         finally:
             self.updating = False
+        self._select(mode)
 
 
 def wrapped(text=""):
@@ -148,6 +190,7 @@ class RecipientPanel(Gtk.Box):
         self.selected_keys = set()
         self.selected_key = None
         self.preview_key = None
+        self.editor_target_key = None
         self.selection_initialized = False
         self.ledger_error = ""
         self.ledger = None
@@ -702,6 +745,11 @@ class RecipientPanel(Gtk.Box):
 
     def _load_editor(self, config):
         target = self.picker.selected.get(self.selected_key)
+        editor_key = target.key if target is not None else None
+        if editor_key != self.editor_target_key:
+            self.prompt_limit.dismiss_number_editor()
+            self.goal_limit.dismiss_number_editor()
+            self.editor_target_key = editor_key
         preview = target is None and self.preview_key in self.picker.targets
         if preview:
             target = self.picker.targets[self.preview_key]

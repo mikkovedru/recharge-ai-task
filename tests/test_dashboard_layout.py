@@ -77,10 +77,11 @@ try:
             x,y=button.translate_coordinates(p.editor_scroller,0,0)
             assert x>=0 and x+button.get_allocated_width()<=p.editor_scroller.get_allocated_width()
     p.default_prompt.limited.clicked();pump(w)
-    assert p.default_prompt.limited.get_active() and not p.default_prompt.unlimited.get_active()
     p.default_prompt.number.set_value(4)
+    assert AppConfig.load().prompt_limit is None and p.default_prompt.unlimited.get_active()
+    p.default_prompt.number_popover.popdown();pump(w)
+    assert p.default_prompt.limited.get_active() and not p.default_prompt.unlimited.get_active()
     assert AppConfig.load().prompt_limit==4 and p.default_prompt.limited.get_label()=='4'
-    p.default_prompt.number_popover.popdown()
     p.default_prompt.unlimited.clicked();pump(w)
     assert p.default_prompt.unlimited.get_active() and not p.default_prompt.limited.get_active()
     assert AppConfig.load().prompt_limit is None
