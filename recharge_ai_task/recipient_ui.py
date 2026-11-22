@@ -195,6 +195,7 @@ class RecipientPanel(Gtk.Box):
         self.ledger_error = ""
         self.ledger = None
         self.last_usage = {}
+        self._rendered = None
         self.status_css = Gtk.CssProvider()
         self.status_palette = None
         self.get_style_context().add_provider_for_screen(self.get_screen(), self.status_css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+1)
@@ -397,15 +398,24 @@ class RecipientPanel(Gtk.Box):
             self.ledger_error = error
             return {}
 
-    def render(self):
-        config = AppConfig.load()
+    def render(self, config=None, *, only_changed=False):
+        config = config if config is not None else AppConfig.load()
         self.view_config = config
         usage = self._usage()
+        selected = self.picker.selected
+        target = selected.get(self.selected_key) or self.picker.targets.get(self.preview_key)
+        message_status = self.picker.custom_message_status(target, saved_config=config)
+        prompt_text = self.picker._prompt_text()
+        state = (selected.copy(), self.picker.preferences.copy(), self.selected_key, self.preview_key, target,
+                 prompt_text, config.prompt_limit, config.goal_limit, usage, self.ledger_error,
+                 self.status_palette, message_status)
+        if only_changed and state == self._rendered:
+            return
+        self._rendered = None
         self.updating = True
         try:
             self.default_prompt.set_value(config.prompt_limit)
             self.default_goal.set_value(config.goal_limit)
-            selected = self.picker.selected
             for key in list(self.rows):
                 if key not in selected:
                     self.list.remove(self.rows.pop(key))
@@ -497,7 +507,7 @@ class RecipientPanel(Gtk.Box):
                     context.add_class("target-actions-off")
                 pl, gl = effective_limit(target, "prompt", config), effective_limit(target, "goal", config)
                 pu, gu = usage.get((key, "prompt"), Usage()), usage.get((key, "goal"), Usage())
-                message = effective_message(target, self.picker._prompt_text())
+                message = effective_message(target, prompt_text)
                 row.automatic = recipient_readiness(target, config, usage, message, ledger_error=self.ledger_error)
                 row.manual = recipient_readiness(target, config, usage, message, manual=True, ledger_error=self.ledger_error)
                 row.health_ok = target_health(target, row.automatic)
@@ -551,7 +561,8 @@ class RecipientPanel(Gtk.Box):
                 self.list.select_row(self.rows[key])
             self.empty_label.set_visible(not self._visible_rows())
             self._load_editor(config)
-            self._update_reset_help()
+            self._update_reset_help(config, usage)
+            self._rendered = state
         finally:
             self.updating = False
 
@@ -573,8 +584,9 @@ class RecipientPanel(Gtk.Box):
             self.selected_keys = {current.key} if current else set()
             self.list.select_row(current)
             self.empty_label.set_visible(not rows)
-            self._load_editor(AppConfig.load())
-            self._update_reset_help()
+            config = AppConfig.load()
+            self._load_editor(config)
+            self._update_reset_help(config)
         finally:
             self.updating = False
 
@@ -682,15 +694,17 @@ class RecipientPanel(Gtk.Box):
     def refresh_health(self):
         runtime = self.picker.runtime or {}
         watch_on = bool(runtime.get("desktop_watch"))
+        changed = False
         for key, row in self.rows.items():
             target = self.picker.selected.get(key)
             provider_error = self.picker.quota_errors.get(target.provider, "") if target else ""
             healthy = row.health_ok and not provider_error and not runtime.get("watch_error")
-            row.health_level = ("success" if watch_on else "warning") if healthy else "error"
-            context = row.get_style_context()
-            for level in ("success", "warning", "error"):
-                context.remove_class("health-" + level)
-            context.add_class("health-" + row.health_level)
+            level = ("success" if watch_on else "warning") if healthy else "error"
+            if getattr(row, "health_level", None) != level:
+                row.health_level = level
+                row.queue_draw()
+                changed = True
+        return changed
 
     def _draw_health_border(self, row, cr):
         draw_target_border(cr, self, 0, row.get_allocated_height(), getattr(row, "health_level", "error"), inset=3)
@@ -711,8 +725,9 @@ class RecipientPanel(Gtk.Box):
         try:
             if self.selected_key is not None:
                 self.picker.highlight_recipient(self.selected_key)
-            self._load_editor(AppConfig.load())
-            self._update_reset_help()
+            config = AppConfig.load()
+            self._load_editor(config)
+            self._update_reset_help(config)
         finally:
             self.updating = False
 
@@ -738,8 +753,9 @@ class RecipientPanel(Gtk.Box):
                     self.picker.highlight_recipient(row.key)
                 y = row.translate_coordinates(self.list, 0, 0)[1]
                 self.list_scroller.get_vadjustment().clamp_page(y, y + row.get_allocated_height())
-            self._load_editor(AppConfig.load())
-            self._update_reset_help()
+            config = AppConfig.load()
+            self._load_editor(config)
+            self._update_reset_help(config)
         finally:
             self.updating = False
 
@@ -763,7 +779,7 @@ class RecipientPanel(Gtk.Box):
             if child is not self.actions:
                 child.set_sensitive(target is not None and not preview)
         self.reset.set_sensitive(bool(self.selected_keys))
-        state, detail = self.picker.custom_message_status(target)
+        state, detail = self.picker.custom_message_status(target, saved_config=config)
         icon = {"saved": "emblem-ok-symbolic", "pending": "emblem-synchronizing-symbolic",
                 "error": "dialog-error-symbolic", "unknown": "dialog-warning-symbolic", "default": "dialog-information-symbolic", "paused": "media-playback-pause-symbolic"}[state]
         level = "success" if state == "saved" else "error" if state == "error" else "passive" if state == "paused" else "warning"
@@ -893,28 +909,28 @@ class RecipientPanel(Gtk.Box):
         label.set_max_width_chars(16)
         label.set_justify(Gtk.Justification.CENTER)
 
-    def _update_reset_help(self):
+    def _update_reset_help(self, config, usage=None):
+        if usage is None:
+            usage = self._usage()
         count = len(self.selected_keys)
         self.reset.set_label(f"Reset current targets' ({count}) counts" if count > 1 else "Reset current target's counts")
         self._wrap_reset_label(self.reset)
         for button, all_recipients in ((self.reset, False), (self.reset_all, True)):
-            button.set_tooltip_text(self._reset_help(all_recipients))
+            button.set_tooltip_text(self._reset_help(all_recipients, config, usage))
             if not getattr(button, "reset_help_connected", False):
                 button.connect("query-tooltip", self._reset_tooltip, all_recipients)
                 button.reset_help_connected = True
 
     def _reset_tooltip(self, _button, _x, _y, _keyboard, tooltip, all_recipients):
-        tooltip.set_text(self._reset_help(all_recipients))
+        tooltip.set_text(self._reset_help(all_recipients, AppConfig.load(), self._usage()))
         return True
 
-    def _reset_help(self, all_recipients):
-        usage = self._usage()
+    def _reset_help(self, all_recipients, config, usage):
         if self.ledger_error:
             return self.ledger_error + " Counts cannot be previewed or reset safely until the ledger is readable."
         keys = ({key for key, _action in usage} | set(self.picker.selected)) if all_recipients else set(self.selected_keys)
         scope = "all stored targets (including hidden and removed targets with counts)" if all_recipients else "the selected targets only"
         lines = [f"Reset Goal and Message counts for {len(keys)} target(s): {scope}."]
-        config = AppConfig.load()
         for key in sorted(keys):
             target = self.picker.preferences.get(key)
             name = " · ".join(part for part in (target.project_name, target.title, target.instance) if part) if target else key

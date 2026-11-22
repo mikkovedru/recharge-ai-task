@@ -88,6 +88,7 @@ class TargetPicker(Gtk.Window):
         self._apply_notice = ""
         self._save_notice = ""
         self._runtime_notice = None
+        self._watch_border_on = None
         self._inventory_notice = ""
         self._quota_notice = ""
         self.saved_signature = self._signature(self.config.targets(), self.config.continue_prompt) if config_path().exists() else None
@@ -573,22 +574,25 @@ class TargetPicker(Gtk.Window):
 
     def _draw_target_borders(self, table, cr):
         panel = getattr(self, "recipient_panel", None)
-        if panel is None:
+        visible = table.get_visible_range()
+        if panel is None or not visible:
             return False
-        for row in self.filtered:
+        start, end = (path.get_indices()[0] for path in visible)
+        x, header = table.convert_bin_window_to_widget_coords(0, 0)
+        for index in range(start, end + 1):
+            row = self.filtered[index]
             chosen = panel.rows.get(row[17])
             if not row[18] or chosen is None:
                 continue
             bounds = table.get_background_area(row.path, None)
-            _x, y = table.convert_bin_window_to_widget_coords(0, bounds.y)
-            header = table.convert_bin_window_to_widget_coords(0, 0)[1]
+            y = bounds.y + header
             top = max(header, y + 2)
             bottom = y + bounds.height - 2
             if bottom > top:
                 # The stripe belongs to the row, so it scrolls with its padded cells.
                 cr.save()
-                cr.translate(_x, 0)
-                draw_target_border(cr, table, top, bottom-top, chosen.health_level)
+                cr.translate(x, 0)
+                draw_target_border(cr, table, top, bottom-top, getattr(chosen, "health_level", "error"))
                 cr.restore()
         return False
 
@@ -740,13 +744,13 @@ class TargetPicker(Gtk.Window):
     def dirty(self):
         return self._signature(self.selected.values(), self._prompt_text()) != self.saved_signature
 
-    def _summary(self):
+    def _summary(self, saved=None, *, only_changed=False):
         consumed_settings = None
         for key, target in list(self.preferences.items()):
             normalized = clear_consumed_custom_prompt(target)
             if normalized != target:
                 if consumed_settings is None:
-                    consumed_settings = AppConfig.load()
+                    consumed_settings = saved if saved is not None else AppConfig.load()
                 latest = next((t for t in consumed_settings.all_targets() if t.key == key), None)
                 if latest is not None:
                     normalized = replace(normalized, custom_prompt=latest.custom_prompt, custom_prompt_once=latest.custom_prompt_once)
@@ -775,8 +779,8 @@ class TargetPicker(Gtk.Window):
             self._message(message, "error" if self.autosave_error else "warning")
         self._save_notice = message
         if hasattr(self, "recipient_panel"):
-            self.recipient_panel.render()
-        self._render_runtime()
+            self.recipient_panel.render(saved, only_changed=only_changed)
+        self._render_runtime(saved)
 
     def _destroy(self, *_):
         self.window_layout.close()
@@ -830,7 +834,7 @@ class TargetPicker(Gtk.Window):
                     self.apply_error = ""
                     self._apply_notice = ""
                 self.saved_signature = self._signature(saved.chosen_targets(), saved.continue_prompt) if config_path().exists() else None
-                self._summary()
+                self._summary(saved, only_changed=True)
             except Exception as exc:
                 self._message(f"Could not read settings: {exc}", "error")
                 self._render_runtime()
@@ -858,7 +862,7 @@ class TargetPicker(Gtk.Window):
                 self.status.write(text, level, timestamp=event["created"], attributed=True)
         self._background(lambda: ActivityLog().read(self.activity_cursor), show)
 
-    def _render_runtime(self):
+    def _render_runtime(self, saved=None):
         if not hasattr(self, "watch_button"):
             return
         runtime = self.runtime or {}
@@ -868,7 +872,8 @@ class TargetPicker(Gtk.Window):
         requested = runtime.get("watch_requested", alive)
         pending_settings = False
         try:
-            pending_settings = alive and runtime.get("watch_settings") != tray_control.watch_settings(AppConfig.load())
+            pending_settings = alive and runtime.get("watch_settings") != tray_control.watch_settings(
+                saved if saved is not None else AppConfig.load())
         except Exception:
             pass
         state = ("Error" if runtime.get("watch_error") else "Stopping" if stopping and not restarting else
@@ -901,9 +906,11 @@ class TargetPicker(Gtk.Window):
         self.send_button.set_sensitive(not self.busy and any(any(t.signal_actions()) for t in self.selected.values()))
         self._update_recipient_transfer()
         if hasattr(self, "recipient_panel"):
-            self.recipient_panel.refresh_health()
-            self.recipient_frame.queue_draw()
-            self.table.queue_draw()
+            if self.recipient_panel.refresh_health():
+                self.table.queue_draw()
+            if self._watch_border_on != alive:
+                self._watch_border_on = alive
+                self.recipient_frame.queue_draw()
         notice = runtime.get("watch_error") or runtime.get("watch_pause_reason") or ""
         if notice and notice != self._runtime_notice and hasattr(self, "status"):
             self._message(notice, "error" if runtime.get("watch_error") else "warning" if runtime.get("watch_pause_reason") else "normal")
@@ -1113,7 +1120,7 @@ class TargetPicker(Gtk.Window):
     def _sync_quota_display(self):
         self.quota = self.quotas.get("codex") or next(iter(self.quotas.values()), None)
         self.quota_error = "; ".join(f"{PROVIDER_LABELS.get(p, p)}: {e}" for p, e in self.quota_errors.items() if e)
-        self.render_quota()
+        self._render_quota_summary()
 
     def refresh_quota(self, *_):
         if self.closed:
@@ -1147,6 +1154,7 @@ class TargetPicker(Gtk.Window):
                     self.quota_updated = time.time()
                     self.quota_checked[provider] = self.quota_updated
             self._sync_quota_display()
+            self._render_overview()
         def read_quota():
             from concurrent.futures import ThreadPoolExecutor
             config = AppConfig.load()
@@ -1172,6 +1180,10 @@ class TargetPicker(Gtk.Window):
         if self.closed:
             return False
         self._render_overview()
+        self._render_quota_summary()
+        return True
+
+    def _render_quota_summary(self):
         colors = status_colors(self.quota_label)
         def window_text(window):
             label = window.label or ("5-hour" if window.window_duration_mins == 300 else "Weekly" if window.window_duration_mins == 10080 else f"{window.window_duration_mins}-minute")
@@ -1206,7 +1218,6 @@ class TargetPicker(Gtk.Window):
                 lines[-1] += " · Additional credits are available" + (" · backend still reports a limit" if quota.rate_limit_reached or quota.spend_control_reached else " · usable without waiting for the included window reset")
         lines.append(f"Quota checked per provider · automatic refresh every {self.quota_interval}s" + (" · Latest refresh failed · see provider tabs" if self.quota_error else ""))
         update_selectable_markup(self.quota_label, "\n".join(lines))
-        return True
 
     def _apply_provider_config(self, config):
         self.config = config
@@ -1546,11 +1557,11 @@ class TargetPicker(Gtk.Window):
             self.poll_runtime()
         self._background(lambda: tray_control.request("reload"), applied)
 
-    def custom_message_status(self, target):
+    def custom_message_status(self, target, *, saved_config=None):
         if target is not None:
             reason = "Send messages is Off for this target." if not target.signal_actions()[0] else ""
             try:
-                limit = effective_limit(target, "prompt", self.config)
+                limit = effective_limit(target, "prompt", self.config if saved_config is None else saved_config)
                 if not reason and limit == 0:
                     reason = "The effective message limit is 0."
             except ValueError:
@@ -1565,7 +1576,8 @@ class TargetPicker(Gtk.Window):
         if target is None or target.custom_prompt is None:
             return "default", "Default message is in use; no custom message is enabled."
         try:
-            saved = next((t for t in AppConfig.load().all_targets() if t.key == target.key), None)
+            config = AppConfig.load() if saved_config is None else saved_config
+            saved = next((t for t in config.all_targets() if t.key == target.key), None)
         except Exception as exc:
             return "error", "Could not verify the saved custom message: " + str(exc)
         if saved is None or (saved.custom_prompt, saved.custom_prompt_once) != (target.custom_prompt, target.custom_prompt_once):
@@ -1580,7 +1592,7 @@ class TargetPicker(Gtk.Window):
         error = runtime.get("watch_error") or runtime.get("watch_pause_reason")
         if error:
             return "error", "Saved, but Desktop watch needs attention: " + error
-        if runtime.get("restarting") or runtime.get("desktop_watch") and runtime.get("watch_settings") != tray_control.watch_settings(self.config):
+        if runtime.get("restarting") or runtime.get("desktop_watch") and runtime.get("watch_settings") != tray_control.watch_settings(config):
             return "pending", "Saved; waiting for Desktop watch to apply these settings."
         return "saved", ("Saved and applied by Desktop watch." if runtime.get("desktop_watch") else
                          "Saved. Desktop watch is off; the custom message is ready for Send now or the next watch start.")

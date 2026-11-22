@@ -34,6 +34,41 @@ finally:w.destroy()
 ''')
 
 
+def test_runtime_poll_only_rebuilds_recipients_when_data_changes():
+    run_gui(r'''
+from recharge_ai_task.delivery_policy import UsageLedger
+w=make();p=w.recipient_panel
+try:
+    w.poll_runtime();pump(w)
+    renders=[]
+    readiness=p._readiness
+    def render_row(row):
+        renders.append(row.key)
+        readiness(row)
+    p._readiness=render_row
+    row=p.rows[b.key]
+    for monitoring,level in ((False,'warning'),(True,'success')):
+        runtime.update(desktop_watch=monitoring, watch_settings=tray_control.watch_settings(AppConfig.load()))
+        w.poll_runtime();pump(w)
+        assert not renders
+        assert row.health_level==level
+    ledger=UsageLedger()
+    ledger.finish(ledger.reserve(b.key,'prompt',None),'sent')
+    w.poll_runtime();pump(w)
+    assert b.key in renders and 'used 1 /' in row.allowance.get_text()
+    renders.clear()
+    config=AppConfig.load();config.prompt_limit=1;config.save()
+    runtime['watch_settings']=tray_control.watch_settings(config)
+    w.poll_runtime();pump(w)
+    assert b.key in renders and 'used 1 / 1' in row.allowance.get_text()
+    assert row.health_level=='error'
+    renders.clear()
+    w.poll_runtime();pump(w)
+    assert not renders
+finally:w.destroy()
+''')
+
+
 def test_usage_custom_preview_large_infinity_and_reset_labels():
     run_gui(r'''
 from recharge_ai_task.delivery_policy import UsageLedger
