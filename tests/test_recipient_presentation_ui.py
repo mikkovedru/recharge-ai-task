@@ -6,6 +6,34 @@ from test_monitoring_status_ui import run_gui
 pytestmark=pytest.mark.skipif(os.environ.get('RECHARGE_AI_TASK_GUI_TESTS')!='1',reason='Requires GTK')
 
 
+def test_allowance_layout_settles_with_monitoring_on_and_off():
+    run_gui(r'''
+w=make()
+try:
+    w.update_recipient(replace(w.selected[b.key], custom_prompt='Long custom message ' * 80))
+    row=w.recipient_panel.rows[b.key]
+    allocations=[]
+    row.allowance_box.connect('size-allocate', lambda *_: allocations.append(1))
+    table_allocations=[]
+    w.table.connect('size-allocate', lambda *_: table_allocations.append(1))
+    for monitoring in (False, True):
+        runtime.update(desktop_watch=monitoring, watch_settings=tray_control.watch_settings(AppConfig.load()))
+        w.poll_runtime();pump(w)
+        allocations.clear();table_allocations.clear()
+        pump(w,.65)
+        assert len(allocations) < 6, (monitoring, len(allocations))
+        assert len(table_allocations) < 6, (monitoring, len(table_allocations))
+    assert row.preview_toggle.get_visible()
+    row.preview_toggle.clicked();pump(w)
+    assert row.preview.get_visible()
+    assert 'Long custom message' not in row.allowance.get_text()
+    row.preview_toggle.clicked();pump(w)
+    assert not row.preview.get_visible()
+    assert 'Long custom message' in row.allowance.get_text()
+finally:w.destroy()
+''')
+
+
 def test_usage_custom_preview_large_infinity_and_reset_labels():
     run_gui(r'''
 from recharge_ai_task.delivery_policy import UsageLedger

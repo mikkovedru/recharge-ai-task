@@ -113,16 +113,13 @@ class TableLayout:
     def _refresh_geometry(self):
         self.geometry_timer = None
         pending, self.geometry_pending = self.geometry_pending, set()
+        # GTK can notify the same width again on allocation. Only changed
+        # header text or renderer wrap width should request another layout.
         for column in pending:
             self._header_width(column)
             for renderer in column.get_cells():
                 if isinstance(renderer, Gtk.CellRendererText):
                     self._wrap(column, None, renderer)
-        if pending:
-            # Resize notifications arrive during GTK's allocation pass. Apply
-            # wrapping once afterwards, then redraw all affected row geometry.
-            self.table.queue_resize()
-            self.table.queue_draw()
         return False
 
     def _compare(self, model, first, second, index):

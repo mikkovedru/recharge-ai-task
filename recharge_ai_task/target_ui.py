@@ -763,9 +763,11 @@ class TargetPicker(Gtk.Window):
         count = len(self.selected)
         recipients = f"{count} " + ("target" if count == 1 else "targets")
         self.summary.set_text(f"{recipients} · Send message: {prompts} · Resume goal: {goals}.")
-        self.send_button.set_label(f"Send now\n({goals} goals, {prompts} messages)")
-        self._wrap_button_label(self.send_button)
-        WrappingButton._label(self.send_button).set_max_width_chars(24)
+        send_label = f"Send now\n({goals} goals, {prompts} messages)"
+        if self.send_button.get_label() != send_label:
+            self.send_button.set_label(send_label)
+            self._wrap_button_label(self.send_button)
+            WrappingButton._label(self.send_button).set_max_width_chars(24)
         self.summary.set_line_wrap(True)
         message = ("Could not save automatically — retrying: " + self.autosave_error if self.autosave_error else
                    "Changes differ from saved settings. Edits save automatically." if self.dirty() else "")
@@ -819,7 +821,9 @@ class TargetPicker(Gtk.Window):
                     self._apply_provider_config(saved)
                 self._configure_quota_poll(saved.poll_seconds)
                 self._adopt_watch_quota()
-                if self.quota is None and not self._uses_watch_quota():
+                # Inventory may arrive before the first tray response. Start
+                # checks then, and let the quota timer schedule retries.
+                if any(provider not in self.quota_errors for provider in self.active_providers):
                     self.refresh_quota()
                 if value is not None and (not value.get("desktop_watch") and not value.get("restarting") or
                         value.get("watch_settings") == tray_control.watch_settings(saved)):
@@ -829,7 +833,7 @@ class TargetPicker(Gtk.Window):
                 self._summary()
             except Exception as exc:
                 self._message(f"Could not read settings: {exc}", "error")
-            self._render_runtime()
+                self._render_runtime()
         self._background(lambda: tray_control.request(timeout=1), show)
         return True
 
@@ -881,12 +885,17 @@ class TargetPicker(Gtk.Window):
         self.monitoring_card.set_tooltip_text(details)
         self._render_overview()
         context = self.monitoring_card.get_style_context()
-        for name in ("watch-off", "watch-on", "watch-stopping"):
-            context.remove_class(name)
-        context.add_class("watch-off" if state in {"Off", "Error", "Waiting"} else "watch-on" if state == "On" else "watch-stopping")
-        self.watch_button.set_label("Stop Desktop watch" if alive or requested else "Start Desktop watch")
-        self.watch_button.set_image(Gtk.Image.new_from_icon_name("media-playback-stop-symbolic" if alive or requested else "media-playback-start-symbolic",Gtk.IconSize.BUTTON))
-        self.watch_button.set_always_show_image(True)
+        watch_style = "watch-off" if state in {"Off", "Error", "Waiting"} else "watch-on" if state == "On" else "watch-stopping"
+        if not context.has_class(watch_style):
+            for name in ("watch-off", "watch-on", "watch-stopping"):
+                context.remove_class(name)
+            context.add_class(watch_style)
+        watch_label = "Stop Desktop watch" if alive or requested else "Start Desktop watch"
+        if self.watch_button.get_image() is None or self.watch_button.get_label() != watch_label:
+            self.watch_button.set_label(watch_label)
+            self.watch_button.set_image(Gtk.Image.new_from_icon_name(
+                "media-playback-stop-symbolic" if alive or requested else "media-playback-start-symbolic", Gtk.IconSize.BUTTON))
+            self.watch_button.set_always_show_image(True)
         self.watch_button.set_sensitive(not self.busy and not self.runtime_busy and (not stopping or restarting) and not runtime.get("cli_running", False))
         self.watch_button.set_tooltip_text("Monitor each selected target using its own provider's quota; the list filter does not change targets")
         self.send_button.set_sensitive(not self.busy and any(any(t.signal_actions()) for t in self.selected.values()))
@@ -933,10 +942,13 @@ class TargetPicker(Gtk.Window):
     def _overview_label(label, text, level, *, bold=False):
         context = label.get_style_context()
         for old in ("success", "warning", "error"):
-            context.remove_class("overview-" + old)
+            if old != level:
+                context.remove_class("overview-" + old)
         if level != "normal":
             context.add_class("overview-" + level)
-        label.set_markup(("<b>" if bold else "") + GLib.markup_escape_text(text) + ("</b>" if bold else ""))
+        markup = ("<b>" if bold else "") + GLib.markup_escape_text(text) + ("</b>" if bold else "")
+        if label.get_label() != markup:
+            label.set_markup(markup)
         label.set_tooltip_text(text)
 
     def _render_overview(self):
@@ -1084,10 +1096,6 @@ class TargetPicker(Gtk.Window):
         provider = (self.runtime.get("watch_settings") or {}).get("provider", "codex")
         return {provider: progress}
 
-    def _uses_watch_quota(self):
-        observations = self._watch_observations()
-        return bool(observations and set(self.active_providers or ("codex",)) <= set(observations))
-
     def _adopt_watch_quota(self):
         for provider, progress in self._watch_observations().items():
             error = str(progress.get("quota_error") or "")
@@ -1131,6 +1139,7 @@ class TargetPicker(Gtk.Window):
             self.quota_button.set_label("Check quota now")
             if error:
                 self._message("Quota refresh failed: " + error, "error")
+                self.quota_errors.update(dict.fromkeys(providers, error))
             for provider, (quota, problem) in (value or {}).items():
                 self.quota_errors[provider] = problem or ""
                 if quota is not None:
@@ -1282,9 +1291,8 @@ class TargetPicker(Gtk.Window):
             iterator = rows.get(key)
             if iterator is None:
                 self.store.append(values)
-            else:
+            elif list(self.store[iterator]) != values:
                 self.store.set(iterator, list(range(len(values))), values)
-        self.filtered.refilter()
         self.provider_notices = {p: "\n".join(rows) for p, rows in inventory.provider_warnings.items()}
         scoped_warnings = {warning for rows in inventory.provider_warnings.values() for warning in rows}
         warnings = "\n".join(w for w in inventory.warnings if w not in scoped_warnings)

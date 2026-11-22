@@ -17,7 +17,8 @@ try:
     limited=replace(a,id='limited',title='Limit reached',goal_limit=0)
     paused=replace(a,id='paused',title='Paused Goal',goal_status='Paused')
     for target in (running,passive,limited,paused):w.update_recipient(target)
-    w._apply_inventory(Inventory([running,passive,limited,paused]));pump(w)
+    target_ui.discover_targets=lambda:Inventory([running,passive,limited,paused])
+    w._apply_inventory(target_ui.discover_targets());pump(w)
     def padded_first():
         first=next(column for column in w.table.get_columns() if column.get_visible())
         for column in w.table.get_columns():
@@ -36,6 +37,9 @@ try:
                 runtime.update(desktop_watch=watch,watch_settings=tray_control.watch_settings(AppConfig.load()))
                 w.runtime=dict(runtime);w._summary();pump(w)
                 p.select_recipient(b.key);pump(w)
+                # The stripe scrolls with the first column. Show that column
+                # before sampling its pixels at the left edge of the table.
+                w.table.get_hadjustment().set_value(0);pump(w)
                 assert p.heading.get_text()=='Targets & actions'
                 expected={a.key:'success' if watch else 'warning',b.key:'error',limited.key:'error',paused.key:'error'}
                 for key,level in expected.items():

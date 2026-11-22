@@ -6,6 +6,29 @@ from test_monitoring_status_ui import run_gui
 pytestmark=pytest.mark.skipif(os.environ.get('RECHARGE_AI_TASK_GUI_TESTS')!='1',reason='Requires GTK')
 
 
+def test_unavailable_quota_retries_on_quota_timer_or_manual_request():
+    run_gui(r'''
+calls=[]
+def fetch(_):
+    calls.append(1)
+    raise RuntimeError('Provider unavailable')
+target_ui.fetch_quota=fetch
+config=AppConfig.load();config.poll_seconds=60;config.save()
+w=make()
+try:
+    assert len(calls)==1
+    for monitoring in (False, True):
+        runtime.update(desktop_watch=monitoring, watch_settings=tray_control.watch_settings(AppConfig.load()))
+        w.poll_runtime();pump(w)
+        assert len(calls)==1
+    w._periodic_quota_refresh();pump(w)
+    assert len(calls)==2
+    w.quota_button.clicked();pump(w)
+    assert len(calls)==3
+finally:w.destroy()
+''')
+
+
 def test_configured_quota_timer_and_worker_snapshot_use_same_schedule():
     run_gui(r'''
 from dataclasses import asdict

@@ -485,13 +485,15 @@ class RecipientPanel(Gtk.Box):
                         details.append(caption)
                 row.allowance_collapsed = "\n".join(allowances)
                 row.allowance_expanded = "\n".join(expanded_allowances)
-                row.allowance.set_markup(row.allowance_expanded if row.expanded else row.allowance_collapsed)
                 row.allowance_box.set_no_show_all(True)
                 row.allowance_box.set_visible(bool(allowances))
                 row.allowance.set_tooltip_text("\n".join(details))
                 row.custom_message = message if prompt and target.custom_prompt is not None else ""
                 if not row.custom_message:
                     row.expanded = False
+                markup = row.allowance_expanded if row.expanded else row.allowance_collapsed
+                if row.allowance.get_label() != markup:
+                    row.allowance.set_markup(markup)
                 row.preview.set_text(row.custom_message)
                 self._queue_preview(row.allowance_box, None, row)
             if self.selected_key not in selected:
@@ -541,26 +543,34 @@ class RecipientPanel(Gtk.Box):
             row.preview_pending = False
             if row.get_parent() is None:
                 return False
-            row.allowance.set_markup(row.allowance_expanded if row.expanded else row.allowance_collapsed)
+            # Keep caption writes out of size allocation. A label write queues
+            # another allocation, which would schedule this callback again.
+            if not row.custom_message:
+                row.preview.hide()
+                row.preview_toggle.hide()
+                return False
             layout = row.allowance.get_layout().copy()
             # Measure the collapsed caption even while its message is expanded.
             layout.set_markup(row.allowance_collapsed, -1)
             layout.set_width(-1)
             layout.set_ellipsize(Pango.EllipsizeMode.NONE)
             overflow = layout.get_pixel_size()[0] > row.allowance_box.get_allocated_width()
-            row.preview.set_visible(bool(row.custom_message and row.expanded))
-            row.preview_toggle.set_visible(bool(row.custom_message and (row.expanded or overflow)))
-            caption = "Shorten custom message" if row.expanded else "Expand custom message"
+            row.preview.set_visible(row.expanded)
+            row.preview_toggle.set_visible(row.expanded or overflow)
             icon = "pan-up-symbolic" if row.expanded else "pan-down-symbolic"
             if row.preview_toggle.get_image().get_icon_name()[0] != icon:
                 row.preview_toggle.get_image().set_from_icon_name(icon, Gtk.IconSize.MENU)
-            row.preview_toggle.get_accessible().set_name(caption)
-            row.preview_toggle.set_tooltip_text(("Hide the full custom message" if row.expanded else "Show the full custom message") + " (Enter / Space)")
+            caption = "Shorten custom message" if row.expanded else "Expand custom message"
+            accessible = row.preview_toggle.get_accessible()
+            if accessible.get_name() != caption:
+                accessible.set_name(caption)
+                row.preview_toggle.set_tooltip_text(("Hide the full custom message" if row.expanded else "Show the full custom message") + " (Enter / Space)")
             return False
         GLib.idle_add(update)
 
     def _toggle_preview(self, _button, row):
         row.expanded = not row.expanded
+        row.allowance.set_markup(row.allowance_expanded if row.expanded else row.allowance_collapsed)
         self._queue_preview(row.allowance_box, None, row)
 
     @staticmethod
