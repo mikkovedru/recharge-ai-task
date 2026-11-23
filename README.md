@@ -1,14 +1,47 @@
 # Recharge AI-task
 
-Are you an ordinary poor peasant and a target of 5h limits of cheaper AI plans? Are you tired of fighting against this limit, running to your computer at specific time (even setting an alarm and purposefully waking up) just to restart a long-running task? Do you have resets expiring soon and you want to push the current quota limits to their limited limits?  Use **Recharge AI-task** program to automatically reset tasks according to your token quota limits.
+Continue selected AI tasks (by resuming goals and sending custom messages) after their quota usage limits are reset.
 
-Do you have a specific work plan and want to send goal continuation signals and custom messages to different tasks? Do you want to limit how much those signals are being sent, so you have some tokens left for the rest of the week? Do you want to do all that across different AI providers? **Recharge AI-task** is a user-friendly program for demanding AI users, made for you; for GUI mouse-clickers and CLI automation-wizards.
+- Are you an ordinary poor peasant and a target of 5h limits of cheaper AI plans? 
+- Are you tired of fighting against this limit, running to your computer at specific time (even setting an alarm and purposefully waking up) just to restart a long-running task?
+- Do you have resets expiring soon and you want to push the current quota limits to their limited limits?
 
-Continue selected AI tasks (by resuming goals and sending custom messages) after their quota usage limits are reset. Recharge AI-task supports **OpenAI Codex**, **Claude Code**, **Meta (Facebook) Muse Code**, **Google Gemini CLI**, **Google Antigravity CLI** and **OpenCode** in wrapped interactive terminals. Linux (dashboard, a system tray, and CLI terminal commands) and Windows (tray, CLI). User-friendly. Portable, `.deb`, `.AppImage` (incl `.zsync` delta files for updates).
+Use **Recharge AI-task** program to automatically reset tasks according to your token quota limits.
+
+- Do you have a specific work plan and want to send goal continuation signals and custom messages to different tasks?
+- Do you want to limit how much those signals are being sent, so you have some tokens left for the rest of the week? 
+- Do you want to do all that across different AI providers?
+
+**Recharge AI-task** is a user-friendly program for demanding AI users, made for both GUI mouse-clickers and for CLI automation-wizards.
+
+-  Supported AI providers:
+  1. **OpenAI Codex**,
+  2. **Claude Code**
+  3. **Meta (Facebook) Muse Code**
+  4. **Google Gemini CLI**, **Google Antigravity CLI**
+  5. **OpenCode** (a lot of different AI models, Qwen, Deepseek, etc) in wrapped interactive terminals.
+
+- **Linux** (dashboard, a system tray, and CLI terminal commands) and **Windows** (tray, CLI).
+- User-friendly. Power-user-friendly. Polished.
+- Portable exec, `.deb`, `.AppImage` (incl `.zsync` delta files for updates), `.flatpak`, Windows `.exe`.
 
 ![Recharge AI-task main screen](docs/assets/2026-11-17_Screenshot_Recharge-AI-task_Main-screen.png)
 
 The Linux dashboard brings local chats, selected targets, recovery actions, provider quota and activity logs into one window. Each target can have its own message, signal limits and recovery plan.
+
+## Goals vs. messages
+
+**TLDR: Goal is sent first. Message is sent after a delay, no matter how Goal sending went.**
+
+If only one is selected, it will be sent if it (hover mouse over the goal and message headers for more info).
+
+![Recharge AI-task task status hover info](docs/assets/2026-11-23_Screenshot_Task-status-example.png)
+
+If both Goal and Message type are selected, the algorithm is:
+
+1. First the Goal continuation signal is sent.
+2. It will be attempted for a few minutes.
+3. After success, failure, time-out or uncertainty, the Message signal is sent.
 
 ## Download and start
 

@@ -6,7 +6,7 @@
 
 First public release of [Recharge AI-task](https://github.com/mikkovedru/recharge-ai-task), licensed under the [MIT license](../LICENSE).
 
-Recharge AI-task continues selected **OpenAI Codex**, **Claude Code**, **Meta Muse Code**, and **OpenCode** tasks after token quota becomes available again. Choose targets, continuation messages, Codex Goal actions and per-target allowances; review quota, recovery timing and delivery results. **GUI** (dashboard, tray) and **CLI**. **Linux** and **Windows** (only tray and CLI).
+Continue selected AI tasks (by resuming goals and sending custom messages) after their quota usage limits are reset. Recharge AI-task supports **OpenAI Codex**, **Claude Code**, **Meta (Facebook) Muse Code**, **Google Gemini CLI**, **Google Antigravity CLI** and **OpenCode** in wrapped interactive terminals. Linux (dashboard, a system tray, and CLI terminal commands) and Windows (tray, CLI). User-friendly. Portable, `.deb`, `.AppImage` (incl `.zsync` delta files for updates).
 
 ## Included
 
