@@ -33,7 +33,7 @@ from . import tray_control
 from .target_delivery import open_target, send_signals
 from .targets import Target
 from .providers import discover_all_targets as discover_targets, check_providers, installation_details
-from .status_display import BORDER_COLORS, COLORS, overview_status_level, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
+from .status_display import BORDER_COLORS, COLORS, message_status_label, overview_status_level, status_colors, status_level, status_tooltip, watch_check_summary, send_schedule_summary
 from .status_log import StatusLog
 from .status_help import StatusInfoButton, status_markup
 from .status_display import draw_target_border
@@ -258,7 +258,7 @@ class TargetPicker(Gtk.Window):
             column.set_cell_data_func(checkbox, self._action_cell, index)
             self.table.append_column(column)
             self.table_layout.register(action, column, index, 95)
-        columns = [("Provider", 16, 90), ("Title", 1, 230), ("Last active", 14, 155), ("Task status", 10, 125), ("Goal status", 11, 105),
+        columns = [("Provider", 16, 90), ("Title", 1, 230), ("Last active", 14, 155), ("Message status", 10, 125), ("Goal status", 11, 105),
                    ("Project", 13, 130), ("Project path", 8, 300), ("Kind", 2, 80), ("Availability", 3, 160), ("ID", 4, 295),
                    ("PID", 5, 95), ("Instance", 6, 260), ("Deep link", 7, 400),
                    ("Desktop client", 9, 300)]
@@ -277,7 +277,7 @@ class TargetPicker(Gtk.Window):
                 info = StatusInfoButton(goal=index == 11)
                 self.status_info[index] = info
                 header.pack_start(info,False,False,0)
-                header.set_tooltip_text("Hover over ⓘ for status recovery rules; focus the icon and press Enter for details.")
+                header.set_tooltip_text(info.get_tooltip_text())
                 header.show_all()
                 column.set_widget(header)
             column.set_resizable(True)
@@ -310,7 +310,7 @@ class TargetPicker(Gtk.Window):
         box.pack_start(scroller, True, True, 0)
         self.inventory_status = Gtk.Label(label="Discovering targets…", xalign=0)
         self.inventory_status.set_line_wrap(True)
-        self.inventory_status.set_tooltip_text("Chat statuses refresh every 15 seconds. Send message sends only the message; Resume goal resumes without a prompt. Resume goal is available for chat IDs. Task state comes from Codex's live desktop owner when available; goal state also uses the saved goal database. Windows do not identify a fixed chat. Unavailable means the state could not be read.")
+        self.inventory_status.set_tooltip_text("Chat statuses refresh every 15 seconds. Send message sends only the message; Resume goal resumes without a prompt. Resume goal is available for chat IDs. Message status shows current turn activity when the provider exposes it. Goal status also uses saved Goal state. Windows do not identify a fixed chat. Unavailable means the state could not be read.")
         self.buttons = []
         self.list_toolbar = Gtk.Box(spacing=8)
         self.refresh_button = WrappingButton(label="Check chats and statuses")
@@ -520,7 +520,7 @@ class TargetPicker(Gtk.Window):
             tooltip.set_text(f"Last active: {row[14]}\nLast chat update recorded by Codex, shown in local time.")
             table.set_tooltip_cell(tooltip, path, column, None)
             return True
-        if name in ("Task status", "Goal status"):
+        if name in ("Message status", "Goal status"):
             index = 11 if name == "Goal status" else 10
             if hasattr(tooltip,"set_markup"):
                 tooltip.set_markup(status_markup(row[index],goal=index == 11,widget=self.table))
@@ -530,7 +530,7 @@ class TargetPicker(Gtk.Window):
             return True
         membership = ("Passive target — Goal and Message are off." if row[18] and not (row[0] or row[12]) else
                       "Target — actions are enabled." if row[18] else "Not in Targets & actions.")
-        tooltip.set_text(f"{row[1]}\n{membership}\nTask: {row[10]}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}\nDouble-click or Enter to add this item to Targets & actions. Action checkboxes stay unchanged.")
+        tooltip.set_text(f"{row[1]}\n{membership}\nMessage status: {message_status_label(row[10])}\nGoal: {row[11]}\nLast active: {row[14]}\nID: {row[4]}\nPID: {row[5] or '—'}\nInstance: {row[6]}\n{row[7]}\nProject: {row[13] or '—'}\nProject path: {row[8]}\nDesktop client: {row[9]}\nDouble-click or Enter to add this item to Targets & actions. Action checkboxes stay unchanged.")
         table.set_tooltip_row(tooltip, path)
         return True
 
@@ -541,7 +541,7 @@ class TargetPicker(Gtk.Window):
         level = status_level(text, goal=index == 11)
         # Reset all reusable renderer state, including after a colored row.
         renderer.set_property("foreground-set", False)
-        markup = GLib.markup_escape_text(text)
+        markup = GLib.markup_escape_text(message_status_label(text) if index == 10 else text)
         if index == 11 and text == "Complete":
             markup = f"<span foreground='{colors['success']}'>✓</span> " + markup
         elif level != "normal":
@@ -656,7 +656,8 @@ class TargetPicker(Gtk.Window):
         if provider != "all" and model[iterator][16] != provider:
             return False
         query = self.search.get_text().casefold()
-        return not query or query in " ".join(str(model[iterator][i]) for i in (*range(1, 12), 13, 14, 16)).casefold()
+        return (not query or query in message_status_label(model[iterator][10]).casefold()
+                or query in " ".join(str(model[iterator][i]) for i in (*range(1, 12), 13, 14, 16)).casefold())
 
     def _provider_filter_changed(self, *_):
         self.filtered.refilter()

@@ -42,7 +42,7 @@ def test_package_allowlist_permissions_and_checksums(tmp_path, platform, names):
     outputs = module.package(platform, tmp_path, deb=False)
     with zipfile.ZipFile(outputs[0]) as z:
         assert set(z.namelist()) == {*names, "LICENSE", "README.md", "RELEASE.md", "OPEN_SOURCE.md", "CONTRIBUTING.md",
-                                    "docs/target-selection.md", "docs/2026-11-17_windows-portable.md", module.SCREENSHOT}
+                                    "docs/target-selection.md", "docs/2026-11-17_windows-portable.md", *module.SCREENSHOTS}
         readme = z.read("README.md").decode()
         assert "](RELEASE.md)" in readme
         assert "](docs/2026-11-17_windows-portable.md)" in readme

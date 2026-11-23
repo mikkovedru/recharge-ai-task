@@ -1,7 +1,10 @@
 """Readable, keyboard-accessible continuation rules with theme-aware badges."""
 from html import escape
 from gi.repository import Gdk, GLib, Gtk
-from .status_display import GOAL_STATES, TASK_STATES, continuation_allowed, status_rows, status_colors
+from .status_display import (
+    GOAL_STATES, MESSAGE_STATUS_NOTE, continuation_allowed, message_status_rows,
+    status_rows, status_colors, status_tooltip,
+)
 
 
 def badge_colors(widget):
@@ -10,10 +13,14 @@ def badge_colors(widget):
 
 
 def status_markup(value, *, goal=False, widget=None):
+    if not goal:
+        title, status, detail = status_tooltip(value).split("\n", 2)
+        return f"<b>{escape(title)} · {escape(status)}</b>\n{escape(detail)}"
+    if value == "Usage limited":
+        value = "Stopped by quota"
     colors = badge_colors(widget) if widget is not None else ("#137333","#b3261e")
-    kind = "Goal" if goal else "Task"
-    detail = (GOAL_STATES if goal else TASK_STATES).get(value,(None,"Unrecognized status: allowed by default."))[1]
-    lines = [f"<b>{kind} statuses · {escape(value)}</b>",escape(detail)]
+    detail = GOAL_STATES.get(value,(None,"Unrecognized status: allowed by default."))[1]
+    lines = [f"<b>Goal statuses · {escape(value)}</b>",escape(detail)]
     for label,manual in (("Automatic Goal",False),("Send now Goal",True)):
         allowed = continuation_allowed(value,goal=goal,manual=manual)
         text = "✓ Continue" if allowed else "✕ Skip / unavailable"
@@ -31,9 +38,9 @@ class StatusInfoButton(Gtk.Button):
         icon.set_pixel_size(14)
         self.set_image(icon)
         self.set_always_show_image(True)
-        kind = "Goal" if goal else "Task"
-        self.get_accessible().set_name(kind + " continuation rules")
-        self.set_tooltip_text(f"Hover for {kind.lower()} status rules; open details (Enter / Space)")
+        kind = "Goal status and recovery rules" if goal else "Message status and delivery"
+        self.get_accessible().set_name(kind)
+        self.set_tooltip_text(f"{kind} (Enter / Space)")
         self.connect("clicked",lambda *_: self.open())
         self.popover = None
         self.keyboard_open = False
@@ -175,7 +182,7 @@ class StatusInfoButton(Gtk.Button):
         self.connect("destroy",lambda *_: self.popover.destroy())
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8,margin=12)
         title = Gtk.Label(xalign=0)
-        title.set_markup("<b>" + ("Goal" if self.goal else "Task") + " statuses · continuation rules</b>")
+        title.set_markup("<b>" + ("Goal status and recovery rules" if self.goal else "Message status and delivery") + "</b>")
         box.pack_start(title,False,False,0)
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
@@ -184,11 +191,14 @@ class StatusInfoButton(Gtk.Button):
         scroll.set_min_content_height(160)
         scroll.set_max_content_height(380)
         grid = Gtk.Grid(column_spacing=12,row_spacing=10)
-        for column,text in enumerate(("Status","Automatic Goal","Send now Goal")):
-            label=Gtk.Label(xalign=0)
-            label.set_markup("<b>"+text+"</b>")
-            grid.attach(label,column,0,1,1)
-        for index,(value,automatic,manual,detail) in enumerate(status_rows(goal=self.goal),1):
+        if self.goal:
+            for column,text in enumerate(("Status","Automatic Goal","Send now Goal")):
+                label=Gtk.Label(xalign=0)
+                label.set_markup("<b>"+text+"</b>")
+                grid.attach(label,column,0,1,1)
+        rows = ([(value, detail, (automatic, manual)) for value, automatic, manual, detail in status_rows(goal=True)]
+                if self.goal else [(value, detail, ()) for value, detail in message_status_rows()])
+        for index,(value,detail,eligibility) in enumerate(rows,1):
             expander=Gtk.Expander(label="<b>"+escape(value)+"</b>")
             expander.set_use_markup(True)
             expander.connect("notify::expanded", self._pin)
@@ -199,13 +209,16 @@ class StatusInfoButton(Gtk.Button):
             expander.add(explanation)
             self.expanders.append(expander)
             grid.attach(expander,0,index,1,1)
-            for column,allowed in ((1,automatic),(2,manual)):
+            for column,allowed in enumerate(eligibility,1):
                 badge=Gtk.Label(xalign=0,valign=Gtk.Align.START)
                 grid.attach(badge,column,index,1,1)
                 self.badges.append((badge,allowed))
         scroll.add(grid)
         box.pack_start(scroll,True,True,0)
-        note=Gtk.Label(label="Green ✓ allows the Goal action; red ✕ excludes it.\nNew nonempty statuses are allowed by default.\nMessage-only ignores these status gates. Quota, limits and identity checks still apply.",xalign=0)
+        guidance = ("Green ✓ allows the Goal status and red ✕ excludes it. Automatic recovery also skips chats with an active turn. "
+                    "New nonempty statuses are eligible by default. Goal delivery still verifies live identity and state."
+                    if self.goal else MESSAGE_STATUS_NOTE)
+        note=Gtk.Label(label=guidance,xalign=0)
         note.set_line_wrap(True)
         note.set_max_width_chars(66)
         box.pack_start(note,False,False,0)

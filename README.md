@@ -33,7 +33,7 @@ The Linux dashboard brings local chats, selected targets, recovery actions, prov
 
 **TLDR: Goal is sent first. Message is sent after a delay, no matter how Goal sending went.**
 
-If only one is selected, it will be sent if it (hover mouse over the goal and message headers for more info).
+Choose **Send message**, **Resume goal**, or both. Hover over the info icon beside **Message status** for sending guidance or beside **Goal status** for recovery rules.
 
 ![Recharge AI-task task status hover info](docs/assets/2026-11-23_Screenshot_Task-status-example.png)
 

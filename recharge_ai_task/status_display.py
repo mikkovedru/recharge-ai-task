@@ -154,18 +154,46 @@ def send_schedule_summary(runtime, now, grace_seconds=0):
 
 
 TASK_STATES = {
-    "Active": ("success", "Codex is working on a turn."),
-    "Running": ("success", "Codex is working on a turn."),
-    "Waiting for approval": ("warning", "A turn is active but needs your approval before continuing."),
-    "Waiting for input": ("warning", "A turn is active but needs your reply before continuing."),
-    "Idle": ("normal", "No turn is currently running."),
-    "Error": ("error", "Codex reports a task error, which can also follow quota exhaustion. This does not block selected messages or resumable goals."),
-    "Not loaded": ("normal", "The saved chat is not loaded in the queried backend."),
-    "Unavailable": ("warning", "The current state could not be read; this does not mean idle."),
+    "Active": ("success", "Codex is processing a turn. A selected message is added to that turn when it is still active at delivery."),
+    "Running": ("success", "Codex is processing a turn. A selected message is added to that turn when it is still active at delivery."),
+    "Waiting for approval": ("warning", "The current turn needs approval. Recharge can send text to the active turn. Review the approval in Codex."),
+    "Waiting for input": ("warning", "The current turn needs your reply. Recharge can send text to the active turn. Answer any structured prompt in Codex."),
+    "Idle": ("normal", "No turn is running. A selected message can start a new turn in the chat."),
+    "Error": ("error", "The provider reported a turn error, which can follow quota exhaustion. Recharge still attempts a selected message."),
+    "Not loaded": ("normal", "The backend has not loaded this saved chat. Sending still needs a reachable chat in the desktop."),
+    "Saved": ("normal", "This provider exposes a saved local session. Recharge checks the session and project before sending."),
+    "Unavailable": ("warning", "The current turn state could not be read. Recharge can still attempt a message through a verified destination."),
 }
+MESSAGE_LABELS = {
+    "Active": "Turn in progress", "Running": "Turn in progress",
+    "Waiting for approval": "Approval needed", "Waiting for input": "Reply needed",
+    "Idle": "No active turn", "Error": "Turn error", "Not loaded": "Chat not loaded",
+    "Saved": "Saved session", "Unavailable": "Status unavailable",
+}
+UNKNOWN_MESSAGE_STATUS = "The provider reported a status this version does not recognize. Recharge checks the current destination when sending."
+MESSAGE_STATUS_NOTE = (
+    "Message status describes chat activity. Send message and Send now use the same destination checks and allowance. "
+    "Automatic sends also wait for quota recovery."
+)
+
+
+def message_status_label(value):
+    return " / ".join(MESSAGE_LABELS.get(part, part) for part in value.split(" / "))
+
+
+def message_status_detail(value):
+    return "\n".join(TASK_STATES.get(part, ("warning", UNKNOWN_MESSAGE_STATUS))[1]
+                     for part in value.split(" / "))
+
+
+def message_status_rows():
+    rows = {message_status_label(value): detail for value, (_level, detail) in TASK_STATES.items()}
+    return [*rows.items(), ("Other / new statuses", UNKNOWN_MESSAGE_STATUS)]
+
+
 GOAL_STATES = {
     "Error": ("error", "Codex reports a goal error. Native Goal activation can still be attempted after quota recovers; it must be verified live."),
-    "Active": ("success", "The goal is enabled and may continue automatically; check Task status for current activity."),
+    "Active": ("success", "The goal is enabled and may continue automatically. Message status shows current chat activity."),
     "Paused": ("warning", "The goal is intentionally paused. Manual Goal signals may resume it; quota recovery leaves it paused."),
     "Stopped by quota": ("warning", "Codex saved this goal as stopped after quota exhaustion. This is the reason it stopped, not current account quota. It remains stopped until resumed, even after quota becomes available. See provider monitoring for current quota."),
     "Budget limited": ("error", "The goal reached its own token budget. A continuation signal does not override this limit."),
@@ -187,6 +215,8 @@ def status_level(value, *, goal=False):
 
 
 def status_tooltip(value, *, goal=False):
+    if not goal:
+        return f"Message status\n{message_status_label(value)}\n{message_status_detail(value)}\n{MESSAGE_STATUS_NOTE}"
     if goal and value == "Usage limited":
         value = "Stopped by quota"
     states = GOAL_STATES if goal else TASK_STATES

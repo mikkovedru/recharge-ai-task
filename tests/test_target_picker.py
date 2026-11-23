@@ -84,7 +84,7 @@ def check():
         assert window.next_check_label.get_text() == "—"
         assert "monitoring is off" in window.next_check_detail.get_text()
         visible_titles = lambda: [c.get_title() for c in window.table.get_columns() if c.get_visible()]
-        assert visible_titles() == ["Provider", "Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status"]
+        assert visible_titles() == ["Provider", "Project", "Send message", "Resume goal", "Title", "Last active", "Message status", "Goal status"]
         assert "Editing them sends nothing now" in window.selection_help.get_text()
         assert "monitoring off" in window.send_button.get_tooltip_text()
         assert not window.send_button.get_sensitive()
@@ -154,7 +154,7 @@ def check():
         assert window.signal.get_wrap_mode() == Gtk.WrapMode.WORD_CHAR
         assert isinstance(window.status, Gtk.ScrolledWindow)
         assert window.status.get_allocated_height() >= 36 and not window.status.view.get_editable()
-        from recharge_ai_task.status_display import COLORS, TASK_STATES, GOAL_STATES, status_level
+        from recharge_ai_task.status_display import COLORS, TASK_STATES, GOAL_STATES, message_status_label, message_status_rows, status_level
         # Each window gets its own threshold color, including recovery to normal.
         for primary, secondary in ((84.9,85), (85,100), (99.9,84.9), (100,99.9), (101,0), (0,0)):
             window.quotas['codex'] = replace(current_quota,
@@ -208,7 +208,7 @@ def check():
         window._message("\n".join("Bounded line " + str(i) for i in range(1100)))
         assert window.status.buffer.get_line_count() <= 1000
         for index, states in ((10, TASK_STATES), (11, GOAL_STATES)):
-            column = next(c for c in window.table.get_columns() if c.get_title() == ("Task status" if index == 10 else "Goal status"))
+            column = next(c for c in window.table.get_columns() if c.get_title() == ("Message status" if index == 10 else "Goal status"))
             header = column.get_widget()
             assert isinstance(header, Gtk.Box)
             assert " ".join(header.get_children()[0].get_text().split()) == column.get_title()
@@ -217,7 +217,9 @@ def check():
             assert info.get_image().get_icon_name()[0] == "dialog-information-symbolic"
             assert "F1" not in info.get_tooltip_text() and "Enter" in info.get_tooltip_text()
             info._build()
-            assert len(info.badges) == 2*(len(states)+1)
+            assert len(info.badges) == (2*(len(states)+1) if index == 11 else 0)
+            if index == 10:
+                assert len(info.expanders) == len(message_status_rows())
             renderer = column.get_cells()[0]
             original = window.store[0][index]
             for value in states:
@@ -240,7 +242,12 @@ def check():
                 window.table.set_tooltip_cell = lambda *args: None
                 assert window._tooltip(window.table, x, y, False, tooltip)
                 window.table.set_tooltip_cell = original_cell
-                assert value in tooltip.text and "statuses" in tooltip.text
+                if index == 10:
+                    assert renderer.get_property("text") == message_status_label(value)
+                    assert message_status_label(value) in tooltip.text and "Message status" in tooltip.text
+                    assert "Automatic Goal" not in tooltip.text and "Send now Goal" not in tooltip.text
+                else:
+                    assert value in tooltip.text and "Goal statuses" in tooltip.text
             window.store[0][index] = original
         assert "watch-off" in window.monitoring_card.get_style_context().list_classes()
         window.runtime = {"desktop_watch": True, "watch_settings": target_ui.tray_control.watch_settings(AppConfig.load()),
@@ -264,7 +271,7 @@ def check():
         assert window.send_button.get_label() == "Send now\n(0 goals, 1 messages)"
         assert window.send_button.get_sensitive()
         assert not window.dirty() and not hasattr(window, "save_state")
-        assert [c.get_title() for c in window.table.get_columns()][:10] == ["Provider", "Project", "Send message", "Resume goal", "Title", "Last active", "Task status", "Goal status", "Project path", "Kind"]
+        assert [c.get_title() for c in window.table.get_columns()][:10] == ["Provider", "Project", "Send message", "Resume goal", "Title", "Last active", "Message status", "Goal status", "Project path", "Kind"]
         window.table.get_selection().select_path("0")
         target_ui.discover_targets = lambda: Inventory([alpha, replace(beta, task_status="Waiting for input", goal_status="Blocked")])
         window.refresh_statuses()

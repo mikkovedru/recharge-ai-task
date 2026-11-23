@@ -24,6 +24,7 @@ from recharge_ai_task.desktop_entry import KEYWORDS, desktop_entry
 DOCUMENTS = ("README.md", "RELEASE.md", "OPEN_SOURCE.md", "CONTRIBUTING.md",
              "docs/target-selection.md", "docs/2026-11-17_windows-portable.md")
 SCREENSHOT = "docs/assets/2026-11-17_Screenshot_Recharge-AI-task_Main-screen.png"
+SCREENSHOTS = (SCREENSHOT, "docs/assets/2026-11-23_message-status-help.png")
 
 
 def archive_document(name, homepage):
@@ -35,7 +36,7 @@ def archive_document(name, homepage):
         if parsed.scheme or parsed.netloc or not parsed.path:
             return match.group(0)
         resolved = normpath(join(dirname(name), parsed.path))
-        if resolved in (*DOCUMENTS, "LICENSE", SCREENSHOT):
+        if resolved in (*DOCUMENTS, "LICENSE", *SCREENSHOTS):
             return match.group(0)
         suffix = ("?" + parsed.query if parsed.query else "") + ("#" + parsed.fragment if parsed.fragment else "")
         return f"[{label}]({homepage}/blob/v{__version__}/{resolved}{suffix})"
@@ -60,7 +61,8 @@ def package(platform, dist, *, deb=True):
             z.write(path, path.name)
         for name in DOCUMENTS:
             z.writestr(name, archive_document(name, metadata["homepage"]))
-        z.write(ROOT / SCREENSHOT, SCREENSHOT)
+        for screenshot in SCREENSHOTS:
+            z.write(ROOT / screenshot, screenshot)
     outputs.append(archive)
     if platform == "linux":
         raw = output / "recharge-ai-task"
