@@ -1,6 +1,6 @@
 # Windows portable package
 
-Download `recharge-ai-task-1.0-windows-x86_64.zip` and `SHA256SUMS-windows.txt` from the same [GitHub Release](https://github.com/mikkovedru/recharge-ai-task/releases). Before a tagged release exists, open **Actions → Release → a successful run → Artifacts → windows-x86_64**. Extract that workflow artifact first to find the release ZIP and checksum file.
+Download `recharge-ai-task-1.1-windows-x86_64.zip` and `SHA256SUMS-windows.txt` from the same [GitHub Release](https://github.com/mikkovedru/recharge-ai-task/releases). Before a tagged release exists, open **Actions → Release → a successful run → Artifacts → windows-x86_64**. Extract that workflow artifact first to find the release ZIP and checksum file.
 
 ## Contents and startup
 

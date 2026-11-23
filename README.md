@@ -2,14 +2,14 @@
 
 Continue selected AI tasks (by resuming goals and sending custom messages) after their quota usage limits are reset.
 
-- Are you an ordinary poor peasant and a target of 5h limits of cheaper AI plans? 
+- Are you an ordinary poor peasant and a target of 5h limits of cheaper AI plans?
 - Are you tired of fighting against this limit, running to your computer at specific time (even setting an alarm and purposefully waking up) just to restart a long-running task?
 - Do you have resets expiring soon and you want to push the current quota limits to their limited limits?
 
 Use **Recharge AI-task** program to automatically reset tasks according to your token quota limits.
 
 - Do you have a specific work plan and want to send goal continuation signals and custom messages to different tasks?
-- Do you want to limit how much those signals are being sent, so you have some tokens left for the rest of the week? 
+- Do you want to limit how much those signals are being sent, so you have some tokens left for the rest of the week?
 - Do you want to do all that across different AI providers?
 
 **Recharge AI-task** is a user-friendly program for demanding AI users, made for both GUI mouse-clickers and for CLI automation-wizards.
@@ -50,9 +50,10 @@ Get the files from [GitHub Releases](https://github.com/mikkovedru/recharge-ai-t
 | Platform | Download | Start |
 |---|---|---|
 | Linux x86_64 (Debian with glibc 2.39+ / Ubuntu 24.04 / Mint 22 family) | Linux ZIP or raw `recharge-ai-task` | Extract if needed, allow execution, then open `recharge-ai-task` |
-| Debian / Ubuntu / Mint x86_64 (glibc 2.39+) | `recharge-ai-task_1.0_amd64.deb` | Install with `sudo apt install ./recharge-ai-task_1.0_amd64.deb`, then open from the app menu |
-| Linux x86_64 AppImage (glibc 2.39+) | `recharge-ai-task-1.0-x86_64.AppImage`; `.AppImage.zsync` for updates | Allow execution, then open the AppImage; see [installation and updates](#appimage-installation-and-updates) |
-| Windows x86_64 | `recharge-ai-task-1.0-windows-x86_64.zip` | Extract both executables together and open `recharge-ai-task.exe` for the tray |
+| Debian / Ubuntu / Mint x86_64 (glibc 2.39+) | `recharge-ai-task_1.1_amd64.deb` | Install with `sudo apt install ./recharge-ai-task_1.1_amd64.deb`, then open from the app menu |
+| Linux x86_64 AppImage (glibc 2.39+) | `recharge-ai-task-1.1-x86_64.AppImage`; `.AppImage.zsync` for updates | Allow execution, then open the AppImage; see [installation and updates](#appimage-installation-and-updates) |
+| Linux x86_64 Flatpak (host glibc 2.39+) | `recharge-ai-task-1.1-x86_64.flatpak` | Install the standalone file, then launch from the app menu |
+| Windows x86_64 | `recharge-ai-task-1.1-windows-x86_64.zip` | Extract both executables together and open `recharge-ai-task.exe` for the tray |
 
 For a portable Linux download:
 
@@ -64,15 +65,25 @@ chmod +x recharge-ai-task
 For the AppImage:
 
 ```bash
-chmod +x recharge-ai-task-1.0-x86_64.AppImage
-./recharge-ai-task-1.0-x86_64.AppImage
+chmod +x recharge-ai-task-1.1-x86_64.AppImage
+./recharge-ai-task-1.1-x86_64.AppImage
 ```
 
-If FUSE mounting is unavailable, use `./recharge-ai-task-1.0-x86_64.AppImage --appimage-extract-and-run`. Verify the download with `sha256sum -c SHA256SUMS-appimage.txt`. The `.zsync` file is update metadata for the matching AppImage, not a program to launch. Restart Recharge after updating.
+If FUSE mounting is unavailable, use `./recharge-ai-task-1.1-x86_64.AppImage --appimage-extract-and-run`. Verify the download with `sha256sum -c SHA256SUMS-appimage.txt`. The `.zsync` file is update metadata for the matching AppImage, not a program to launch. Restart Recharge after updating.
 
 Linux has **one executable** for the dashboard, tray and terminal commands. The portable app registers a per-user menu entry and file icon when opened; keep the executable at a permanent location. You can refresh integration with `./recharge-ai-task --install-desktop`. No installer script is needed. Closing the dashboard leaves the tray running; use **Exit** in the tray to quit. `./recharge-ai-task --tray` starts without opening the dashboard.
 
 Windows currently provides a **tray and terminal interface**, without the Linux graphical dashboard. Keep `recharge-ai-task-cli.exe` beside the tray executable for terminal actions and configuration. The ZIP includes both executables, usage/build documentation and the license. See the [Windows portable guide](docs/2026-11-17_windows-portable.md) for downloads, PowerShell commands and checksum verification. Native verification is tracked in the [release guide](RELEASE.md).
+
+### Install the standalone Flatpak
+
+```bash
+sha256sum -c SHA256SUMS-flatpak.txt
+flatpak install --user ./recharge-ai-task-1.1-x86_64.flatpak
+flatpak run io.github.mikkovedru.recharge_ai_task
+```
+
+This package uses the Freedesktop 26.08 runtime and launches Recharge as your user on the host, with the same access to native providers and the desktop as the Linux executable. The download is a direct-distribution bundle. See the [Flatpak packaging and verification notes](doc/investigations/2026-11-23_flatpak-release.md) for permissions and publication status.
 
 ### Remove the Debian package
 
@@ -158,12 +169,12 @@ Google/OpenCode provider tabs also show live Recharge-wrapped terminal sessions,
 
 AppImage format is really cool. Download an application, make it executable, and run! No need to install. No system libraries or system preferences are altered. No need to fight dependencies, everything needed is in one nifty file, running on all common Linux distributions.
 
-- [Gear Lever](https://gearlever.mijorus.it/docs/overview/) is recommended for graphical installation, menu integration and update management; 
+- [Gear Lever](https://gearlever.mijorus.it/docs/overview/) is recommended for graphical installation, menu integration and update management;
 - [AM/AppMan](https://github.com/ivan-hc/AM) is the CLI alternative.
 - Alternatively you can use:
   - [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) to integrate AppImages your application launcher with one click, and manage, update and remove them from there.
   - [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate) to update your AppImages in a decentral way using information embedded in the AppImage itself; no central repository is involved. A Rust implementation can be found [here](https://github.com/pkgforge-dev/AppImageUpdate).
 
-The AppImage build includes `gh-releases-zsync` update information and a matching `.AppImage.zsync` delta control file. 
+The AppImage build includes `gh-releases-zsync` update information and a matching `.AppImage.zsync` delta control file.
 
 See the [AppImage release and update requirements](doc/requirements/2026-11-17_appimage-release.md) for build commands, the Linux baseline, manager setup and the paired-publication process. Online updates require the matching assets in a public GitHub release.

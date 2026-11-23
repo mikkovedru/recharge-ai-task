@@ -145,7 +145,10 @@ def test_windows_file_and_product_version_come_from_runtime(tmp_path):
     resource = output.read_text()
     assert f"StringStruct('FileVersion', '{__version__}')" in resource
     assert f"StringStruct('ProductVersion', '{__version__}')" in resource
-    assert "filevers=(1, 0, 0, 0)" in resource
+    parts = [int(part) for part in __version__.split(".")]
+    numeric = tuple((parts + [0] * 4)[:4])
+    assert f"filevers={numeric}" in resource
+    assert f"prodvers={numeric}" in resource
 
 
 def test_release_builds_both_platforms_on_master_and_tags():
@@ -162,3 +165,5 @@ def test_release_builds_both_platforms_on_master_and_tags():
     assert release["draft"] is True
     assert "artifacts/windows-x86_64/*.zip" in release["files"]
     assert "artifacts/windows-x86_64/SHA256SUMS-windows.txt" in release["files"]
+    assert "artifacts/linux-x86_64/*.flatpak" in release["files"]
+    assert "artifacts/linux-x86_64/SHA256SUMS-flatpak.txt" in release["files"]

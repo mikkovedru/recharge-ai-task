@@ -35,7 +35,7 @@ def render(source: Path, *, repository: str, ref: str) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=ROOT / "docs/2026-11-09_release-notes-1.0.md")
+    parser.add_argument("--source", type=Path, default=ROOT / "docs/2026-11-23_release-notes-1.1.md")
     parser.add_argument("--repository", required=True)
     parser.add_argument("--ref", required=True)
     parser.add_argument("--output", type=Path, required=True)

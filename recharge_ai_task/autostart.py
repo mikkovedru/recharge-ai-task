@@ -15,7 +15,9 @@ _DESKTOP_NAME = "recharge-ai-task-tray.desktop"
 
 
 def _tray_command() -> str:
-    from .launch_path import appimage_path
+    from .launch_path import FLATPAK_ID, appimage_path, flatpak_hosted
+    if flatpak_hosted():
+        return f"flatpak run {FLATPAK_ID} --tray --autostart"
     image = appimage_path()
     if image:
         from .desktop_integration import _exec_value

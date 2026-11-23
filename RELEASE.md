@@ -1,29 +1,29 @@
 # Release and build guide
 
-Current version: **1.0**, tag **v1.0**. Source metadata and the logo tooltip use 1.0; Windows file/product resources use 1.0 (numeric resource: 1.0.0.0). `python scripts/check_version.py --tag v1.0` checks source, installed metadata and tag. Do not reuse a published tag for different code. Existing local v1.1.0/v1.1.1 tags are retained; this release intentionally uses the requested 1.0 version. When publishing, explicitly select whether 1.0 should be marked Latest rather than assuming version ordering will choose it.
+Current version **1.1**, tag **v1.1**. The Windows numeric file version is **1.1.0.0**. Run `python scripts/check_version.py --tag v1.1` after installing the project in the build environment. Create the tag only when the release commit and checks are ready. Choose the GitHub Latest designation deliberately because historical tags have a different version format.
 
 ## Release formats
 
-| Format | 1.0 decision | Considerations |
+| Format | 1.1 decision | Considerations |
 |---|---|---|
 | Linux ZIP | Ship | One executable, offline usage/build documentation and license; file managers may require restoring the executable permission |
 | Raw Linux `recharge-ai-task` | Ship | Same executable, convenient for updates; `chmod +x` after download |
 | `.deb` (amd64) | Ship; owner tested installation/use | Debian / Ubuntu / Mint with glibc 2.39+; Ubuntu 24.04 / Mint 22 baseline; installs binary, menu entry, icon and license |
 | Windows ZIP | Ship; owner approved proceeding | Tray EXE plus console CLI EXE, offline usage/build documentation and license; no Linux GTK dashboard |
 | AppImage (x86_64) | Build with update metadata and paired zsync | Same glibc 2.39 baseline; publish both files and verify GTK/tray/accessibility and host CLI discovery |
-| Flatpak | Excluded by owner | Host processes, provider files/sockets and accessibility need deliberate permissions and host execution adapters; a sandbox wrapper alone would break features |
-| `.tar.gz`, RPM, ARM, macOS, Windows installer | Omit for 1.0 | ZIP covers portable downloads; additional targets need their own builds and validation |
+| Flatpak (x86_64) | Build standalone bundle | Uses the host session for native providers, process identity, sockets and accessibility. Flathub is a separate submission. |
+| `.tar.gz`, RPM, ARM, macOS, Windows installer | Omit for 1.1 | ZIP covers portable downloads; additional targets need their own builds and validation |
 | SHA-256 manifests | Ship | Detect corrupt/incorrect downloads; not a code signature |
 
 The Linux executable handles dashboard, tray and terminal commands itself. Windows keeps `recharge-ai-task.exe` (windowed tray) and `recharge-ai-task-cli.exe` (console). The tray launches its console companion for interactive actions. PyInstaller's windowed build has no standard streams; a single Windows EXE would need a tested console attachment/hiding design. See [PyInstaller's standard-stream limitations](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#sys-stdin-sys-stdout-and-sys-stderr-in-noconsole-windowed-applications-windows-only).
 
-AppImage must be built against a compatible oldest target system; see its [build guidance](https://docs.appimage.org/reference/best-practices.html). Flatpak restricts host access; see its [sandbox permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html). AppImage packaging and update requirements are now specified in the [AppImage release contract](doc/requirements/2026-11-17_appimage-release.md). Flatpak remains excluded.
+AppImage must be built against a compatible oldest target system; see its [build guidance](https://docs.appimage.org/reference/best-practices.html). Flatpak restricts host access; see its [sandbox permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html). AppImage packaging and update requirements are now specified in the [AppImage release contract](doc/requirements/2026-11-17_appimage-release.md). For the standalone Flatpak and the separate Flathub requirements, see the [Flatpak release investigation](doc/investigations/2026-11-23_flatpak-release.md).
 
 For AppImage, publish the `.AppImage`, `.AppImage.zsync` and `SHA256SUMS-appimage.txt` together; [embedded update information, tool pins, manager recommendations and publication checks](doc/requirements/2026-11-17_appimage-release.md) are mandatory parts of that release.
 
 ## Where Windows downloads are created
 
-Every push to `master`, version-tag push and manual **Release** workflow run builds Linux and Windows together after CI passes. Open **Actions → Release → a successful run → Artifacts** for `linux-x86_64` and `windows-x86_64`. The latter contains `recharge-ai-task-1.0-windows-x86_64.zip` and `SHA256SUMS-windows.txt`. Workflow downloads wrap these files in an outer artifact ZIP; extract that first. Branch builds upload artifacts only; version tags also create a draft release containing both platforms. Published downloads appear on [GitHub Releases](https://github.com/mikkovedru/recharge-ai-task/releases) after the draft is reviewed and published.
+Every push to `master`, version-tag push and manual **Release** workflow run builds Linux and Windows together after CI passes. Open **Actions → Release → a successful run → Artifacts** for `linux-x86_64` and `windows-x86_64`. The latter contains `recharge-ai-task-1.1-windows-x86_64.zip` and `SHA256SUMS-windows.txt`. Workflow downloads wrap these files in an outer artifact ZIP; extract that first. Branch builds upload artifacts only; version tags also create a draft release containing both platforms. Published downloads appear on [GitHub Releases](https://github.com/mikkovedru/recharge-ai-task/releases) after the draft is reviewed and published.
 
 On 2026-11-17, GitHub's release list and Release workflow history were both empty. The local checkout already had a Windows job, but local Linux builds do not run that job or produce Windows EXEs. This explains the missing remote downloads without establishing any Windows build failure. Creating native Windows executables requires a Windows runner; running the packager on Linux with placeholder EXEs cannot verify a Windows build.
 
@@ -37,15 +37,15 @@ The portable ZIP includes both Windows executables (the main EXE is the tray), R
 4. Once checks and manual tests pass, create and push the matching tag:
 
    ```bash
-   git tag -a v1.0 -m "Recharge AI-task 1.0"
+   git tag -a v1.1 -m "Recharge AI-task 1.1"
    git push origin master
-   git push origin v1.0
+   git push origin v1.1
    ```
 
-5. The tag build validates versions, reruns CI, builds on Ubuntu 24.04 and Windows Server 2022, verifies archives/checksums and creates a **draft** under **Releases** with the artifacts and [1.0 notes](docs/2026-11-09_release-notes-1.0.md).
+5. The tag build validates versions, reruns CI, builds on Ubuntu 24.04 and Windows Server 2022, verifies archives/checksums and creates a **draft** under **Releases** with the artifacts and [1.1 notes](docs/2026-11-23_release-notes-1.1.md).
 6. Download and check the draft’s assets, including the Windows ZIP. Windows is approved for the release plan; record native verification results without claiming tests that have not been run. Then select **Publish release**. Nothing is automatically published.
 
-No push, tag or remote release is performed by local build scripts. This task prepares the process; a successful GitHub run and real Windows session remain verification steps. Future versions must update both version declarations, the notes and the workflow's `body_path` before tagging. The tag must exactly match the version prefixed by `v` (for example 1.0.1 → v1.0.1).
+No push, tag or remote release is performed by local build scripts. This task prepares the process; a successful GitHub run and real Windows session remain verification steps. Future versions must update both version declarations, the notes renderer's default source and the standalone Flatpak's AppStream release date before tagging. The tag must exactly match the version prefixed by `v` (for example 1.0.1 → v1.0.1).
 
 ## Build locally
 
@@ -56,12 +56,13 @@ Linux x86_64, Debian / Ubuntu / Mint with glibc 2.39+ (Ubuntu 24.04 / Mint 22 ba
 ```bash
 sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo \
   gir1.2-gtk-3.0 gir1.2-xapp-1.0 gir1.2-atspi-2.0 \
-  gir1.2-ayatanaappindicator3-0.1 dpkg-dev
+  gir1.2-ayatanaappindicator3-0.1 dpkg-dev flatpak appstream desktop-file-utils
 /usr/bin/python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install -e ".[tray,dev]"
 PYTHON=.venv/bin/python bash scripts/build_linux.sh
 PYTHON=.venv/bin/python bash scripts/package_release.sh
 .venv/bin/python scripts/build_appimage.py
+.venv/bin/python scripts/build_flatpak.py
 ```
 
 Windows x86_64, from PowerShell in the source checkout:
@@ -84,9 +85,10 @@ The GUI was tested on Linux Mint 22.3 “Zena” Cinnamon, the [latest stable Li
 - On a compatible Debian / Ubuntu / Mint machine, launch the extracted ZIP, raw executable and installed `.deb`. Check `--version`, `--help`, `run --help`, `quota`, tray startup, dashboard open/close/reopen, terminal launch and autostart. Check package install/removal with apt; package removal leaves personal settings.
 - Test selecting targets, resizing the dashboard, editing messages, and monitoring start/stop. Verify a real provider recovery without duplicate sends. Check X11 and Wayland separately, including the documented native Goal limits.
 - On Windows 10/11 x86_64, launch the tray, configuration, quota, a real pywinpty wrapped provider, target selection and desktop delivery, start/stop and autostart. CLI unit tests use a fake PTY and do not establish these native behaviors.
+- Install the standalone Flatpak, verify its host-mode version and dashboard startup, and check the download with `sha256sum -c SHA256SUMS-flatpak.txt`.
 - Verify downloaded checksums with `sha256sum -c SHA256SUMS-linux.txt` on Linux or `Get-FileHash` on Windows. GitHub workflow artifacts wrap release files in another ZIP; use the inner release packages for these checks.
 
-The `.deb` is a direct-download package, not an apt repository with automatic updates. Portable menu/autostart registrations refer to the executable's location; refresh them after moving the file. AppImage retains the same tested Linux baseline; Flatpak, macOS and ARM remain unsupported. Record failed native checks before publishing; do not treat a build or mocked test suite as proof of end-to-end provider compatibility.
+The `.deb` is a direct-download package, not an apt repository with automatic updates. Portable menu/autostart registrations refer to the executable's location; refresh them after moving the file. AppImage and the standalone Flatpak host launcher retain the same Linux baseline. macOS and ARM remain unsupported. Record failed native checks before publishing; do not treat a build or mocked test suite as proof of end-to-end provider compatibility.
 
 ## Package name, descriptions, logo and repository
 
@@ -106,4 +108,4 @@ The owner confirmed that `.deb` installation and use work and Synaptic removes t
 
 ## Release-note image and documentation links
 
-The source [1.0 notes](docs/2026-11-09_release-notes-1.0.md) use a relative logo path and relative documentation links, so they work in the repository and local previews without requiring a published tag. A GitHub Release body is a separate document context. Before creating the draft, the workflow runs `scripts/render_release_notes.py` to turn local image links into raw-content URLs and documentation links into GitHub file URLs using `GITHUB_SHA`. The pushed release commit already exists at that point, and later branch changes cannot redirect those links. The generated body stays under `build/`; the source Markdown remains relative.
+The source [1.1 notes](docs/2026-11-23_release-notes-1.1.md) use a relative logo path and relative documentation links, so they work in the repository and local previews without requiring a published tag. A GitHub Release body is a separate document context. Before creating the draft, the workflow runs `scripts/render_release_notes.py` to turn local image links into raw-content URLs and documentation links into GitHub file URLs using `GITHUB_SHA`. The pushed release commit already exists at that point, and later branch changes cannot redirect those links. The generated body stays under `build/`; the source Markdown remains relative.

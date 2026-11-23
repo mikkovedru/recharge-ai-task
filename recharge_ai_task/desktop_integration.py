@@ -193,9 +193,9 @@ def install_main():
 def install_on_launch():
     """Refresh frozen-release integration without affecting isolated test profiles."""
     from ._migration import environment_value
-    from .launch_path import appimage_path
-    if appimage_path():
-        return  # AppImage managers own their launchers; explicit installation remains available.
+    from .launch_path import FLATPAK_ID, appimage_path, flatpak_hosted
+    if appimage_path() or flatpak_hosted() or os.environ.get("FLATPAK_ID") == FLATPAK_ID:
+        return  # Package managers own their menu entries.
     if not getattr(sys, "frozen", False) or environment_value("CONFIG_DIR") or not Path(sys.executable).is_file():
         return
     import logging

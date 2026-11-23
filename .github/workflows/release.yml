@@ -25,7 +25,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-xapp-1.0 gir1.2-atspi-2.0 gir1.2-ayatanaappindicator3-0.1 appstream desktop-file-utils
+          sudo apt-get install -y python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 gir1.2-xapp-1.0 gir1.2-atspi-2.0 gir1.2-ayatanaappindicator3-0.1 appstream desktop-file-utils flatpak
           /usr/bin/python3 -m venv --system-site-packages .build-venv
           .build-venv/bin/python -m pip install -e ".[tray,dev]"
       - name: Validate version
@@ -42,11 +42,13 @@ jobs:
           PYTHON=.build-venv/bin/python bash scripts/build_linux.sh
           PYTHON=.build-venv/bin/python bash scripts/package_release.sh
           .build-venv/bin/python scripts/build_appimage.py
+          .build-venv/bin/python scripts/build_flatpak.py
       - name: Verify packages
         run: |
           cd dist/release
           sha256sum -c SHA256SUMS-linux.txt
           sha256sum -c SHA256SUMS-appimage.txt
+          sha256sum -c SHA256SUMS-flatpak.txt
           ./*.AppImage --appimage-extract-and-run --version
           ./*.AppImage --appimage-updateinformation
           dpkg-deb --info *.deb
@@ -68,6 +70,8 @@ jobs:
             dist/release/*.deb
             dist/release/*.AppImage
             dist/release/*.AppImage.zsync
+            dist/release/*.flatpak
+            dist/release/SHA256SUMS-flatpak.txt
             dist/release/SHA256SUMS-appimage.txt
             dist/release/recharge-ai-task
             dist/release/SHA256SUMS-linux.txt
@@ -151,6 +155,8 @@ jobs:
             artifacts/linux-x86_64/*.deb
             artifacts/linux-x86_64/*.AppImage
             artifacts/linux-x86_64/*.AppImage.zsync
+            artifacts/linux-x86_64/*.flatpak
+            artifacts/linux-x86_64/SHA256SUMS-flatpak.txt
             artifacts/linux-x86_64/SHA256SUMS-appimage.txt
             artifacts/linux-x86_64/recharge-ai-task
             artifacts/linux-x86_64/SHA256SUMS-linux.txt
