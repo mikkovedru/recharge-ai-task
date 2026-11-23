@@ -204,21 +204,25 @@ class RecipientPanel(Gtk.Box):
         self._recolor_status()
         css = Gtk.CssProvider()
         css.load_from_data(b"""
+            @define-color recharge_target_off #b3261e;
             .target-passive { background-color: mix(@theme_base_color, @theme_bg_color, .55); }
             .target-passive .target-title, .target-passive .target-preview {
                 color: @theme_text_color; opacity: 1; }
             .target-actions-off .target-title { font-style: normal; }
-            .target-passive-badge { background-color: alpha(@theme_fg_color, .12);
-                color: @theme_text_color; border: 0;
-                border-radius: 3px; padding: 0 4px; font-size: .85em; }
+            label.target-passive-badge { border: 0; border-radius: 3px; padding: 0 4px; font-size: .85em; }
             .target-row { border-left: 4px solid transparent; }
             .target-row:selected { background-color: @theme_selected_bg_color;
                 color: @theme_selected_fg_color; }
             .target-row:selected label, .target-row:selected .target-title {
                 color: @theme_selected_fg_color; opacity: 1; }
-            .target-row:selected .target-passive-badge {
-                color: @theme_selected_fg_color; background-color: alpha(@theme_selected_fg_color, .18); }
             .target-row button { padding: 3px; }
+            .target-row label.target-passive-badge, .target-row:selected label.target-passive-badge {
+                background-color: @recharge_target_off; color: #ffffff; }
+            .action-limit button.action-off:checked {
+                background-image: none; transition: none;
+                background-color: @recharge_target_off; color: #ffffff; border-color: @recharge_target_off; }
+            .action-limit button.action-off:checked:hover { background-color: shade(@recharge_target_off, .88); }
+            .action-limit button.action-off:checked label { color: #ffffff; opacity: 1; }
             .target-settings-preview label:disabled, .target-settings-preview checkbutton:disabled,
             .target-settings-preview button:disabled { color: @theme_fg_color; opacity: 1; }
             .target-settings-preview checkbutton:disabled check { opacity: 1; color: @theme_fg_color; }
@@ -369,18 +373,13 @@ class RecipientPanel(Gtk.Box):
         luminance = sum(weight*linear(value) for weight,value in zip((.2126,.7152,.0722),(selected.red,selected.green,selected.blue))) if found else 0
         selected_text = "#000000" if luminance > .179 else "#ffffff"
         self.status_css.load_from_data(f"""
-            .target-row:selected label, .target-row:selected .target-title {{ color: {selected_text}; }}
+            .target-row:selected label:not(.target-passive-badge), .target-row:selected .target-title {{ color: {selected_text}; }}
             .target-save-success {{ color: {colors['success']}; }}
             .target-save-warning {{ color: {colors['warning']}; }}
             .target-save-error {{ color: {colors['error']}; }}
-            .action-limit button:checked {{ background-image: none; background-color: {colors['success']};
+            .action-limit button:checked:not(.action-off) {{ background-image: none; background-color: {colors['success']};
                 color: {text}; border-color: {colors['success']}; }}
-            .action-limit button:checked:hover {{ background-color: shade({colors['success']}, .88); }}
-            .action-limit button.action-off:checked {{ background-image: none; transition: none;
-                background-color: mix(@theme_base_color, @theme_fg_color, .15);
-                color: @theme_fg_color; border-color: mix(@theme_base_color, @theme_fg_color, .5); }}
-            .action-limit button.action-off:checked:hover {{ background-color: mix(@theme_base_color, @theme_fg_color, .23); }}
-            .action-limit button.action-off:checked:disabled {{ color: @theme_fg_color; opacity: 1; }}
+            .action-limit button:checked:not(.action-off):hover {{ background-color: shade({colors['success']}, .88); }}
         """.encode())
 
     def _usage(self):
@@ -441,7 +440,7 @@ class RecipientPanel(Gtk.Box):
                     row.provider.set_tooltip_text("Provider: " + PROVIDER_NAMES[target.provider])
                     row.title.set_hexpand(True)
                     header.pack_start(row.title, True, True, 0)
-                    row.passive_badge = Gtk.Label(label="\u23f8 Passive", valign=Gtk.Align.START)
+                    row.passive_badge = Gtk.Label(label="\u23f8 Off", valign=Gtk.Align.START)
                     row.passive_badge.get_style_context().add_class("target-passive-badge")
                     row.passive_badge.set_tooltip_text("Goal and Message are off. This chat stays in Targets & actions; nothing will be sent.")
                     row.passive_badge.set_no_show_all(True)

@@ -71,6 +71,29 @@ def run_gui(body):
 pytestmark = pytest.mark.skipif(os.environ.get('RECHARGE_AI_TASK_GUI_TESTS') != '1', reason='Requires GTK')
 
 
+def test_selected_off_buttons_keep_red_fill_across_themes():
+    run_gui(r'''
+w=make();p=w.recipient_panel
+try:
+    p.select_recipient(a.key)
+    for theme,dark in (('Mint-X',False),('Adwaita',False),('Adwaita',True)):
+        Gtk.Settings.get_default().set_property('gtk-theme-name',theme)
+        Gtk.Settings.get_default().set_property('gtk-application-prefer-dark-theme',dark);pump(w)
+        for control in (p.goal_limit,p.prompt_limit):
+            control.default.clicked();pump(w)
+            button=control.off
+            context=button.get_style_context()
+            assert not button.get_active()
+            assert not close_color(context.get_background_color(button.get_state_flags()),rgba('#b3261e'))
+            button.clicked();pump(w)
+            assert button.get_active()
+            assert close_color(context.get_background_color(button.get_state_flags()),rgba('#b3261e')),(theme,dark,context.get_background_color(button.get_state_flags()))
+            label=button.get_child()
+            assert close_color(label.get_style_context().get_color(label.get_state_flags()),rgba('#ffffff'))
+finally:w.destroy()
+''')
+
+
 def test_recipient_colors_pause_and_message_information():
     run_gui(r'''
 w=make();p=w.recipient_panel
@@ -101,7 +124,6 @@ try:
         assert not p.default_prompt.get_style_context().has_class('action-limit')
         assert not close_color(p.default_prompt.unlimited.get_style_context().get_background_color(p.default_prompt.unlimited.get_state_flags()),rgba(colors['success']))
         p.prompt_limit.off.clicked();pump(w)
-        assert not close_color(p.prompt_limit.off.get_style_context().get_background_color(p.prompt_limit.off.get_state_flags()),rgba(colors['error']))
         assert p.save_status.get_style_context().has_class('target-save-passive')
         assert not close_color(p.save_status.get_style_context().get_color(p.save_status.get_state_flags()),rgba(colors['error']))
         p.prompt_limit.default.clicked();pump(w)

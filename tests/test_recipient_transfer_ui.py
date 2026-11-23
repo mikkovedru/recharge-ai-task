@@ -27,9 +27,15 @@ try:
             w.resize(width,height);w.table_layout.sort('title');pump(w)
             row=p.rows[b.key]
             p.select_recipient(b.key);pump(w)
-            assert row.passive_badge.get_visible() and 'Passive' in row.passive_badge.get_text()
+            assert row.passive_badge.get_visible() and 'Off' in row.passive_badge.get_text()
             assert row.get_style_context().has_class('target-actions-off')
             assert row.get_state_flags() & Gtk.StateFlags.SELECTED
+            for current in (a.key,b.key):
+                p.select_recipient(current);pump(w,.05)
+                badge=row.passive_badge.get_style_context()
+                state=row.passive_badge.get_state_flags()
+                assert close_color(badge.get_background_color(state),rgba('#b3261e'))
+                assert close_color(badge.get_color(state),rgba('#ffffff'))
             model=w.filtered
             column=w.title_column;cell=column.get_cells()[0]
             for key,passive in ((b.key,True),(a.key,False),(c.key,False)):
@@ -152,6 +158,7 @@ try:
                 button=control.off;context=button.get_style_context();flags=button.get_state_flags()
                 foreground=button.get_child().get_style_context().get_color(button.get_child().get_state_flags())
                 background=context.get_background_color(flags)
+                assert close_color(background,rgba('#b3261e')),(theme,dark,background)
                 assert contrast(foreground,background)>=4.5,(theme,dark,foreground,background)
             assert p.message_buffer.get_text(*p.message_buffer.get_bounds(),True)=='Retained custom text'
             assert not p.message.get_editable() and p.message.is_sensitive()
