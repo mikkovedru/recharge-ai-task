@@ -7,12 +7,15 @@ import pytest
 def test_logo_version_repository_and_copy_menu():
     result = subprocess.run([sys.executable, "-c", '''
 from types import SimpleNamespace
+import gi
+gi.require_version("Gdk", "3.0")
+gi.require_version("Gtk", "3.0")
 from recharge_ai_task import __version__
 from recharge_ai_task.brand_ui import ProjectLogo, Gtk, Gdk, REPOSITORY_URL
 window = Gtk.Window()
 logo = ProjectLogo(Gtk.Image())
 window.add(logo)
-assert __version__ == "1.0" and __version__ in logo.get_tooltip_text()
+assert logo.get_tooltip_text().splitlines()[0] == f"Recharge AI-task {__version__}"
 assert logo.menu.get_children()[0].get_label() == f"Copy GitHub repository link ({REPOSITORY_URL})"
 calls = []
 Gtk.show_uri_on_window = lambda *args: calls.append(args)
