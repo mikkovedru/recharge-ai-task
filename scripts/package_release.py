@@ -24,7 +24,7 @@ from recharge_ai_task.desktop_entry import KEYWORDS, desktop_entry
 DOCUMENTS = ("README.md", "RELEASE.md", "OPEN_SOURCE.md", "CONTRIBUTING.md",
              "docs/target-selection.md", "docs/2026-11-17_windows-portable.md")
 SCREENSHOT = "docs/assets/2026-11-17_Screenshot_Recharge-AI-task_Main-screen.png"
-SCREENSHOTS = (SCREENSHOT, "docs/assets/2026-11-23_message-status-help.png")
+SCREENSHOTS = (SCREENSHOT, "docs/assets/2026-11-23_Screenshot_Task-status-example.png")
 
 
 def archive_document(name, homepage):
