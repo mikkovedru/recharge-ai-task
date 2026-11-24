@@ -18,10 +18,12 @@ def tray_image(*, running: bool = False):
     image = Image.new("RGBA", (64 * scale, 64 * scale), "#101820")
     draw = ImageDraw.Draw(image)
     draw.rectangle((2*scale, 2*scale, 61*scale, 61*scale), fill="white")
+    # Use the space above the status strip for the logo. A few pixels of
+    # extra margin here noticeably reduce the mark at 16–24 px panel sizes.
     with Image.open(asset_path("logo-symbol.png")) as artwork:
-        logo = artwork.convert("RGBA").resize((52*scale, 52*scale), Image.Resampling.LANCZOS)
-    image.alpha_composite(logo, (6*scale, 3*scale))
-    draw.rectangle((5*scale, 56*scale, 58*scale, 60*scale),
+        logo = artwork.convert("RGBA").resize((58*scale, 58*scale), Image.Resampling.LANCZOS)
+    image.alpha_composite(logo, (3*scale, scale))
+    draw.rectangle((5*scale, 59*scale, 58*scale, 62*scale),
                    fill="#00df70" if running else "#ffcc00")
     return image.resize((64, 64), Image.Resampling.LANCZOS)
 

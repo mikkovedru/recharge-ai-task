@@ -1,4 +1,6 @@
 """Check that installed artwork remains usable at desktop and tray sizes."""
+from math import ceil
+
 from PIL import Image, ImageColor
 import pytest
 
@@ -21,7 +23,11 @@ def test_tray_logo_and_status_stay_visible_on_light_and_dark_panels(running, col
     assert icon.getchannel("A").getextrema() == (255, 255)
     rgb = icon.convert("RGB")
     pixels = [rgb.getpixel((x,y)) for y in range(size) for x in range(size)]
-    assert any(b > 150 and r < 80 for r, g, b in pixels), "Blue recharge ring disappeared"
+    ring = [(x, y) for y in range(size) for x in range(size)
+            if (pixel := rgb.getpixel((x, y)))[0] < 100 and pixel[2] > 150]
+    assert ring, "Blue recharge ring disappeared"
+    xs, ys = zip(*ring)
+    assert min(max(xs) - min(xs) + 1, max(ys) - min(ys) + 1) >= ceil(.8 * size)
     assert any(min(pixel) > 220 for pixel in pixels), "White background disappeared"
     assert any(max(pixel) < 90 for pixel in pixels), "Dark detail disappeared"
     status = ImageColor.getrgb(color)
